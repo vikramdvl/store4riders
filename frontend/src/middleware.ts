@@ -22,6 +22,17 @@ export function middleware(request: NextRequest) {
     return new NextResponse("Not Found", { status: 404 });
   }
 
+  // Block known bandwidth-hogging crawlers that ignore robots.txt and drain origin bandwidth
+  const userAgent = (request.headers.get("user-agent") || "").toLowerCase();
+  if (
+    userAgent.includes("bytespider") ||
+    userAgent.includes("semrushbot") ||
+    userAgent.includes("dotbot") ||
+    userAgent.includes("mj12bot")
+  ) {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
+
   const secretPath = process.env.ADMIN_SECRET_PATH || process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH || "rider-staff-gate";
 
   // Check environment: local development & Vercel previews allow testing without domain restrictions

@@ -23,6 +23,20 @@ export default function robots(): MetadataRoute.Robots {
           "/reset-password",
         ],
       },
+      {
+        userAgent: [
+          "Bytespider",
+          "GPTBot",
+          "CCBot",
+          "Claude-Web",
+          "anthropic-ai",
+          "SemrushBot",
+          "AhrefsBot",
+          "DotBot",
+          "MJ12bot",
+        ],
+        disallow: ["/"],
+      },
     ],
     sitemap: `${normalizedBase}/sitemap.xml`,
   };
