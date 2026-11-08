@@ -5,13 +5,14 @@ import { useCartStore } from "@/stores/useCartStore";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
-export function useLogin(options?: { disableRedirect?: boolean }) {
+export function useLogin(options?: { disableRedirect?: boolean; scope?: "admin" | "customer" }) {
   const setAuth = useAuthStore((state) => state.setAuth);
   const router = useRouter();
 
   return useMutation({
     mutationFn: async (credentials: any) => {
-      const response = await apiClient.post("/auth/login", credentials);
+      const endpoint = options?.scope === "admin" ? "/auth/login?scope=admin" : "/auth/login";
+      const response = await apiClient.post(endpoint, credentials);
       return response.data;
     },
     onSuccess: (data) => {
@@ -94,7 +95,6 @@ export function useResetPassword() {
     },
   });
 }
-
 
 export function useLogout() {
   const router = useRouter();

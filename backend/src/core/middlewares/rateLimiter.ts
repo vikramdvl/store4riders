@@ -86,7 +86,7 @@ export async function consumeRateLimit(rule: RateLimitRule, ip: string): Promise
 // =============================================================================
 
 /**
- * 🔐 Auth Rate Limiter
+ * 🔐 Customer Auth Rate Limiter (OWASP Standard)
  * 5 attempts per 15 minutes. Use on /auth/login, /auth/register
  */
 export const checkAuthRateLimit = async (ip: string) => {
@@ -95,6 +95,14 @@ export const checkAuthRateLimit = async (ip: string) => {
 
 // Backward compatibility alias
 export const checkRateLimit = checkAuthRateLimit;
+
+/**
+ * 👑 Admin Auth Rate Limiter
+ * 8 attempts per 15 minutes. Use on Admin Portal Login
+ */
+export const checkAdminAuthRateLimit = async (ip: string) => {
+  await consumeRateLimit(RATE_LIMIT_CONFIG.ADMIN_AUTH, ip);
+};
 
 /**
  * 💳 Order & Checkout Rate Limiter

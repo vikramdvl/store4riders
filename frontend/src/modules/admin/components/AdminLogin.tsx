@@ -18,7 +18,7 @@ type AdminLoginInputs = z.infer<typeof adminLoginSchema>;
 export function AdminLogin() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
-  const loginMutation = useLogin({ disableRedirect: true });
+  const loginMutation = useLogin({ disableRedirect: true, scope: "admin" });
 
   const {
     register,

@@ -22,16 +22,29 @@ export interface RateLimitRule {
 
 export const RATE_LIMIT_CONFIG = {
   /**
-   * 1. Authentication Limiter
+   * 1. Customer Authentication Limiter (OWASP Standard)
    * Protects: /api/v1/auth/login, /api/v1/auth/register, /api/v1/auth/forgot-password
    * Purpose: Prevents credential stuffing, dictionary brute-force, and account enumeration.
    */
   AUTH: {
     keyPrefix: process.env.NODE_ENV === "development" ? "rl_auth_dev" : "rl_auth",
-    points: process.env.NODE_ENV === "development" ? 100 : 10,  // 10 attempts in prod, 100 in dev
+    points: process.env.NODE_ENV === "development" ? 100 : 5,  // 5 attempts in prod (Strict OWASP standard), 100 in dev
     duration: 15 * 60,       // per 15 minutes
     blockDuration: 15 * 60,  // Block IP for 15 minutes if exceeded
     errorMessage: "Too many login/registration attempts from this IP. Please try again after 15 minutes.",
+  },
+
+  /**
+   * 1.1 Dedicated Admin Authentication Limiter
+   * Protects: /api/v1/auth/login?scope=admin
+   * Purpose: Prevents brute-force while allowing admin safe margin (8 attempts per 15 mins)
+   */
+  ADMIN_AUTH: {
+    keyPrefix: process.env.NODE_ENV === "development" ? "rl_admin_auth_dev" : "rl_admin_auth",
+    points: process.env.NODE_ENV === "development" ? 100 : 8,  // 8 attempts for staff/admin in prod
+    duration: 15 * 60,       // per 15 minutes
+    blockDuration: 15 * 60,  // Block IP for 15 minutes if exceeded
+    errorMessage: "Too many admin login attempts from this IP. Please try again after 15 minutes.",
   },
 
   /**
