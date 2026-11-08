@@ -4,6 +4,24 @@ import type { NextRequest } from "next/server";
 export function middleware(request: NextRequest) {
   const host = request.headers.get("host") || "";
   const { pathname } = request.nextUrl;
+
+  // Immediate Edge Defense: Block vulnerability scanners and exploit probes from invoking serverless origin
+  const lowerPath = pathname.toLowerCase();
+  if (
+    lowerPath.endsWith(".php") ||
+    lowerPath.endsWith(".env") ||
+    lowerPath.endsWith(".git") ||
+    lowerPath.endsWith(".asp") ||
+    lowerPath.endsWith(".aspx") ||
+    lowerPath.endsWith(".sql") ||
+    lowerPath.startsWith("/wp-") ||
+    lowerPath.startsWith("/cgi-bin") ||
+    lowerPath.startsWith("/phpmyadmin") ||
+    lowerPath.includes("xmlrpc.php")
+  ) {
+    return new NextResponse("Not Found", { status: 404 });
+  }
+
   const secretPath = process.env.ADMIN_SECRET_PATH || process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH || "rider-staff-gate";
 
   // Check environment: local development & Vercel previews allow testing without domain restrictions

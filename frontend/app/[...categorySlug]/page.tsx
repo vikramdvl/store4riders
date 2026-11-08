@@ -37,7 +37,7 @@ async function getCategoryNode(categorySlug: string) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
     const treeUrl = baseUrl.includes("/v1") ? `${baseUrl}/categories/tree` : `${baseUrl}/v1/categories/tree`;
-    const res = await fetch(treeUrl, { cache: "no-store", signal: AbortSignal.timeout(8000) });
+    const res = await fetch(treeUrl, { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) });
     if (res.ok) {
       const data = await res.json();
       const findCategory = (nodes: any[]): any => {
@@ -57,7 +57,7 @@ async function getCategoryNode(categorySlug: string) {
     const singleUrl = baseUrl.includes("/v1")
       ? `${baseUrl}/categories/${encodeURIComponent(categorySlug)}`
       : `${baseUrl}/v1/categories/${encodeURIComponent(categorySlug)}`;
-    const singleRes = await fetch(singleUrl, { cache: "no-store", signal: AbortSignal.timeout(8000) });
+    const singleRes = await fetch(singleUrl, { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) });
     if (singleRes.ok) {
       const singleData = await singleRes.json();
       if (singleData?.data) return singleData.data;
