@@ -18,7 +18,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   REDIS_URL: z.string().optional(),
   FRONTEND_URL: z.string().min(1, "FRONTEND_URL is required"),
-  API_URL: z.string().min(1, "API_URL is required"),
+  API_URL: z.string().optional(),
   NEXT_PUBLIC_API_URL: z.string().optional(),
   JWT_ACCESS_SECRET: z.string().min(1, "JWT_ACCESS_SECRET is required"),
   JWT_REFRESH_SECRET: z.string().min(1, "JWT_REFRESH_SECRET is required"),
@@ -47,10 +47,10 @@ const envSchema = z.object({
   SES_FROM_EMAIL: z.string().optional(),
   SHIPROCKET_EMAIL: z.string().optional(),
   SHIPROCKET_PASSWORD: z.string().optional(),
-  DELHIVERY_API_KEY: z.string().optional(),
-  XPRESSBEES_API_KEY: z.string().optional(),
   SHIPROCKET_WEBHOOK_SECRET: z.string().optional(),
+  DELHIVERY_API_KEY: z.string().optional(),
   DELHIVERY_WEBHOOK_TOKEN: z.string().optional(),
+  XPRESSBEES_API_KEY: z.string().optional(),
   XPRESSBEES_WEBHOOK_TOKEN: z.string().optional(),
   CRON_SECRET: z.string().optional(),
   SERPAPI_KEY: z.string().optional(),
@@ -63,12 +63,17 @@ const envSchema = z.object({
   GOOGLE_PAY_ENVIRONMENT: z.enum(["TEST", "PRODUCTION"]).optional().default("TEST"),
 });
 
+const defaultApiUrl = 
+  process.env.API_URL || 
+  process.env.NEXT_PUBLIC_API_URL || 
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : (process.env.NODE_ENV === "development" ? "http://localhost:4000" : "https://api.store4riders.com"));
+
 export const ENV = envSchema.parse({
   DATABASE_URL: process.env.DATABASE_URL || process.env.MONGODB_URI,
   REDIS_URL: process.env.REDIS_URL,
   FRONTEND_URL: process.env.FRONTEND_URL || "https://store4riders.com",
-  API_URL: process.env.API_URL || process.env.NEXT_PUBLIC_API_URL,
-  NEXT_PUBLIC_API_URL: process.env.API_URL || process.env.NEXT_PUBLIC_API_URL,
+  API_URL: defaultApiUrl,
+  NEXT_PUBLIC_API_URL: defaultApiUrl,
   JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET,
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
   NODE_ENV: process.env.NODE_ENV,
