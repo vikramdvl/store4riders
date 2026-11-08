@@ -45,6 +45,16 @@ jobs:
   test:
     name: 🧪 Vitest Suite (Unit & Edge-Case Tests)
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      VITEST: "true"
+      DATABASE_URL: mongodb://localhost:27017/store4riders_ci
+      JWT_SECRET: test_ci_jwt_secret_key_minimum_32_characters_long_12345
+      JWT_ACCESS_SECRET: test_ci_jwt_access_secret_key_min_32_chars_12345
+      JWT_REFRESH_SECRET: test_ci_jwt_refresh_secret_key_min_32_chars_12345
+      FRONTEND_URL: http://localhost:3000
+      API_URL: http://localhost:4000
+      NEXT_PUBLIC_API_URL: http://localhost:4000
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4

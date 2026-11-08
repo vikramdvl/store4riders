@@ -1,13 +1,13 @@
 /**
  * @file env.ts
  * @description Validates all required environment variables strictly at runtime.
- * Strict zero-mock enforcement: reads exclusively from process.env.
+ * Strict zero-mock enforcement: reads exclusively from process.env with zero hardcoded fallbacks.
  */
 import { z } from "zod";
 import dotenv from "dotenv";
 import path from "path";
 
-// Ensure environment variables from .env and backend/.env are loaded reliably in all contexts
+// Ensure environment variables from .env and backend/.env are loaded reliably
 const rootDir = process.cwd();
 dotenv.config({ path: path.resolve(rootDir, ".env") });
 dotenv.config({ path: path.resolve(rootDir, "backend", ".env") });
@@ -60,36 +60,36 @@ const envSchema = z.object({
   GOOGLE_PAY_MERCHANT_NAME: z.string().optional(),
   GOOGLE_PAY_MCC: z.string().optional(),
   GOOGLE_PAY_MERCHANT_ID: z.string().optional(),
-  GOOGLE_PAY_ENVIRONMENT: z.enum(["TEST", "PRODUCTION"]).optional().default("TEST"),
+  GOOGLE_PAY_ENVIRONMENT: z.enum(["TEST", "PRODUCTION"]).optional(),
 });
 
-const defaultApiUrl = 
+const apiUrl = 
   process.env.API_URL || 
   process.env.NEXT_PUBLIC_API_URL || 
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : (process.env.NODE_ENV === "development" ? "http://localhost:4000" : "https://api.store4riders.com"));
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
 
 export const ENV = envSchema.parse({
   DATABASE_URL: process.env.DATABASE_URL || process.env.MONGODB_URI,
   REDIS_URL: process.env.REDIS_URL,
-  FRONTEND_URL: process.env.FRONTEND_URL || "https://store4riders.com",
-  API_URL: defaultApiUrl,
-  NEXT_PUBLIC_API_URL: defaultApiUrl,
+  FRONTEND_URL: process.env.FRONTEND_URL,
+  API_URL: apiUrl,
+  NEXT_PUBLIC_API_URL: apiUrl,
   JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET,
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
   NODE_ENV: process.env.NODE_ENV,
   PAYU_MERCHANT_KEY: process.env.PAYU_MERCHANT_KEY,
   PAYU_SALT: process.env.PAYU_SALT,
-  PAYU_MODE: process.env.PAYU_MODE || "test",
+  PAYU_MODE: process.env.PAYU_MODE,
   CCAVENUE_MERCHANT_ID: process.env.CCAVENUE_MERCHANT_ID,
   CCAVENUE_ACCESS_CODE: process.env.CCAVENUE_ACCESS_CODE,
   CCAVENUE_WORKING_KEY: process.env.CCAVENUE_WORKING_KEY,
-  CCAVENUE_MODE: process.env.CCAVENUE_MODE || "test",
+  CCAVENUE_MODE: process.env.CCAVENUE_MODE,
   CCAVENUE_REDIRECT_URL: process.env.CCAVENUE_REDIRECT_URL,
   CCAVENUE_CANCEL_URL: process.env.CCAVENUE_CANCEL_URL,
   SNAPMINT_MERCHANT_ID: process.env.SNAPMINT_MERCHANT_ID,
   SNAPMINT_SECRET: process.env.SNAPMINT_SECRET,
   SNAPMINT_MID: process.env.SNAPMINT_MID,
-  SNAPMINT_MODE: process.env.SNAPMINT_MODE || "test",
+  SNAPMINT_MODE: process.env.SNAPMINT_MODE,
   SNAPMINT_MIN_ORDER_VALUE: process.env.SNAPMINT_MIN_ORDER_VALUE,
   AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY_ID,
   AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY || process.env.S3_SECRET_ACCESS_KEY,
@@ -114,4 +114,7 @@ export const ENV = envSchema.parse({
   GOOGLE_PAY_MERCHANT_NAME: process.env.GOOGLE_PAY_MERCHANT_NAME,
   GOOGLE_PAY_MCC: process.env.GOOGLE_PAY_MCC,
   GOOGLE_PAY_MERCHANT_ID: process.env.GOOGLE_PAY_MERCHANT_ID,
+  GOOGLE_PAY_ENVIRONMENT: process.env.GOOGLE_PAY_ENVIRONMENT,
 });
+
+export type EnvConfig = z.infer<typeof envSchema>;
