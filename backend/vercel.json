@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/v1/cron/cleanup",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 1 * * *"
     },
     {
       "path": "/api/v1/cron/sync-instagram",
