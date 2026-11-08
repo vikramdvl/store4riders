@@ -4,14 +4,14 @@ export const cartItemSchema = z.object({
   id: z.string().nullable().optional(),
   productId: z.string().min(1, "Product ID is required"),
   variantId: z.string().nullable().optional(),
-  quantity: z.number().int().min(1, "Quantity must be at least 1"),
+  quantity: z.number().int("Quantity must be an integer").min(1, "Quantity must be at least 1").max(99, "Quantity cannot exceed 99 units"),
   product: z.any().optional(),
 });
 
 export const updateCartItemSchema = z.object({
   productId: z.string().min(1, "Product ID is required"),
   variantId: z.string().nullable().optional(),
-  quantity: z.number().int().min(0, "Quantity must be 0 or greater"),
+  quantity: z.number().int("Quantity must be an integer").min(0, "Quantity must be 0 or greater").max(99, "Quantity cannot exceed 99 units"),
 });
 
 export const removeCartItemSchema = z

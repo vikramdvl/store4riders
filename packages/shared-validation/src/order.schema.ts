@@ -21,7 +21,7 @@ export const createOrderSchema = z.object({
   items: z.array(z.object({
     productId: z.string(),
     variantId: z.string().nullable().optional(),
-    quantity: z.number().min(1),
+    quantity: z.number().int("Quantity must be an integer").min(1, "Quantity must be at least 1").max(99, "Quantity cannot exceed 99 units"),
   })).optional(),
   idempotencyKey: z.string().nullable().optional(),
   customerGstin: z

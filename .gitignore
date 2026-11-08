@@ -1,45 +1,49 @@
 # Dependencies
-node_modules
-.pnpm-store
+node_modules/
+.pnpm-store/
 
 # Next.js & Build outputs
 .next/
 dist/
 out/
 build/
-.turbo
+.turbo/
+*.tsbuildinfo
 
-# Environment variables
+# Environment variables (Never commit secrets)
 .env
+.env.*
 .env.local
 .env.production
 .env*.local
+!.env.example
+!backend/.env.example
+!frontend/.env.example
 
-# Logs
+# Test Reports, Coverage & Logs
+coverage/
+*.lcov
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+*.log
+**/*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# OS Files
+# OS & Editor Files
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 
-# Temporary Scripts
-extract-swagger.js
-fix-swagger-errors.js
-safe-extract.js
-create-pages.js
-
-# Test Reports & Error Logs
-test-results/
-playwright-report/
-blob-report/
-playwright/.cache/
-
-*.tsbuildinfo
-
-# Product Catalog, CSV & Tabular Data Files
+# Product Catalog, CSV, Excel & Tabular Data Files
 *.csv
 *.tsv
 *.xlsx
@@ -51,19 +55,6 @@ playwright/.cache/
 *.sqlite3
 *.db
 *.dump
-backup-data/*.sql
-backup-data/db.sql
-
-# Product Media, Images & Extracted Assets
-backup-data/extracted_media/
-backup-data/product_image/
-backup-data/product_image
-backup-data/media/
-backup-data/images/
-backup-data/cache/
-extracted_media/
-product_image/
-product_images/
 
 # Archives & Compressed Backups
 *.zip
@@ -73,59 +64,38 @@ product_images/
 *.rar
 *.7z
 
-# Temporary Data Exports & Audit Scripts
-temp_categories.json
-unique_csv_categories.json
+# Temporary / Scratch Data Exports & JSON Dumps
 temp*.json
 *categories.json
-backup-data/*.json
-backup-data/audit-*.js
-backup-data/sync-*.js
+unique_csv_categories.json
+low-res-images.json
+audit-failures.json
+category-desc-backup.json
+pre-sync-backup.json
 
-# Scratch Files
-backup-data/analyze-*.ts
-backup-data/check-*.ts
-backup-data/find-*.ts
-backup-data/fix-*.ts
-backup-data/hide-*.ts
-backup-data/investigate-*.ts
-backup-data/verify-*.ts
-backup-data/get-*.ts
-
-# Random fix & test scripts
-fix*.js
-patch*.js
-update-layout.js
-test*.js
-migrate*.js
-
-# Scratch folders
+# Scratch Folders & Legacy Backup Data
 scratch/
 backend/scratch/
+backup-data/
+extracted_media/
+product_image/
+product_images/
 
-# Root-level one-off maintenance & debug scripts
+# Root-level one-off maintenance, test & debug scripts
 /*.js
 /*.mjs
 /*.cjs
 !ecosystem.config.cjs
 
-# Backend temporary .cjs / .ts scripts & data migration tools
-*.cjs
-**/*.cjs
+# Backend temporary scripts, seeders & migration tools
 backend/*.js
+backend/*.cjs
+backend/*.mjs
+backend/test-*.ts
+backend/scratch_*.cjs
 !backend/next.config.js
 backend/scripts/
 backend/src/scripts/
 backend/src/scrape-to-db.ts
-backup-data/*.cjs
-backup-data/*.json
-backup-data/.*
-low-res-images.json
-audit-failures.json
 backend/clear.ts
-backend/temp-*.cjs
 powershell.exe
-
-# All log files
-*.log
-**/*.log
