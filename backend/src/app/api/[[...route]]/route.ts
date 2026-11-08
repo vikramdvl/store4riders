@@ -42,9 +42,10 @@ const handleRequest = async (
     logger.info(`[${req.method}] ${req.nextUrl.pathname}`);
 
     // Global Baseline Rate Limiter (Protects ALL endpoints from DDoS / scraping)
-    // Exclude GET /products from global rate limit to allow Next.js SSG to build without failing
+    // Only internal build/SSG on localhost bypasses; all external internet IPs are strictly rate limited
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "127.0.0.1";
-    if (req.method !== 'GET' || !routePath.includes('products')) {
+    const isInternalLocal = ip === "127.0.0.1" || ip === "::1" || ip === "localhost";
+    if (!isInternalLocal || !routePath.includes('products')) {
       await checkGeneralApiRateLimit(ip);
     }
     

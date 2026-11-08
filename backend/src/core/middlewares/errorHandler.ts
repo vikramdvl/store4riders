@@ -13,11 +13,19 @@ export const errorHandler = (error: unknown): NextResponse => {
 
   // Zod validation errors, if thrown manually or via interceptor
   if (error instanceof Error && error.name === "ZodError") {
-    return ApiResponse.error(JSON.parse(error.message), 400);
+    try {
+      return ApiResponse.error(JSON.parse(error.message), 400);
+    } catch {
+      return ApiResponse.error(error.message, 400);
+    }
   }
 
   logger.error("Unhandled Exception:", error);
-  const msg = error instanceof Error ? error.message : "Internal Server Error";
-  // Always expose the error message for debugging purposes
+  // Production safe: Do not leak internal stack traces or connection errors to clients
+  const isProduction = process.env.NODE_ENV === "production";
+  const msg = isProduction 
+    ? "Internal Server Error" 
+    : (error instanceof Error ? error.message : "Internal Server Error");
+
   return ApiResponse.error(msg, 500);
 };
