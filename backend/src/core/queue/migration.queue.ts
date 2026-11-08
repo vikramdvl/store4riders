@@ -1,11 +1,10 @@
 import { Queue } from "bullmq";
-import { ENV } from "../config/env";
 import { logger } from "../utils/logger";
-import IORedis from "ioredis";
+import { getQueueRedisConnection } from "./redis-connection";
 
-const connection = ENV.REDIS_URL ? new IORedis(ENV.REDIS_URL, { maxRetriesPerRequest: null }) : new IORedis({ maxRetriesPerRequest: null });
-
-export const migrationQueue = new Queue("migrationQueue", { connection });
+export const migrationQueue = new Queue("migrationQueue", {
+  connection: getQueueRedisConnection(),
+});
 
 export async function addMigrationJob(filePath: string, adminId: string) {
   try {
@@ -19,6 +18,7 @@ export async function addMigrationJob(filePath: string, adminId: string) {
     throw error;
   }
 }
+
 export async function getMigrationJob(jobId: string) {
   return await migrationQueue.getJob(jobId);
 }

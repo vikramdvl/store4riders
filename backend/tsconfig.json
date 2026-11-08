@@ -30,8 +30,8 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
     "src/types/**/*.d.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
@@ -40,6 +40,9 @@
     "node_modules",
     "src/scripts",
     "scripts",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/__tests__/**",
     ".next/dev"
   ]
 }

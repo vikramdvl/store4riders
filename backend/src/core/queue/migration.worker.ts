@@ -1,7 +1,8 @@
 import { Worker, Job } from "bullmq";
 import { ENV } from "../config/env";
 import { logger } from "../utils/logger";
-import IORedis from "ioredis";
+import { createWorkerRedisConnection } from "./redis-connection";
+import { connectToDatabase } from "../database/connection";
 import fs from "fs";
 import csv from "csv-parser";
 import { ProductModel } from "../../modules/product/product.model";
@@ -11,7 +12,8 @@ import { BrandModel } from "../../modules/brand/brand.model";
 import { slugify } from "@store4riders/shared-utils";
 
 
-const connection = ENV.REDIS_URL ? new IORedis(ENV.REDIS_URL, { maxRetriesPerRequest: null }) : new IORedis({ maxRetriesPerRequest: null });
+// BullMQ Worker dedicated connection
+const connection = createWorkerRedisConnection("migrationWorker");
 
 const KNOWN_FIELDS = new Set([
   "name", "description", "short_description", "url_key", "sku", "price", "special_price",
@@ -30,8 +32,8 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
 
   // Connect to mongoose if not connected (Worker might run in separate process depending on setup)
   if (mongoose.connection.readyState === 0) {
-    if (!ENV.DATABASE_URL) throw new Error("DATABASE_URL is missing");
-    await mongoose.connect(ENV.DATABASE_URL);
+
+    await connectToDatabase();
   }
 
   // We will keep track of configurable products and their simple children
