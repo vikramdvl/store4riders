@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ReviewController } from "./review.controller";
 import { checkReviewRateLimit } from "../../core/middlewares/rateLimiter";
+import { extractUserFromAuth } from "../../core/middlewares/auth";
+import { checkAdmin } from "../../core/middlewares/admin";
+import { UserService } from "../user/user.service";
 
 /**
  * @swagger
@@ -22,18 +25,10 @@ import { checkReviewRateLimit } from "../../core/middlewares/rateLimiter";
  * 
  * /api/v1/reviews/store/sync:
  *   post:
- *     summary: Fetch latest 10 reviews from SerpApi and save to database
+ *     summary: Fetch latest 10 reviews from SerpApi and save to database (Admin only)
  *     tags: [Reviews]
- *     requestBody:
- *       required: false
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               apiKey:
- *                 type: string
- *                 description: Optional SerpApi key (falls back to process.env.SERPAPI_KEY)
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Reviews fetched and saved successfully
@@ -53,6 +48,8 @@ export async function reviewRouter(req: NextRequest, routePath: string[]): Promi
   }
 
   if (method === "GET" && pathLen === 2 && routePath[0] === "store" && routePath[1] === "account") {
+    const userId = extractUserFromAuth(req);
+    await checkAdmin(userId, UserService.getRole);
     return await ReviewController.getAccountStatus(req);
   }
 
@@ -65,6 +62,8 @@ export async function reviewRouter(req: NextRequest, routePath: string[]): Promi
   }
 
   if (method === "POST" && pathLen === 2 && routePath[0] === "store" && routePath[1] === "sync") {
+    const userId = extractUserFromAuth(req);
+    await checkAdmin(userId, UserService.getRole);
     return await ReviewController.syncGoogleReviews(req);
   }
 
