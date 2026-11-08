@@ -2,9 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { UploadService } from "./upload.service";
 import { UploadValidator } from "./upload.validator";
 import { ApiResponse } from "../../core/response/ApiResponse";
+import { extractUserFromAuth } from "../../core/middlewares/auth";
 
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+/**
+ * SSRF Host Protection: Blocks access to internal IPs, metadata endpoints, and localhost
+ */
+const isSafeExternalHost = (hostname: string): boolean => {
+  const lower = hostname.toLowerCase();
+  if (
+    lower === "localhost" ||
+    lower === "127.0.0.1" ||
+    lower === "::1" ||
+    lower === "0.0.0.0" ||
+    lower === "169.254.169.254" || // AWS / Cloud metadata endpoint
+    lower.endsWith(".internal") ||
+    lower.endsWith(".local") ||
+    lower.startsWith("10.") ||
+    lower.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(lower)
+  ) {
+    return false;
+  }
+  return true;
+};
 
 /**
  * @class UploadController
@@ -18,6 +41,9 @@ export class UploadController {
   }
 
   static async directUpload(req: NextRequest) {
+    // Strictly require authenticated user/admin to prevent arbitrary S3 bucket flooding
+    extractUserFromAuth(req);
+
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     if (!file) {
@@ -32,12 +58,26 @@ export class UploadController {
 
   static async scrapeUrl(req: NextRequest) {
     const { url } = await UploadValidator.validateScrapeUrl(req);
+    const parsed = new URL(url);
+    if (!isSafeExternalHost(parsed.hostname)) {
+      return ApiResponse.error("Access to internal or private hosts is prohibited", 403);
+    }
+
     const result = await UploadService.scrapeImagesFromUrl(url);
     return ApiResponse.success(result, `Discovered ${result.images.length} images from URL`);
   }
 
   static async importFromUrl(req: NextRequest) {
     const { items, maxDimension, quality } = await UploadValidator.validateImportFromUrl(req);
+    
+    // Validate each URL is safe external host
+    for (const item of items) {
+      const parsed = new URL(item.url);
+      if (!isSafeExternalHost(parsed.hostname)) {
+        return ApiResponse.error(`Access to internal or private host (${parsed.hostname}) is prohibited`, 403);
+      }
+    }
+
     const result = await UploadService.importAndUploadImages(items, maxDimension, quality);
     return ApiResponse.success(
       result,
@@ -50,8 +90,11 @@ export class UploadController {
   /**
    * Safe preview proxy: fetches external images with proper User-Agent and Referer headers
    * so thumbnails always preview cleanly in the admin modal, even when hotlink-protected by external hosts.
+   * Hardened against SSRF attacks.
    */
   static async proxyPreview(req: NextRequest): Promise<NextResponse> {
+    extractUserFromAuth(req);
+
     const targetUrl = req.nextUrl.searchParams.get("url");
     if (!targetUrl) {
       return new NextResponse("Missing url parameter", { status: 400 });
@@ -59,6 +102,14 @@ export class UploadController {
 
     try {
       const parsed = new URL(targetUrl);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return new NextResponse("Invalid protocol", { status: 400 });
+      }
+
+      if (!isSafeExternalHost(parsed.hostname)) {
+        return new NextResponse("Forbidden: Target host is blocked", { status: 403 });
+      }
+
       let res = await fetch(targetUrl, {
         headers: {
           "User-Agent": BROWSER_USER_AGENT,
@@ -93,7 +144,7 @@ export class UploadController {
         },
       });
     } catch (err: any) {
-      return new NextResponse(err.message || "Preview proxy error", { status: 502 });
+      return new NextResponse("Preview proxy error", { status: 502 });
     }
   }
 }

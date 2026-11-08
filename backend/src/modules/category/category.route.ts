@@ -17,6 +17,8 @@ export async function categoryRouter(req: NextRequest, routePath: string[]): Pro
   }
 
   if ((method === "POST" || method === "GET") && pathLen === 1 && routePath[0] === "revalidate") {
+    const userId = extractUserFromAuth(req);
+    await checkAdmin(userId, UserService.getRole);
     const { CategoryService } = await import("./category.service");
     await CategoryService.invalidateCache();
     const { ApiResponse } = await import("../../core/response/ApiResponse");
