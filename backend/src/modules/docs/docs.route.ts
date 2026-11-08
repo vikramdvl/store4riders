@@ -4,8 +4,22 @@ import { getSwaggerSpec } from "@/core/config/swagger";
 /**
  * @file docs.route.ts
  * @description Serves Swagger UI and the OpenAPI JSON spec for automatic testing.
+ * Protected: In production, requires Staff/Admin authentication to prevent information disclosure.
  */
 export async function docsRouter(req: NextRequest, routePath: string[]): Promise<NextResponse | null> {
+  // In production, Swagger documentation is strictly locked to Admin/Staff
+  if (process.env.NODE_ENV === "production") {
+    try {
+      const { extractUserFromAuth } = await import("../../core/middlewares/auth");
+      const { checkAdmin } = await import("../../core/middlewares/admin");
+      const { UserService } = await import("../user/user.service");
+      const userId = extractUserFromAuth(req);
+      await checkAdmin(userId, UserService.getRole);
+    } catch {
+      return new NextResponse("Not Found", { status: 404 });
+    }
+  }
+
   if (req.method === "GET" && routePath.length === 0) {
     // Serve Swagger UI HTML
     const html = `
@@ -25,7 +39,7 @@ export async function docsRouter(req: NextRequest, routePath: string[]): Promise
         <script>
           window.onload = () => {
             window.ui = SwaggerUIBundle({
-              url: '/api/docs/spec',
+              url: '/api/v1/docs/spec',
               dom_id: '#swagger-ui',
             });
           };
