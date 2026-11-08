@@ -67,8 +67,13 @@ export async function connectToDatabase() {
 
   if (!cached.promise) {
     const targetUri = getDirectMongoUri(rawUri);
-    const opts = {
+    const opts: mongoose.ConnectOptions = {
       bufferCommands: false,
+      maxPoolSize: 20,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
     };
 
     logger.info("Connecting to MongoDB...");

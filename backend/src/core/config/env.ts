@@ -1,7 +1,7 @@
 /**
  * @file env.ts
  * @description Validates all required environment variables strictly at runtime.
- * Uses safe defaults during build time to prevent build failures.
+ * Strict zero-mock enforcement: reads exclusively from process.env.
  */
 import { z } from "zod";
 import dotenv from "dotenv";
@@ -63,17 +63,14 @@ const envSchema = z.object({
   GOOGLE_PAY_ENVIRONMENT: z.enum(["TEST", "PRODUCTION"]).optional().default("TEST"),
 });
 
-const isProd = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
-const isCi = Boolean(process.env.CI);
-
 export const ENV = envSchema.parse({
-  DATABASE_URL: process.env.DATABASE_URL || process.env.MONGODB_URI || (isProd && !isCi ? "" : "mongodb://localhost:27017/store4riders"),
-  REDIS_URL: process.env.REDIS_URL || (isProd && !isCi ? "" : "redis://localhost:6379"),
-  FRONTEND_URL: process.env.FRONTEND_URL || (isProd && !isCi ? "" : "http://localhost:3000"),
-  API_URL: process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || (isProd && !isCi ? "" : "http://localhost:4000"),
-  NEXT_PUBLIC_API_URL: process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || (isProd && !isCi ? "" : "http://localhost:4000"),
-  JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || (isProd && !isCi ? "" : (process.env.NODE_ENV === "test" ? "test-secret" : "")),
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || (isProd && !isCi ? "" : (process.env.NODE_ENV === "test" ? "test-secret" : "")),
+  DATABASE_URL: process.env.DATABASE_URL || process.env.MONGODB_URI,
+  REDIS_URL: process.env.REDIS_URL,
+  FRONTEND_URL: process.env.FRONTEND_URL || "https://store4riders.com",
+  API_URL: process.env.API_URL || process.env.NEXT_PUBLIC_API_URL,
+  NEXT_PUBLIC_API_URL: process.env.API_URL || process.env.NEXT_PUBLIC_API_URL,
+  JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET,
+  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
   NODE_ENV: process.env.NODE_ENV,
   PAYU_MERCHANT_KEY: process.env.PAYU_MERCHANT_KEY,
   PAYU_SALT: process.env.PAYU_SALT,
