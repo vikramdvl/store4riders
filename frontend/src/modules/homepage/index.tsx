@@ -35,12 +35,16 @@ export const HomepageModule: React.FC<{
   homepageConfig: initialHomepageConfig,
   storeReviews = [],
 }) => {
-  const { data: liveConfig } = usePublicHomepageConfig();
+  const { data: liveConfig } = usePublicHomepageConfig(initialHomepageConfig);
   const homepageConfig = liveConfig || initialHomepageConfig;
 
-  // Real client-side products query if SSR products list was empty (e.g. during Vercel cold-start)
-  const { data: clientProductsData } = useProducts({ limit: 40 });
-  const backendProductsList = (backendProducts && backendProducts.length > 0)
+  // Real client-side products query ONLY if SSR products list was empty (e.g. during Vercel cold-start)
+  const hasServerProducts = Array.isArray(backendProducts) && backendProducts.length > 0;
+  const { data: clientProductsData } = useProducts(
+    { limit: 40 },
+    { enabled: !hasServerProducts }
+  );
+  const backendProductsList = hasServerProducts
     ? backendProducts
     : (clientProductsData?.items || []);
 
@@ -491,9 +495,14 @@ export const HomepageModule: React.FC<{
     });
   }, [backendProductsList]);
 
-  const { data: storeReviewsQuery } = useStoreReviews({ random: true, limit: 10 });
+  const hasServerReviews = Array.isArray(storeReviews) && storeReviews.length > 0;
+  const { data: storeReviewsQuery } = useStoreReviews({
+    random: true,
+    limit: 10,
+    enabled: !hasServerReviews,
+  });
   const queryReviews = storeReviewsQuery?.pages.flatMap((p) => p.data) || [];
-  const fetchedStoreReviews = queryReviews.length > 0 ? queryReviews : (storeReviews || []);
+  const fetchedStoreReviews = hasServerReviews ? storeReviews : (queryReviews.length > 0 ? queryReviews : []);
 
   const testimonialsData: TestimonialData[] = React.useMemo(() => {
     if (!fetchedStoreReviews || fetchedStoreReviews.length === 0) return [];

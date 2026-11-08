@@ -19,8 +19,9 @@ export interface BrowseProductsSectionProps {
 /**
  * GridProductCard Component
  */
-const GridProductCard: React.FC<{ product: BrowseProductData }> = ({ 
+const GridProductCard: React.FC<{ product: BrowseProductData; priority?: boolean }> = ({ 
   product, 
+  priority = false,
 }) => {
   return (
     <div className="flex flex-col group cursor-pointer w-full h-full">
@@ -30,6 +31,9 @@ const GridProductCard: React.FC<{ product: BrowseProductData }> = ({
           src={product.imageUrl}
           alt={product.name}
           fill
+          priority={priority}
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
           className="object-contain mix-blend-multiply group-hover:scale-105 transition-transform duration-500 ease-out will-change-transform"
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           unoptimized={true}
@@ -167,7 +171,7 @@ export const BrowseProductsSection: React.FC<BrowseProductsSectionProps> = ({
               </div>
             ))
           ) : (
-            products.map((product) => (
+            products.map((product, idx) => (
               <Link
                 key={product.id}
                 href={product.productUrl}
@@ -177,7 +181,7 @@ export const BrowseProductsSection: React.FC<BrowseProductsSectionProps> = ({
                     : "block w-full"
                 }
               >
-                <GridProductCard product={product} />
+                <GridProductCard product={product} priority={idx < 4} />
               </Link>
             ))
           )}

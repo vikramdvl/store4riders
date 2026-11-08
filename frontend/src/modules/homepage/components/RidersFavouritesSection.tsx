@@ -78,7 +78,7 @@ export const RidersFavouritesSection: React.FC<RidersFavouritesSectionProps> = (
 
       {/* 2by2 on mobile (grid-cols-2), 4 columns on desktop (lg:grid-cols-4) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
-        {displayProducts.map((product) => {
+        {displayProducts.map((product, idx) => {
           const isPlaceholder = product.name === "[PRODUCT NAME]";
 
           return (
@@ -94,6 +94,9 @@ export const RidersFavouritesSection: React.FC<RidersFavouritesSectionProps> = (
                     src={product.imageUrl}
                     alt={product.name}
                     fill
+                    priority={idx < 4}
+                    loading={idx < 4 ? "eager" : "lazy"}
+                    fetchPriority={idx < 4 ? "high" : "auto"}
                     className="object-contain mix-blend-multiply group-hover:scale-105 transition-transform duration-500 ease-out will-change-transform"
                     sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                   />

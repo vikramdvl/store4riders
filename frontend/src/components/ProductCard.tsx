@@ -21,9 +21,10 @@ import { getProductThumbnailUrl, getPreferredInStockColor, getProductCandidateIm
 interface ProductCardProps {
   product: any;
   showBuyNow?: boolean;
+  priority?: boolean;
 }
 
-const ProductCard = ({ product, showBuyNow = false }: ProductCardProps) => {
+const ProductCard = ({ product, showBuyNow = false, priority = false }: ProductCardProps) => {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const addItem = useCartStore((state) => state.addItem);
@@ -186,7 +187,7 @@ const ProductCard = ({ product, showBuyNow = false }: ProductCardProps) => {
   const uniqueColors = Array.from(colorNamesMap.values()).slice(0, 4);
 
   return (
-    <Link href={`/${product.slug || product.id}${preferredColor ? `?color=${encodeURIComponent(preferredColor)}` : ''}`}>
+    <Link prefetch={true} href={`/${product.slug || product.id}${preferredColor ? `?color=${encodeURIComponent(preferredColor)}` : ''}`}>
       <div
         className="group relative flex flex-col rounded-2xl bg-white shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-slate-200 overflow-hidden h-full"
       >
@@ -196,6 +197,9 @@ const ProductCard = ({ product, showBuyNow = false }: ProductCardProps) => {
             src={imgSrc}
             alt={product.name}
             fill
+            priority={priority}
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : "auto"}
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             placeholder="blur"
             blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjFmNWY5Ii8+PC9zdmc+"

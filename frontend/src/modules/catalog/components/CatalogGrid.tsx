@@ -97,8 +97,8 @@ export const CatalogGrid: React.FC<CatalogGridProps> = ({
             isFetching ? "opacity-40 pointer-events-none select-none" : "opacity-100"
           }`}
         >
-          {products.map((product) => (
-            <CatalogProductCard key={product.id} product={product} />
+          {products.map((product, idx) => (
+            <CatalogProductCard key={product.id} product={product} priority={idx < 4} />
           ))}
         </div>
       )}

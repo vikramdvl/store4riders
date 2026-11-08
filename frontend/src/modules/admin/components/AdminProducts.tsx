@@ -625,7 +625,7 @@ export function AdminProducts() {
         )}
 
         {/* Pagination Bar */}
-        {data && data.totalPages > 1 && (
+        {data && (data.totalPages ?? 0) > 1 && (
           <div className="p-4 border-t border-slate-200 flex justify-between items-center bg-white text-xs text-slate-600">
             <span>
               Showing page {data.page} of {data.totalPages} ({data.totalCount} total)
@@ -643,11 +643,11 @@ export function AdminProducts() {
                 <input
                   type="number"
                   min={1}
-                  max={data.totalPages}
+                  max={data.totalPages ?? 1}
                   value={page}
                   onChange={(e) => {
                     const val = Number(e.target.value);
-                    if (val >= 1 && val <= data.totalPages) setPage(val);
+                    if (val >= 1 && val <= (data.totalPages ?? 1)) setPage(val);
                   }}
                   className="w-10 px-1 py-1 text-center border border-slate-300 rounded text-xs font-semibold"
                 />
@@ -656,7 +656,7 @@ export function AdminProducts() {
               <Button
                 variant="outline"
                 disabled={page === data.totalPages}
-                onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
+                onClick={() => setPage((p) => Math.min(data.totalPages ?? 1, p + 1))}
                 className="h-8 text-xs px-3"
               >
                 Next

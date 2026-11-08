@@ -19,14 +19,15 @@ export function useHomepageConfig() {
   });
 }
 
-export function usePublicHomepageConfig() {
+export function usePublicHomepageConfig(initialData?: IHomepageConfig) {
   return useQuery<IHomepageConfig>({
     queryKey: ["homepage", "public"],
     queryFn: async () => {
       const res = await apiClient.get<{ success: boolean; data: IHomepageConfig }>("/homepage/public");
       return res.data.data;
     },
-    staleTime: 5 * 1000,
+    initialData,
+    staleTime: 60 * 1000,
   });
 }
 

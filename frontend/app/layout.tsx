@@ -105,6 +105,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${poppins.variable} font-sans`} suppressHydrationWarning>
       <head>
+        {/* Preconnect & DNS-Prefetch to CloudFront Media Origin for Zero-Latency Image Delivery */}
+        <link rel="preconnect" href="https://d2zuvpvc0pfkya.cloudfront.net" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://d2zuvpvc0pfkya.cloudfront.net" />
         <link rel="icon" href="/favicon.png" type="image/png" />
         <link rel="shortcut icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/favicon.png" />

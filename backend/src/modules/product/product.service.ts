@@ -5,6 +5,7 @@ import { indexProduct, removeProductFromIndex } from "../../core/search/meilisea
 import { slugify } from "@store4riders/shared-utils";
 import { getCache, setCache, deleteCache, clearProductCaches } from "../../core/cache/redis";
 import { buildSearchSlugs, resolveCanonicalCategorySlugs } from "./product.category-constants";
+import { supportsTransactions } from "../../core/database/transaction";
 
 const PRODUCT_LIST_TTL = 120; // 2 minutes
 const PRODUCT_DETAIL_TTL = 300; // 5 minutes
@@ -76,7 +77,10 @@ export class ProductService {
     const cached = await getCache(cacheKey);
     if (cached) return cached;
 
-    const product = await ProductRepository.findById(slug);
+    let product = await ProductRepository.findBySlug(slug);
+    if (!product) {
+      product = await ProductRepository.findById(slug);
+    }
     if (!product) throw new NotFoundError("Product");
 
     // DYNAMIC ORPHAN VARIANT RECOVERY:
@@ -116,8 +120,12 @@ export class ProductService {
 
       let children: any[] = [];
       if (childSkus.length > 0) {
-        const skuRegexes = childSkus.map(s => new RegExp(`^${s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i"));
-        children = await ProductModel.find({ sku: { $in: skuRegexes } }).lean().exec();
+        // Fast direct indexed B-Tree match first (<1ms)
+        children = await ProductModel.find({ sku: { $in: childSkus } }).lean().exec();
+        if (!children || children.length === 0) {
+          const skuRegexes = childSkus.map(s => new RegExp(`^${s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i"));
+          children = await ProductModel.find({ sku: { $in: skuRegexes } }).lean().exec();
+        }
       } else if (product.productType === 'configurable' && product.sku) {
         children = await ProductModel.find({ sku: { $regex: new RegExp(`^${product.sku}[-_]`, "i") } }).lean().exec();
         children.forEach(c => {
@@ -1490,11 +1498,14 @@ export class ProductService {
           const errorRows: any[] = [];
 
           let session: any = null;
-          try {
-            session = await mongoose.startSession();
-            session.startTransaction();
-          } catch {
-            session = null; // graceful fallback for standalone MongoDB instances
+          const canUseTx = await supportsTransactions();
+          if (canUseTx) {
+            try {
+              session = await mongoose.startSession();
+              session.startTransaction();
+            } catch {
+              session = null; // graceful fallback for standalone MongoDB instances
+            }
           }
 
           try {

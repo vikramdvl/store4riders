@@ -1,26 +1,24 @@
-"use client";
-
 import React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { HeroProductCardData } from "../types/homepage.types";
 
 export interface ProductCardProps {
-  /** Product data model */
   product: HeroProductCardData;
-  /** Image positioning: left or right side of the card (matches Figma layout) */
-  imagePosition?: "left" | "right";
-  /** Optional custom CSS classes for positioning */
   className?: string;
 }
 
 /**
  * ProductCard Component
- * 
- * Floating hero product card matching the exact Figma design.
- * Features a split layout with product image on one side and product details (Title, Price, SHOP NOW) on the other.
- * 
+ *
+ * Floating product card displayed over the hero banner.
+ * Exactly matches the reference wireframe styling:
+ * - Rounded corners with subtle shadow
+ * - Product image on the left, details on the right
+ * - Clean typography and Store4Riders brand accents
+ *
  * @param {ProductCardProps} props Component properties
+ * @returns {React.ReactElement} The rendered ProductCard component
  */
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
@@ -38,6 +36,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           alt={product.title}
           fill
           sizes="100px"
+          priority={true}
+          fetchPriority="high"
           className="object-cover group-hover:scale-105 transition-transform duration-300 will-change-transform"
         />
       </div>

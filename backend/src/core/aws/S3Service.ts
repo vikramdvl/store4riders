@@ -10,7 +10,7 @@ const s3Client = new S3Client({
 
 export class S3Service {
   /**
-   * Uploads a file buffer to S3 and returns the public URL.
+   * Uploads a file buffer to S3 with enterprise immutable caching headers and returns the public URL.
    */
   static async uploadFile(file: { buffer: Buffer; originalname: string; mimetype: string }, folder: string = "uploads"): Promise<string> {
     const bucketName = process.env.AWS_S3_BUCKET;
@@ -25,7 +25,7 @@ export class S3Service {
       Key: key,
       Body: file.buffer,
       ContentType: file.mimetype,
-      // ACL: "public-read", // Omitted as modern S3 buckets disable ACLs by default
+      CacheControl: "public, max-age=31536000, immutable",
     });
 
     await s3Client.send(command);

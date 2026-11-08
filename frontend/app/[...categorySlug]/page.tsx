@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
 import { notFound, permanentRedirect } from "next/navigation";
 import { ProductsPageModule } from "@/modules/catalog/components/ProductsPageModule";
 import { ProductDetailPageModule } from "@/modules/product-detail/components/ProductDetailPageModule";
@@ -12,18 +12,18 @@ import {
   cleanText,
 } from "@/core/utils/seo-schema";
 
-const rawApiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+const rawApiBase = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
 const API_BASE = rawApiBase.includes("/v1")
   ? rawApiBase
   : rawApiBase.endsWith("/api")
   ? `${rawApiBase}/v1`
   : `${rawApiBase}/api/v1`;
 
-async function getProduct(slug: string) {
+const getProduct = cache(async (slug: string) => {
   try {
     const res = await fetch(`${API_BASE}/products/${encodeURIComponent(slug)}`, {
       next: { revalidate: 60 },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
     const json = await res.json();
@@ -31,13 +31,13 @@ async function getProduct(slug: string) {
   } catch {
     return null;
   }
-}
+});
 
-async function getCategoryNode(categorySlug: string) {
+const getCategoryNode = cache(async (categorySlug: string) => {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+    const baseUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
     const treeUrl = baseUrl.includes("/v1") ? `${baseUrl}/categories/tree` : `${baseUrl}/v1/categories/tree`;
-    const res = await fetch(treeUrl, { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) });
+    const res = await fetch(treeUrl, { next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) });
     if (res.ok) {
       const data = await res.json();
       const findCategory = (nodes: any[]): any => {
@@ -57,7 +57,7 @@ async function getCategoryNode(categorySlug: string) {
     const singleUrl = baseUrl.includes("/v1")
       ? `${baseUrl}/categories/${encodeURIComponent(categorySlug)}`
       : `${baseUrl}/v1/categories/${encodeURIComponent(categorySlug)}`;
-    const singleRes = await fetch(singleUrl, { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) });
+    const singleRes = await fetch(singleUrl, { next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) });
     if (singleRes.ok) {
       const singleData = await singleRes.json();
       if (singleData?.data) return singleData.data;
@@ -66,7 +66,7 @@ async function getCategoryNode(categorySlug: string) {
   } catch {
     return null;
   }
-}
+});
 
 interface CategoryPageProps {
   params: Promise<{ categorySlug: string[] }>;

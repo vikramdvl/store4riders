@@ -53,7 +53,7 @@ vi.mock('../../payments/PaymentGatewayFactory', () => ({
 
 vi.mock('../../../modules/shipping/shipment.service', () => ({
   ShipmentService: {
-    checkServiceability: vi.fn().mockResolvedValue({ available: true, codAvailable: true }),
+    checkServiceability: vi.fn().mockResolvedValue({ serviceable: true, available: true, codAvailable: true }),
   },
 }));
 

@@ -15,6 +15,7 @@ import { logger } from "../../core/utils/logger";
 import { ENV } from "../../core/config/env";
 import { calculateTax, calculateInclusiveTax, getTaxRateFromClass } from "@store4riders/shared-utils";
 import { getCache, setCache } from "../../core/cache/redis";
+import { withTransactionSafe } from "../../core/database/transaction";
 
 export class OrderService {
   
@@ -103,7 +104,7 @@ export class OrderService {
     // SERVER-SIDE SERVICEABILITY GATE — prevents orders for undeliverable pincodes
     // Frontend check is just UX; this is the real backend guard. Cannot be bypassed.
     const pincode = shippingAddressSnapshot.pincode;
-    if (pincode && /^\d{6}$/.test(pincode) && process.env.NODE_ENV !== "test") {
+    if (pincode && /^\d{6}$/.test(pincode)) {
       try {
         const { ShipmentService } = await import("../shipping/shipment.service");
         const serviceability = await ShipmentService.checkServiceability(pincode, 0.5, paymentMethod === "cod");
@@ -312,111 +313,104 @@ export class OrderService {
 
     const orderNumber = await this.generateOrderNumber();
 
-    const session = await mongoose.startSession();
-    let resultData;
+    const resultData = await withTransactionSafe(async (session) => {
+      const effectiveGuestEmail = !userId
+        ? (guestEmail || shippingAddressSnapshot?.email || input.email || "")?.toLowerCase()?.trim() || undefined
+        : undefined;
 
-    try {
-      await session.withTransaction(async () => {
-        const effectiveGuestEmail = !userId
-          ? (guestEmail || shippingAddressSnapshot?.email || input.email || "")?.toLowerCase()?.trim() || undefined
-          : undefined;
+      const orderData: Partial<IOrder> = {
+        orderNumber,
+        ...(userId ? { userId } : {}),
+        ...(effectiveGuestEmail ? { guestEmail: effectiveGuestEmail } : {}),
+        status: "pending_payment", // Even for pure COD without partial, we might keep it pending until manual confirm, or auto confirm. We will leave it pending_payment
+        pricing,
+        items: orderItems,
+        shippingAddress: shippingAddressSnapshot,
+        paymentMethod,
+        ...(sanitizedGstin ? { customerGstin: sanitizedGstin } : {}),
+        ...(sanitizedBusinessName ? { businessName: sanitizedBusinessName } : {}),
+        idempotencyKey,
+      };
 
-        const orderData: Partial<IOrder> = {
-          orderNumber,
-          ...(userId ? { userId } : {}),
-          ...(effectiveGuestEmail ? { guestEmail: effectiveGuestEmail } : {}),
-          status: "pending_payment", // Even for pure COD without partial, we might keep it pending until manual confirm, or auto confirm. We will leave it pending_payment
-          pricing,
-          items: orderItems,
-          shippingAddress: shippingAddressSnapshot,
-          paymentMethod,
-          ...(sanitizedGstin ? { customerGstin: sanitizedGstin } : {}),
-          ...(sanitizedBusinessName ? { businessName: sanitizedBusinessName } : {}),
+      const order = await OrderRepository.create(orderData, session);
+      const orderIdStr = String((order as any)._id || (order as any).id || "");
+      
+      let gatewayOrderId = "";
+      let gatewayResponse: any = null;
+      
+      if (paymentMethod !== "cod" || collectGatewayForCod) {
+        const gateway = PaymentGatewayFactory.create(actualGatewayType);
+        const gatewayResult = await gateway.createOrder({ ...orderData, id: orderIdStr, userEmail: user?.email, snapmintMinOrderValue: settings.snapmintMinOrderValue } as any, gatewayAmount);
+        gatewayOrderId = gatewayResult.gatewayOrderId;
+        gatewayResponse = gatewayResult.gatewayResponse;
+        
+        await PaymentRepository.create({
+          orderId: orderIdStr,
+          status: "created",
+          amount: gatewayAmount,
+          gatewayOrderId,
+          method: paymentMethod as any,
+          gateway: actualGatewayType as any,
+          webhookEvents: [],
           idempotencyKey,
-        };
-
-        const order = await OrderRepository.create(orderData, session);
-        const orderIdStr = String((order as any)._id || (order as any).id || "");
+        }, session);
+      } else {
+        // Pure COD without partial payment online
         
-        let gatewayOrderId = "";
-        let gatewayResponse: any = null;
-        
-        if (paymentMethod !== "cod" || collectGatewayForCod) {
-          const gateway = PaymentGatewayFactory.create(actualGatewayType);
-          const gatewayResult = await gateway.createOrder({ ...orderData, id: orderIdStr, userEmail: user?.email, snapmintMinOrderValue: settings.snapmintMinOrderValue } as any, gatewayAmount);
-          gatewayOrderId = gatewayResult.gatewayOrderId;
-          gatewayResponse = gatewayResult.gatewayResponse;
-          
-          await PaymentRepository.create({
-            orderId: orderIdStr,
-            status: "created",
-            amount: gatewayAmount,
-            gatewayOrderId,
-            method: paymentMethod as any,
-            gateway: actualGatewayType as any,
-            webhookEvents: [],
-            idempotencyKey,
-          }, session);
-        } else {
-          // Pure COD without partial payment online
-          
-          let allStockDecremented = true;
-          const decrementedItems = [];
-          if (orderItems && orderItems.length > 0) {
-            for (const itm of orderItems) {
-              const success = await ProductRepository.decrementStock(itm.productId, itm.variantId, itm.quantity, session);
-              if (success) {
-                decrementedItems.push(itm);
-              } else {
-                allStockDecremented = false;
-                break;
-              }
-            }
-          }
-
-          if (!allStockDecremented) {
-            for (const itm of decrementedItems) {
-              await ProductRepository.incrementStock(itm.productId, itm.variantId, itm.quantity, session);
-            }
-            throw new AppError("Insufficient stock for one or more items", 400); // Throws out of transaction since it's COD, it won't have payment to refund
-          }
-
-          // Auto-confirm the order since there's no gateway involved
-          await OrderRepository.updateStatus(orderIdStr, "confirmed", {}, session);
-          
+        let allStockDecremented = true;
+        const decrementedItems = [];
+        if (orderItems && orderItems.length > 0) {
           for (const itm of orderItems) {
-            await ProductRepository.incrementSalesCount(itm.productId, itm.quantity, session);
-          }
-          if (couponCode) {
-            await CouponService.incrementUsage(couponCode, userId, session);
-          }
-          if (userId) {
-            await CartService.clearCart(userId, session);
-          }
-          if (user?.email || guestEmail) {
-            const emailTarget = user?.email || guestEmail;
-            addEmailJob(emailTarget, "Order Confirmed (Cash on Delivery)", `Your order #${orderNumber} has been placed successfully via Cash on Delivery.`);
+            const success = await ProductRepository.decrementStock(itm.productId, itm.variantId, itm.quantity, session);
+            if (success) {
+              decrementedItems.push(itm);
+            } else {
+              allStockDecremented = false;
+              break;
+            }
           }
         }
 
-        if (gatewayOrderId) {
-          await OrderRepository.updateStatus(orderIdStr, "pending_payment", {
-            gatewayOrderId,
-          }, session);
+        if (!allStockDecremented) {
+          for (const itm of decrementedItems) {
+            await ProductRepository.incrementStock(itm.productId, itm.variantId, itm.quantity, session);
+          }
+          throw new AppError("Insufficient stock for one or more items", 400); // Throws out of transaction since it's COD, it won't have payment to refund
         }
 
-        resultData = { 
-          orderId: orderIdStr, 
-          gatewayOrderId: gatewayOrderId, 
-          amount: gatewayAmount, 
-          orderNumber,
-          gatewayResponse,
-          paymentMethod: actualGatewayType
-        };
-      });
-    } finally {
-      await session.endSession();
-    }
+        // Auto-confirm the order since there's no gateway involved
+        await OrderRepository.updateStatus(orderIdStr, "confirmed", {}, session);
+        
+        for (const itm of orderItems) {
+          await ProductRepository.incrementSalesCount(itm.productId, itm.quantity, session);
+        }
+        if (couponCode) {
+          await CouponService.incrementUsage(couponCode, userId, session);
+        }
+        if (userId) {
+          await CartService.clearCart(userId, session);
+        }
+        if (user?.email || guestEmail) {
+          const emailTarget = user?.email || guestEmail;
+          addEmailJob(emailTarget, "Order Confirmed (Cash on Delivery)", `Your order #${orderNumber} has been placed successfully via Cash on Delivery.`);
+        }
+      }
+
+      if (gatewayOrderId) {
+        await OrderRepository.updateStatus(orderIdStr, "pending_payment", {
+          gatewayOrderId,
+        }, session);
+      }
+
+      return { 
+        orderId: orderIdStr, 
+        gatewayOrderId: gatewayOrderId, 
+        amount: gatewayAmount, 
+        orderNumber,
+        gatewayResponse,
+        paymentMethod: actualGatewayType
+      };
+    });
 
     if (resultData) {
       try {
@@ -440,95 +434,90 @@ export class OrderService {
     signature: string,
     extraData?: { paymentData?: any; tezResponse?: any; utr?: string }
   ) {
-    const session = await mongoose.startSession();
     let stockFailed = false;
     let paymentRecord: any = null;
-    try {
-      await session.withTransaction(async () => {
-        const order = await OrderRepository.findByGatewayOrderId(gatewayOrderId, session);
-        if (!order) throw new AppError("Order not found", 404);
+    await withTransactionSafe(async (session) => {
+      const order = await OrderRepository.findByGatewayOrderId(gatewayOrderId, session);
+      if (!order) throw new AppError("Order not found", 404);
 
-        // Ownership check
-        if (userId && order.userId && String(order.userId) !== userId) throw new AppError("Order belongs to different user", 403);
+      // Ownership check
+      if (userId && order.userId && String(order.userId) !== userId) throw new AppError("Order belongs to different user", 403);
 
+      const orderIdStr = String((order as any)._id || order.id);
+      const payment = (await PaymentRepository.findByGatewayOrderId(gatewayOrderId, session))
+        || (order.gatewayOrderId ? await PaymentRepository.findByGatewayOrderId(order.gatewayOrderId, session) : null)
+        || (await PaymentRepository.findByOrderId(orderIdStr, session));
+      if (!payment) throw new AppError("Payment record not found", 404);
+      paymentRecord = payment;
+
+      const gateway = PaymentGatewayFactory.create(payment.gateway);
+      const verifyResult = await gateway.verifyPayment(payment as unknown as IPayment, {
+        gatewayOrderId,
+        paymentId,
+        signature,
+        paymentData: extraData?.paymentData,
+        tezResponse: extraData?.tezResponse,
+        utr: extraData?.utr || (signature && /^\d{12}$/.test(signature) ? signature : undefined),
+      });
+
+      if (!verifyResult.success) {
+        throw new AppError(verifyResult.message || "Payment verification failed", 400);
+      }
+
+      if (order.status !== "confirmed") {
         const orderIdStr = String((order as any)._id || order.id);
-        const payment = (await PaymentRepository.findByGatewayOrderId(gatewayOrderId, session))
-          || (order.gatewayOrderId ? await PaymentRepository.findByGatewayOrderId(order.gatewayOrderId, session) : null)
-          || (await PaymentRepository.findByOrderId(orderIdStr, session));
-        if (!payment) throw new AppError("Payment record not found", 404);
-        paymentRecord = payment;
-
-        const gateway = PaymentGatewayFactory.create(payment.gateway);
-        const verifyResult = await gateway.verifyPayment(payment as unknown as IPayment, {
-          gatewayOrderId,
-          paymentId,
-          signature,
-          paymentData: extraData?.paymentData,
-          tezResponse: extraData?.tezResponse,
-          utr: extraData?.utr || (signature && /^\d{12}$/.test(signature) ? signature : undefined),
-        });
-
-        if (!verifyResult.success) {
-          throw new AppError(verifyResult.message || "Payment verification failed", 400);
+        
+        let allStockDecremented = true;
+        const decrementedItems = [];
+        if (order.items && order.items.length > 0) {
+          for (const itm of order.items) {
+            const success = await ProductRepository.decrementStock(itm.productId, itm.variantId, itm.quantity, session);
+            if (success) {
+              decrementedItems.push(itm);
+            } else {
+              allStockDecremented = false;
+              break;
+            }
+          }
         }
 
-        if (order.status !== "confirmed") {
-          const orderIdStr = String((order as any)._id || order.id);
+        if (!allStockDecremented) {
+          // Manual rollback of stock
+          for (const itm of decrementedItems) {
+            await ProductRepository.incrementStock(itm.productId, itm.variantId, itm.quantity, session);
+          }
           
-          let allStockDecremented = true;
-          const decrementedItems = [];
-          if (order.items && order.items.length > 0) {
-            for (const itm of order.items) {
-              const success = await ProductRepository.decrementStock(itm.productId, itm.variantId, itm.quantity, session);
-              if (success) {
-                decrementedItems.push(itm);
-              } else {
-                allStockDecremented = false;
-                break;
-              }
-            }
-          }
-
-          if (!allStockDecremented) {
-            // Manual rollback of stock
-            for (const itm of decrementedItems) {
-              await ProductRepository.incrementStock(itm.productId, itm.variantId, itm.quantity, session);
-            }
-            
-            await OrderRepository.updateStatus(orderIdStr, "failed", { paymentId, paymentSignature: signature }, session);
-            await PaymentRepository.atomicStatusTransition(String((payment as any)._id || payment.id), "created", "captured", { gatewayPaymentId: verifyResult.gatewayPaymentId }, session);
-            
-            stockFailed = true;
-            return;
-          }
-
-          await OrderRepository.updateStatus(orderIdStr, "confirmed", { paymentId, paymentSignature: signature }, session);
+          await OrderRepository.updateStatus(orderIdStr, "failed", { paymentId, paymentSignature: signature }, session);
           await PaymentRepository.atomicStatusTransition(String((payment as any)._id || payment.id), "created", "captured", { gatewayPaymentId: verifyResult.gatewayPaymentId }, session);
           
-          for (const itm of order.items) {
-            await ProductRepository.incrementSalesCount(itm.productId, itm.quantity, session);
-          }
-
-          if (order.pricing && order.pricing.couponCode) {
-            await CouponService.incrementUsage(order.pricing.couponCode, order.userId, session);
-          }
-          if (order.userId) {
-            await CartService.clearCart(order.userId, session);
-          }
-
-          if (order.userId) {
-            const user = await UserRepository.findById(order.userId);
-            if (user) {
-              addEmailJob(user.email, "Order Confirmed", `Your payment of ${paymentId} was successful.`);
-            }
-          } else if (order.guestEmail) {
-            addEmailJob(order.guestEmail, "Order Confirmed", `Your payment of ${paymentId} was successful.`);
-          }
+          stockFailed = true;
+          return;
         }
-      });
-    } finally {
-      await session.endSession();
-    }
+
+        await OrderRepository.updateStatus(orderIdStr, "confirmed", { paymentId, paymentSignature: signature }, session);
+        await PaymentRepository.atomicStatusTransition(String((payment as any)._id || payment.id), "created", "captured", { gatewayPaymentId: verifyResult.gatewayPaymentId }, session);
+        
+        for (const itm of order.items) {
+          await ProductRepository.incrementSalesCount(itm.productId, itm.quantity, session);
+        }
+
+        if (order.pricing && order.pricing.couponCode) {
+          await CouponService.incrementUsage(order.pricing.couponCode, order.userId, session);
+        }
+        if (order.userId) {
+          await CartService.clearCart(order.userId, session);
+        }
+
+        if (order.userId) {
+          const user = await UserRepository.findById(order.userId);
+          if (user) {
+            addEmailJob(user.email, "Order Confirmed", `Your payment of ${paymentId} was successful.`);
+          }
+        } else if (order.guestEmail) {
+          addEmailJob(order.guestEmail, "Order Confirmed", `Your payment of ${paymentId} was successful.`);
+        }
+      }
+    });
 
     if (stockFailed && paymentRecord) {
       // Initiate refund outside the transaction since it's an external API call
@@ -565,10 +554,8 @@ export class OrderService {
     let finalOrderNumber = "";
     let finalOrderId = "";
 
-    const session = await mongoose.startSession();
-    try {
-      await session.withTransaction(async () => {
-        const order = await OrderRepository.findByGatewayOrderId(gatewayOrderId, session);
+    await withTransactionSafe(async (session) => {
+      const order = await OrderRepository.findByGatewayOrderId(gatewayOrderId, session);
 
         if (!order) {
           logger.warn(`Order not found for Gateway Order ID: ${gatewayOrderId}`);
@@ -708,9 +695,6 @@ export class OrderService {
           logger.info(`Webhook processed refund for order ${orderIdStr}`);
         }
       });
-    } finally {
-      await session.endSession();
-    }
 
     if (stockFailed && paymentRecord) {
       try {
@@ -794,22 +778,17 @@ export class OrderService {
       }
 
       if (isSuccess) {
-        const session = await mongoose.startSession();
-        try {
-          await session.withTransaction(async () => {
-            await OrderRepository.updateStatus(orderIdStr, "confirmed", { paymentId: gatewayPaymentId }, session);
-            await PaymentRepository.atomicStatusTransition(String((payment as any)._id || payment.id), ["created", "pending", "failed"], "captured", { gatewayPaymentId }, session);
-            for (const itm of order.items || []) {
-              await ProductRepository.decrementStock(itm.productId, itm.variantId, itm.quantity, session);
-              await ProductRepository.incrementSalesCount(itm.productId, itm.quantity, session);
-            }
-            if (order.pricing && order.pricing.couponCode) {
-              await CouponService.incrementUsage(order.pricing.couponCode, order.userId, session);
-            }
-          });
-        } finally {
-          await session.endSession();
-        }
+        await withTransactionSafe(async (session) => {
+          await OrderRepository.updateStatus(orderIdStr, "confirmed", { paymentId: gatewayPaymentId }, session);
+          await PaymentRepository.atomicStatusTransition(String((payment as any)._id || payment.id), ["created", "pending", "failed"], "captured", { gatewayPaymentId }, session);
+          for (const itm of order.items || []) {
+            await ProductRepository.decrementStock(itm.productId, itm.variantId, itm.quantity, session);
+            await ProductRepository.incrementSalesCount(itm.productId, itm.quantity, session);
+          }
+          if (order.pricing && order.pricing.couponCode) {
+            await CouponService.incrementUsage(order.pricing.couponCode, order.userId, session);
+          }
+        });
 
         return {
           status: "confirmed",
@@ -838,12 +817,8 @@ export class OrderService {
     }
   }
   static async requestRefund(orderId: string, amount?: number, reason?: string) {
-    const session = await mongoose.startSession();
-    let result: any = null;
-
-    try {
-      await session.withTransaction(async () => {
-        const order = await OrderRepository.findById(orderId, session);
+    return await withTransactionSafe(async (session) => {
+      const order = await OrderRepository.findById(orderId, session);
         if (!order) throw new AppError("Order not found", 404);
 
         if (order.status !== "confirmed" && order.status !== "processing" && order.status !== "shipped" && order.status !== "delivered") {
@@ -909,12 +884,8 @@ export class OrderService {
           }
         }
 
-        result = { success: true, refundId: refundRecord.refundId, status: newPaymentStatus };
+        return { success: true, refundId: refundRecord.refundId, status: newPaymentStatus };
       });
-    } finally {
-      await session.endSession();
-    }
-    return result;
   }
 
   static async getOrderById(orderId: string) {

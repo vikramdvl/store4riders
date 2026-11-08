@@ -245,6 +245,68 @@ export class HomepageService {
   }
 
   /**
+   * Enterprise Media Mirroring:
+   * Downloads temporary Instagram/Meta signed CDN thumbnails and persists them
+   * directly to AWS S3 / CloudFront storage so they never expire (403).
+   */
+  private static async mirrorInstagramThumbnail(
+    sourceUrl: string,
+    reelId: string
+  ): Promise<string> {
+    if (!sourceUrl || !sourceUrl.startsWith("http")) return sourceUrl;
+
+    const isMetaCdn = sourceUrl.includes("cdninstagram.com") || sourceUrl.includes("fbcdn.net");
+    if (!isMetaCdn) return sourceUrl;
+
+    try {
+      const s3Bucket = process.env.AWS_S3_BUCKET;
+      const s3Key = process.env.AWS_ACCESS_KEY_ID;
+      const s3Secret = process.env.AWS_SECRET_ACCESS_KEY;
+      if (!s3Bucket || !s3Key || !s3Secret) {
+        return sourceUrl;
+      }
+
+      const imgRes = await fetch(sourceUrl, {
+        headers: { Accept: "image/*" },
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (!imgRes.ok) return sourceUrl;
+
+      const arrayBuffer = await imgRes.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+      const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
+
+      const { S3Service } = await import("../../core/aws/S3Service");
+      const s3Url = await S3Service.uploadFile(
+        {
+          buffer,
+          originalname: `reel-${reelId}.${ext}`,
+          mimetype: contentType,
+        },
+        "reels"
+      );
+
+      const cloudfrontUrl = s3Url.replace(
+        /https:\/\/[^/]+\.s3\.[^/]+\.amazonaws\.com/,
+        "https://d2zuvpvc0pfkya.cloudfront.net"
+      );
+
+      logger.info(`Successfully mirrored Instagram reel ${reelId} thumbnail to CloudFront`, {
+        url: cloudfrontUrl,
+      });
+
+      return cloudfrontUrl;
+    } catch (err: any) {
+      logger.warn(`Failed to mirror Instagram thumbnail for reel ${reelId}`, {
+        error: err?.message,
+      });
+      return sourceUrl;
+    }
+  }
+
+  /**
    * Syncs live Instagram feed (followers count, media count, reels thumbnails, permalinks, likes).
    * Supports both Meta Graph API (business account) and Instagram Basic Display API.
    */
@@ -480,7 +542,11 @@ export class HomepageService {
 
         const idx = playableReels.length;
         const caption = item.caption ? item.caption.split("\n")[0].slice(0, 100) : `Store4Riders Reel #${idx + 1}`;
-        const thumbnail = item.thumbnail_url || item.media_url || "/helmetcat.jpg";
+        const rawThumbnail = item.thumbnail_url || item.media_url || "/helmetcat.jpg";
+        const thumbnail = await HomepageService.mirrorInstagramThumbnail(
+          rawThumbnail,
+          item.id || `reel-${idx}`
+        );
 
         // Prioritize 100% authentic live views:
         // 1. Official Meta Graph API Insights (total_views or views across all surfaces)

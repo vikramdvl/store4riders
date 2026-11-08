@@ -16,11 +16,13 @@ export function useStoreReviews(options?: {
   random?: boolean;
   limit?: number;
   excludeIds?: string[];
+  enabled?: boolean;
 }) {
   const isRandom = options?.random ?? false;
   const limit = options?.limit ?? 10;
   const excludeIds = options?.excludeIds ?? [];
   const excludeKey = excludeIds.slice().sort().join(",");
+  const isEnabled = options?.enabled ?? true;
 
   return useInfiniteQuery({
     queryKey: ["store-reviews", { random: isRandom, limit, exclude: excludeKey }],
@@ -57,8 +59,9 @@ export function useStoreReviews(options?: {
         }
       }
     },
+    enabled: isEnabled,
     getNextPageParam: (lastPage) => lastPage.nextToken || undefined,
     initialPageParam: "",
-    staleTime: isRandom ? 0 : 1000 * 60 * 30, // Fresh random sampling on fresh visits
+    staleTime: isRandom ? 1000 * 60 * 5 : 1000 * 60 * 30, // 5 min cache for random, 30 min for ordered
   });
 }

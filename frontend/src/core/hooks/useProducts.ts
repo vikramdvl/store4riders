@@ -109,7 +109,19 @@ export interface UseProductsParams {
   [key: string]: string | number | undefined;
 }
 
-export function useProducts(params?: UseProductsParams) {
+export function useProducts(
+  params?: UseProductsParams,
+  options?: {
+    enabled?: boolean;
+    initialData?: {
+      items: IBackendProduct[];
+      totalCount: number;
+      page?: number;
+      limit?: number;
+      totalPages?: number;
+    };
+  }
+) {
   return useQuery({
     queryKey: ["products", params],
     queryFn: async () => {
@@ -158,6 +170,8 @@ export function useProducts(params?: UseProductsParams) {
         totalPages: response.data.data.totalPages
       };
     },
+    enabled: options?.enabled !== undefined ? options.enabled : true,
+    initialData: options?.initialData,
     staleTime: 1000 * 60 * 3, // 3 minutes instant cache
     gcTime: 1000 * 60 * 10,    // 10 minutes memory
     placeholderData: keepPreviousData,

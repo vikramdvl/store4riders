@@ -93,6 +93,10 @@ const nextConfig = {
   },
   experimental: {
     optimizePackageImports: ['lucide-react', '@heroicons/react'],
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
   },
 };
 

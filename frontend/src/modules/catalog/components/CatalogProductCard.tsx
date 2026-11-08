@@ -17,7 +17,7 @@ const resolveSwatchBg = (bg?: string, name?: string): string => {
   return (bg && isValidCssSwatch(bg)) ? bg : parseColorToBackground(name || "");
 };
 
-export const CatalogProductCard: React.FC<{ product: CatalogProduct }> = ({ product }) => {
+export const CatalogProductCard: React.FC<{ product: CatalogProduct; priority?: boolean }> = ({ product, priority = false }) => {
   const router = useRouter();
   const [imgSrc, setImgSrc] = useState(product.imageUrl);
   const [fadeKey, setFadeKey] = useState(0);
@@ -96,7 +96,7 @@ export const CatalogProductCard: React.FC<{ product: CatalogProduct }> = ({ prod
       <Link 
         href={dynamicHref} 
         className="absolute inset-0 z-0"
-        prefetch={false}
+        prefetch={true}
         aria-label={`View ${product.name}`}
       />
 
@@ -107,6 +107,9 @@ export const CatalogProductCard: React.FC<{ product: CatalogProduct }> = ({ prod
           src={imgSrc}
           alt={product.name}
           fill
+          priority={priority}
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
           className="object-contain pb-8 group-active:scale-95 transition-opacity duration-200 mix-blend-multiply"
           onError={handleImageError}
@@ -182,6 +185,9 @@ export const CatalogProductCard: React.FC<{ product: CatalogProduct }> = ({ prod
             src={imgSrc}
             alt={product.name}
             fill
+            priority={priority}
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : "auto"}
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="object-contain mix-blend-multiply group-hover:scale-105 transition-transform duration-300 ease-out will-change-transform"
             onError={handleImageError}

@@ -40,6 +40,34 @@ export interface SocialMediaSectionProps {
  * - Width set to max-w-[1180px] for balanced proportions.
  * - Fully connected to Admin Panel for both images and text.
  */
+/**
+ * Resilient Reel Thumbnail Image Component
+ * Automatically catches expired third-party Meta CDN signatures and falls back gracefully.
+ */
+const ReelCardImage = ({ src, alt }: { src: string; alt: string }) => {
+  const [currentSrc, setCurrentSrc] = useState(src || "/helmetcat.jpg");
+
+  React.useEffect(() => {
+    setCurrentSrc(src || "/helmetcat.jpg");
+  }, [src]);
+
+  return (
+    <Image
+      src={currentSrc}
+      alt={alt}
+      fill
+      className="object-cover group-hover:scale-105 transition-transform duration-300"
+      sizes="(max-width: 640px) 30vw, (max-width: 1024px) 15vw, 140px"
+      loading="lazy"
+      onError={() => {
+        if (currentSrc !== "/heropic1.jpg") {
+          setCurrentSrc("/heropic1.jpg");
+        }
+      }}
+    />
+  );
+};
+
 export const SocialMediaSection: React.FC<SocialMediaSectionProps> = ({
   title = "Store4Riders on Insta",
   instagramHandle = "store4riders",
@@ -312,14 +340,10 @@ export const SocialMediaSection: React.FC<SocialMediaSectionProps> = ({
                           onClick={() => setActiveModalReel(reel)}
                           className="group relative aspect-[4/5] rounded-md overflow-hidden bg-neutral-900 border border-white/10 cursor-pointer select-none"
                         >
-                          {/* Thumbnail Image - automatically optimized into responsive WebP/AVIF to minimize download size */}
-                          <Image
+                          {/* Thumbnail Image - automatically optimized with resilient fallback */}
+                          <ReelCardImage
                             src={reel.thumbnailUrl || "/helmetcat.jpg"}
                             alt={reel.title || `Reel ${idx + 1}`}
-                            fill
-                            className="object-cover group-hover:scale-105 transition-transform duration-300"
-                            sizes="(max-width: 640px) 30vw, (max-width: 1024px) 15vw, 140px"
-                            loading="lazy"
                           />
 
                           {/* Top Gradient for Pin Icon */}
