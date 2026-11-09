@@ -12,11 +12,11 @@ const memoryCache = new Map<string, { value: any; expiry: number }>();
 if (REDIS_URL) {
   try {
     redisClient = new Redis(REDIS_URL, {
-      connectTimeout: 500,        // 500ms max to connect
-      commandTimeout: 300,        // 300ms max per query
+      connectTimeout: 5000,       // 5s for reliable remote WAN connections
+      commandTimeout: 2000,       // 2s per query over internet
       maxRetriesPerRequest: 1,    // Do not hang on failure
       enableOfflineQueue: false,  // CRITICAL: Do NOT hang API requests when Redis is disconnected!
-      retryStrategy: () => 10000, // Reconnect attempt every 10s
+      retryStrategy: (times) => Math.min(times * 1000, 5000), // Progressive reconnect attempt
     });
 
     redisClient.on("connect", () => {
