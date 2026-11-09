@@ -261,7 +261,7 @@ export function AdminPaymentSettings() {
                     type="number"
                     min={0}
                     max={settings.codPartialPaymentType === "percentage" ? 100 : undefined}
-                    step={settings.codPartialPaymentType === "percentage" ? 1 : 10}
+                    step={1}
                     placeholder="Enter advance amount"
                     className="w-full border border-neutral-300 rounded p-2.5 text-sm"
                     value={settings.codPartialPaymentValue ?? 0}
@@ -335,7 +335,7 @@ export function AdminPaymentSettings() {
                 <input
                   type="number"
                   min={0}
-                  step={100}
+                  step={1}
                   placeholder="Enter min order value"
                   className="w-full border border-neutral-300 rounded p-2.5 text-sm bg-white"
                   value={settings.snapmintMinOrderValue ?? ""}

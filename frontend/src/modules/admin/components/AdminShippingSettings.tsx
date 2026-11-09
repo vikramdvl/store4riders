@@ -167,7 +167,7 @@ export function AdminShippingSettings() {
                 <input
                   type="number"
                   min={0}
-                  step={10}
+                  step={1}
                   value={settings.freeShippingThreshold ?? 0}
                   onChange={(e) =>
                     setSettings({
