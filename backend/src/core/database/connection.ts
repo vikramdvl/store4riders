@@ -5,14 +5,15 @@ import { logger } from "../utils/logger";
 // Export transaction helpers
 export { supportsTransactions, withTransactionSafe } from "./transaction";
 
-// Configure reliable public DNS servers to resolve MongoDB SRV records without querySrv EBADRESP
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+// Ensure IPv4 is prioritized in dual-stack environments
 try {
-  dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
   if (typeof (dns as any).setDefaultResultOrder === "function") {
     (dns as any).setDefaultResultOrder("ipv4first");
   }
 } catch {
-  // Ignore if custom DNS servers are restricted in environment
+  // Ignore
 }
 
 let cached = (global as any).mongoose;
@@ -36,11 +37,13 @@ export async function connectToDatabase() {
     throw new Error("Please define the MONGODB_URI environment variable inside .env");
   }
 
-  // Ensure public DNS servers are enforced
-  try {
-    dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
-  } catch {
-    // Ignore if restricted
+  // Only apply public DNS servers for mongodb+srv:// if in local development, NEVER in serverless
+  if (!isServerless && uri.startsWith("mongodb+srv://")) {
+    try {
+      dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
+    } catch {
+      // Ignore if restricted
+    }
   }
 
   if (cached.conn) {
@@ -63,7 +66,6 @@ export async function connectToDatabase() {
       
       // Initialize Background Workers and Cron Jobs ONLY on dedicated Node.js server (VPS / Docker / PM2),
       // NEVER inside Serverless environments (like Vercel functions) or test suites.
-      const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
       if (process.env.NODE_ENV !== "test" && !isServerless) {
         try {
           const { initCronJobs } = await import("../cron/order.cron");
