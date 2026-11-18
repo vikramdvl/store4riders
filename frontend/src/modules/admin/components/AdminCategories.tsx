@@ -598,6 +598,16 @@ export const AdminCategories = () => {
     };
     if (!payload.parentId) delete payload.parentId;
 
+    // Safety guard: Never wipe an existing category image/banner if left empty in the form during text/FAQ edits
+    if (editingCategory) {
+      if (!payload.image || payload.image.trim() === "") {
+        delete payload.image;
+      }
+      if (!payload.bannerImage || payload.bannerImage.trim() === "") {
+        delete payload.bannerImage;
+      }
+    }
+
     const targetId = editingCategory?._id || editingCategory?.slug;
     if (editingCategory && targetId) {
       updateCategory.mutate(

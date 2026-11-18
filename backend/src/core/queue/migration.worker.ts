@@ -377,13 +377,47 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
   for (let i = 0; i < finalProducts.length; i += BATCH_SIZE) {
     const batch = finalProducts.slice(i, i + BATCH_SIZE);
     
-    const ops = batch.map(p => ({
-      updateOne: {
-        filter: { sku: p.sku },
-        update: { $set: p },
-        upsert: true
+    // Fetch existing products in this batch to protect existing photos, variants & hero images
+    const batchSkus = batch.map(p => p.sku);
+    const existingInDb = await ProductModel.find({ sku: { $in: batchSkus } })
+      .select("sku images variants status")
+      .lean()
+      .exec();
+    const existingMap = new Map(existingInDb.map((e: any) => [e.sku, e]));
+
+    const ops = batch.map(p => {
+      const updateDoc: any = { ...p };
+      const existing = existingMap.get(p.sku);
+
+      if (existing) {
+        // 1. Never overwrite or reorder existing images if DB already has photos
+        // This protects user-selected Primary hero photos (helmets) and manual image uploads!
+        if (existing.images && existing.images.length > 0) {
+          delete updateDoc.images;
+        }
+
+        // 2. Never wipe existing variants if DB already has variants and CSV row has no variations
+        if (existing.variants && existing.variants.length > 0 && (!updateDoc.variants || updateDoc.variants.length === 0)) {
+          delete updateDoc.variants;
+        }
+
+        // 3. Never downgrade an already published product back to draft
+        if (existing.status === "published" && updateDoc.status === "draft") {
+          updateDoc.status = "published";
+        }
+      } else {
+        if (!updateDoc.images || updateDoc.images.length === 0) delete updateDoc.images;
+        if (!updateDoc.variants || updateDoc.variants.length === 0) delete updateDoc.variants;
       }
-    }));
+
+      return {
+        updateOne: {
+          filter: { sku: p.sku },
+          update: { $set: updateDoc },
+          upsert: true
+        }
+      };
+    });
 
     try {
       const result = await ProductModel.bulkWrite(ops, { ordered: false });

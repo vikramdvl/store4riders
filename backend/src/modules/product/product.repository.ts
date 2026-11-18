@@ -267,6 +267,22 @@ export class ProductRepository {
           v.stock = 0;
         }
 
+        if (data.weight !== undefined && data.weight !== "") {
+          v.weight = Number(data.weight);
+        }
+        if (data.hsnCode !== undefined && data.hsnCode !== "") {
+          v.hsnCode = String(data.hsnCode).trim();
+        }
+        if (data.status !== undefined) {
+          v.status = (data.status === "published" || data.status === "enabled" || data.status === "1") ? "enabled" : "disabled";
+        }
+        // SKU Rename support for variant
+        if (data.newSku && String(data.newSku).trim()) {
+          v.sku = String(data.newSku).trim();
+        } else if (data.sku && String(data.sku).trim() && String(data.sku).trim().toLowerCase() !== cleanSku.toLowerCase()) {
+          v.sku = String(data.sku).trim();
+        }
+
         // Recalculate parent's overall stockStatus based on all child variants
         const hasAnyStock = parent.variants.some((item: any) => (item.stock || 0) > 0);
         parent.stockStatus = hasAnyStock ? 1 : 0;

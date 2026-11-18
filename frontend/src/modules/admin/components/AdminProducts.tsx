@@ -678,31 +678,41 @@ export function AdminProducts() {
               Bulk CSV Update Instructions & Column Reference
             </p>
             <p className="text-slate-600 leading-relaxed text-[11.5px]">
-              Upload a standard CSV file to bulk update pricing, stock, or color swatches.
+              Upload a CSV file to bulk update catalog data. You can export a CSV, edit any fields in Excel/Sheets, and upload it back.
               The CSV header row must include <code className="px-1 py-0.5 bg-white border border-slate-300 rounded font-mono font-bold text-slate-900">sku</code>.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
               <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
-                <span className="font-bold text-slate-800 font-sans block text-xs border-b border-slate-100 pb-0.5">Primary Columns:</span>
-                <div><span className="text-brand font-bold">sku</span>: Parent or Variant SKU</div>
+                <span className="font-bold text-slate-800 font-sans block text-xs border-b border-slate-100 pb-0.5">Price & Inventory:</span>
+                <div><span className="text-brand font-bold">sku</span>: Target SKU</div>
                 <div><span className="text-brand font-bold">price</span>: Selling Price (₹)</div>
-                <div><span className="text-brand font-bold">special_price</span>: Offer (₹)</div>
+                <div><span className="text-brand font-bold">special_price</span>: Sale (₹)</div>
                 <div><span className="text-brand font-bold">qty</span>: Inventory Count</div>
+                <div><span className="text-brand font-bold">is_in_stock</span>: 1 (In), 0 (Out)</div>
               </div>
 
               <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
-                <span className="font-bold text-slate-800 font-sans block text-xs border-b border-slate-100 pb-0.5">Status & Swatches:</span>
-                <div><span className="text-brand font-bold">is_in_stock</span>: 1 (In), 0 (Out)</div>
-                <div><span className="text-brand font-bold">color_swatches</span>: Color=HEX</div>
-                <div className="text-[10px] text-slate-500 font-sans pt-0.5 leading-snug">
-                  e.g. <code className="text-slate-800 font-mono">Matte Black=#1F1F1F|Red=#DC2626</code>
-                </div>
+                <span className="font-bold text-slate-800 font-sans block text-xs border-b border-slate-100 pb-0.5">Product Content & Specs:</span>
+                <div><span className="text-brand font-bold">name</span>: Title / Name</div>
+                <div><span className="text-brand font-bold">weight</span>: Weight (kg/g)</div>
+                <div><span className="text-brand font-bold">brand</span>: Brand Name</div>
+                <div><span className="text-brand font-bold">hsn_code</span>: HSN / Tax Code</div>
+                <div><span className="text-brand font-bold">color_swatches</span>: Key=HEX</div>
+              </div>
+
+              <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
+                <span className="font-bold text-slate-800 font-sans block text-xs border-b border-slate-100 pb-0.5">SEO & SKU Renaming:</span>
+                <div><span className="text-brand font-bold">old_sku</span>: Rename from SKU</div>
+                <div><span className="text-brand font-bold">meta_title</span>: SEO Title</div>
+                <div><span className="text-brand font-bold">meta_description</span>: SEO Desc</div>
+                <div><span className="text-brand font-bold">related_skus</span>: SKU1,SKU2</div>
+                <div><span className="text-brand font-bold">status</span>: published / draft</div>
               </div>
             </div>
 
             <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 leading-relaxed">
-              💡 <strong>Variant Update Tip:</strong> To update an individual size/color variant (e.g. Size M), put its exact Variant SKU (e.g. <code className="font-bold text-slate-900">AXOR-APEX-MAT-M</code>) in the <code className="font-bold">sku</code> column.
+              💡 <strong>Smart Safeguard:</strong> Uploading CSV updates only the columns present in your file. Your existing product photos, WebP galleries, and primary hero selections are 100% protected and will never be wiped.
             </div>
           </div>
 

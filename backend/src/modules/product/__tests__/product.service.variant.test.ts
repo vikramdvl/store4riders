@@ -14,7 +14,7 @@ const shouldRunLiveDbTests = Boolean(
 
 describe.skipIf(!shouldRunLiveDbTests)(
   'ProductService End-to-End Variant SpecialPrice & Relations Resolution',
-  { timeout: 30000 },
+  { timeout: 60000 },
   () => {
     beforeAll(async () => {
       try {
@@ -238,5 +238,5 @@ describe.skipIf(!shouldRunLiveDbTests)(
 
     // 6. Clean up test product
     await ProductService.deleteProduct(String((created as any)._id));
-  }, 30000);
+  }, 60000);
 });

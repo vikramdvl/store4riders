@@ -1526,18 +1526,155 @@ export class ProductService {
                 return undefined;
               };
 
-              const rawSku = getCol(["sku", "SKU", "Sku", "variant_sku", "variantSku"]);
-              if (!rawSku) {
+              const rawOldSku = getCol(["old_sku", "oldSku", "original_sku", "previous_sku", "rename_from"]);
+              const rawSku = getCol(["sku", "SKU", "Sku", "variant_sku", "variantSku", "new_sku", "newSku"]);
+
+              const lookupSku = (rawOldSku || rawSku)?.toString().trim();
+              if (!lookupSku) {
                 errorRows.push({ row: i + 2, reason: "SKU is missing in CSV row" });
                 continue;
               }
 
-              const rawPrice = getCol(["price", "basePrice", "base_price", "Price"]);
-              const rawSpecialPrice = getCol(["special_price", "specialPrice", "SpecialPrice", "specialprice"]);
-              const rawQty = getCol(["qty", "stock", "quantity", "Qty", "Stock"]);
-              const rawStockStatus = getCol(["is_in_stock", "stockStatus", "stock_status", "isInStock"]);
-              const rawStatus = getCol(["status", "product_online"]);
               const updateData: any = {};
+
+              // SKU Renaming: if old_sku was specified and differs from new sku
+              if (rawOldSku && rawSku && String(rawOldSku).trim().toLowerCase() !== String(rawSku).trim().toLowerCase()) {
+                updateData.sku = String(rawSku).trim();
+                updateData.newSku = String(rawSku).trim();
+              }
+
+              // 1. Basic Information & Content
+              const rawName = getCol(["name", "Name", "title", "Title", "product_name"]);
+              if (rawName !== undefined && typeof rawName === "string" && rawName.trim()) {
+                updateData.name = rawName.trim();
+              }
+
+              const rawDesc = getCol(["description", "Description"]);
+              if (rawDesc !== undefined && typeof rawDesc === "string" && rawDesc.trim()) {
+                updateData.description = rawDesc.trim();
+              }
+
+              const rawShortDesc = getCol(["short_description", "shortDescription", "ShortDescription"]);
+              if (rawShortDesc !== undefined && typeof rawShortDesc === "string" && rawShortDesc.trim()) {
+                updateData.shortDescription = rawShortDesc.trim();
+              }
+
+              const rawSlug = getCol(["url_key", "slug", "urlKey", "UrlKey"]);
+              if (rawSlug !== undefined && typeof rawSlug === "string" && rawSlug.trim()) {
+                updateData.slug = slugify(rawSlug.trim());
+              }
+
+              // 2. Pricing & Dates
+              const rawPrice = getCol(["price", "basePrice", "base_price", "Price"]);
+              if (rawPrice !== undefined && rawPrice !== "") {
+                updateData.basePrice = Number(rawPrice);
+              }
+
+              const rawSpecialPrice = getCol(["special_price", "specialPrice", "SpecialPrice", "specialprice"]);
+              if (rawSpecialPrice !== undefined) {
+                updateData.specialPrice = (rawSpecialPrice === "" || rawSpecialPrice === null) ? undefined : Number(rawSpecialPrice);
+              }
+
+              const rawSpecialFrom = getCol(["special_from_date", "specialPriceFromDate", "special_from"]);
+              if (rawSpecialFrom !== undefined) {
+                updateData.specialPriceFromDate = rawSpecialFrom ? parseDateOrNull(rawSpecialFrom) : null;
+              }
+
+              const rawSpecialTo = getCol(["special_to_date", "specialPriceToDate", "special_to"]);
+              if (rawSpecialTo !== undefined) {
+                updateData.specialPriceToDate = rawSpecialTo ? parseDateOrNull(rawSpecialTo) : null;
+              }
+
+              // 3. Inventory, Stock & Shipping
+              const rawQty = getCol(["qty", "stock", "quantity", "Qty", "Stock"]);
+              if (rawQty !== undefined && rawQty !== "") {
+                updateData.qty = Number(rawQty);
+              }
+
+              const rawStockStatus = getCol(["is_in_stock", "stockStatus", "stock_status", "isInStock"]);
+              if (rawStockStatus !== undefined) {
+                updateData.stockStatus = Number(rawStockStatus) === 0 ? 0 : 1;
+              } else if (rawQty !== undefined) {
+                updateData.stockStatus = Number(rawQty) > 0 ? 1 : 0;
+              }
+
+              const rawBackorders = getCol(["backorders", "allowBackorders", "allow_backorders"]);
+              if (rawBackorders !== undefined && rawBackorders !== "") {
+                updateData.allowBackorders = rawBackorders === "1" || String(rawBackorders).toLowerCase() === "true";
+              }
+
+              const rawFreeShipping = getCol(["free_shipping", "isFreeShipping", "is_free_shipping"]);
+              if (rawFreeShipping !== undefined && rawFreeShipping !== "") {
+                updateData.isFreeShipping = rawFreeShipping === "1" || String(rawFreeShipping).toLowerCase() === "true";
+              }
+
+              // 4. Physical Specs & Logistics
+              const rawWeight = getCol(["weight", "Weight"]);
+              if (rawWeight !== undefined && rawWeight !== "") {
+                updateData.weight = Number(rawWeight);
+              }
+
+              const rawGender = getCol(["gender", "Gender"]);
+              if (rawGender !== undefined && typeof rawGender === "string" && rawGender.trim()) {
+                updateData.gender = rawGender.trim();
+              }
+
+              const rawCountry = getCol(["country_of_manufacture", "countryOfManufacture", "country"]);
+              if (rawCountry !== undefined && typeof rawCountry === "string" && rawCountry.trim()) {
+                updateData.countryOfManufacture = rawCountry.trim();
+              }
+
+              const rawHsn = getCol(["hsn_code", "hsnCode", "tax_class_name", "taxClassName"]);
+              if (rawHsn !== undefined && typeof rawHsn === "string" && rawHsn.trim()) {
+                updateData.hsnCode = rawHsn.trim();
+              }
+
+              // 5. SEO & Meta Tags
+              const rawMetaTitle = getCol(["meta_title", "metaTitle", "MetaTitle"]);
+              if (rawMetaTitle !== undefined && typeof rawMetaTitle === "string" && rawMetaTitle.trim()) {
+                updateData.metaTitle = rawMetaTitle.trim();
+              }
+
+              const rawMetaDesc = getCol(["meta_description", "metaDescription", "MetaDescription"]);
+              if (rawMetaDesc !== undefined && typeof rawMetaDesc === "string" && rawMetaDesc.trim()) {
+                updateData.metaDescription = rawMetaDesc.trim();
+              }
+
+              const rawMetaKeywords = getCol(["meta_keyword", "meta_keywords", "metaKeywords", "MetaKeywords"]);
+              if (rawMetaKeywords !== undefined && typeof rawMetaKeywords === "string" && rawMetaKeywords.trim()) {
+                updateData.metaKeywords = rawMetaKeywords.trim();
+              }
+
+              // 6. Cross-sells, Upsells & Related SKUs
+              const parseSkuList = (val: any): string[] => {
+                if (Array.isArray(val)) return val.map(String).map(s => s.trim()).filter(Boolean);
+                if (typeof val === "string" && val.trim()) {
+                  return val.split(/[,|]/).map(s => s.trim()).filter(Boolean);
+                }
+                return [];
+              };
+
+              const rawRelated = getCol(["related_skus", "relatedSkus", "RelatedSkus"]);
+              if (rawRelated !== undefined) {
+                updateData.relatedSkus = parseSkuList(rawRelated);
+              }
+
+              const rawUpsell = getCol(["upsell_skus", "upsellSkus", "UpsellSkus"]);
+              if (rawUpsell !== undefined) {
+                updateData.upsellSkus = parseSkuList(rawUpsell);
+              }
+
+              const rawCrosssell = getCol(["crosssell_skus", "crosssellSkus", "CrosssellSkus"]);
+              if (rawCrosssell !== undefined) {
+                updateData.crosssellSkus = parseSkuList(rawCrosssell);
+              }
+
+              // 7. Swatches & Size Chart
+              const rawSizeChart = getCol(["size_chart", "sizeChart", "SizeChart"]);
+              if (rawSizeChart !== undefined && typeof rawSizeChart === "string" && rawSizeChart.trim()) {
+                updateData.sizeChart = rawSizeChart.trim();
+              }
+
               const rawColorSwatches = getCol(["color_swatches", "colorSwatches", "ColorSwatches"]);
               if (rawColorSwatches !== undefined && typeof rawColorSwatches === "string" && rawColorSwatches.trim()) {
                 const parsedSwatches: Record<string, string> = {};
@@ -1556,34 +1693,61 @@ export class ProductService {
                   updateData.colorSwatches = parsedSwatches;
                 }
               }
-              if (rawPrice !== undefined) updateData.basePrice = Number(rawPrice);
-              if (rawSpecialPrice !== undefined) {
-                updateData.specialPrice = rawSpecialPrice === "" || rawSpecialPrice === null ? undefined : Number(rawSpecialPrice);
-              }
-              if (rawQty !== undefined) {
-                updateData.qty = Number(rawQty);
-              }
-              if (rawStockStatus !== undefined) {
-                updateData.stockStatus = Number(rawStockStatus) === 0 ? 0 : 1;
-              } else if (rawQty !== undefined) {
-                updateData.stockStatus = Number(rawQty) > 0 ? 1 : 0;
-              }
+
+              // 8. Status & Visibility
+              const rawStatus = getCol(["status", "product_online"]);
               if (rawStatus !== undefined) {
-                updateData.status = (rawStatus === "1" || String(rawStatus).toLowerCase() === "published") ? "published" : "draft";
+                updateData.status = (rawStatus === "1" || String(rawStatus).toLowerCase() === "published" || String(rawStatus).toLowerCase() === "enabled") ? "published" : "draft";
+              }
+
+              // 9. Brand (auto-link brandId and brandSlug if matched)
+              const rawBrand = getCol(["brand", "Brand"]);
+              if (rawBrand !== undefined && typeof rawBrand === "string" && rawBrand.trim()) {
+                const cleanBrand = rawBrand.trim();
+                updateData.brand = cleanBrand;
+                try {
+                  const { BrandModel } = await import("../brand/brand.model");
+                  const brandDoc: any = await BrandModel.findOne({
+                    $or: [
+                      { name: new RegExp(`^${cleanBrand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+                      { slug: cleanBrand.toLowerCase() }
+                    ]
+                  }).lean().exec();
+                  if (brandDoc && brandDoc._id) {
+                    updateData.brandId = brandDoc._id.toString();
+                    updateData.brandSlug = brandDoc.slug;
+                  }
+                } catch {
+                  // Continue if BrandModel lookup fails
+                }
+              }
+
+              // 10. Categories & Canonical resolution
+              const rawCats = getCol(["categories", "magentoCategories", "category"]);
+              if (rawCats !== undefined && typeof rawCats === "string" && rawCats.trim()) {
+                updateData.magentoCategories = rawCats.trim();
+                const canonicalSlugs = resolveCanonicalCategorySlugs({
+                  name: updateData.name || "",
+                  magentoCategories: rawCats.trim(),
+                });
+                if (canonicalSlugs && canonicalSlugs.length > 0) {
+                  updateData.categoryId = canonicalSlugs[0];
+                  updateData.categorySlugs = canonicalSlugs;
+                }
               }
 
               try {
-                const product = await ProductRepository.updateBySku(String(rawSku).trim(), updateData, session);
+                const product = await ProductRepository.updateBySku(String(lookupSku).trim(), updateData, session);
 
                 if (!product) {
-                  errorRows.push({ row: i + 2, reason: `Product or Variant with SKU "${rawSku}" not found` });
+                  errorRows.push({ row: i + 2, reason: `Product or Variant with SKU "${lookupSku}" not found` });
                 } else {
                   successCount++;
                   indexProduct(product).catch(console.error);
                   await this.invalidateProductCache(product.slug);
                 }
               } catch (rowErr: any) {
-                errorRows.push({ row: i + 2, reason: rowErr.message || `Failed to update SKU "${rawSku}"` });
+                errorRows.push({ row: i + 2, reason: rowErr.message || `Failed to update SKU "${lookupSku}"` });
               }
             }
 

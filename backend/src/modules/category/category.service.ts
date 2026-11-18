@@ -68,6 +68,13 @@ export class CategoryService {
     if (data.name && !data.slug) {
       data.slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     }
+    // Safety guard: Never wipe an existing category image/banner with empty string during text/FAQ updates
+    if (data.image === "" || data.image === null) {
+      delete data.image;
+    }
+    if (data.bannerImage === "" || data.bannerImage === null) {
+      delete data.bannerImage;
+    }
     const category = await CategoryRepository.update(id, data);
     if (!category) throw new NotFoundError("Category not found");
     await this.invalidateCache();
