@@ -486,19 +486,40 @@ export function getProductThumbnailUrl(
 ): string {
   if (!product) return fallback;
 
-  // Automatically prefer in-stock color if no specific color filter was requested
-  if (!preferredColor) {
-    const inStockColor = getPreferredInStockColor(product);
-    if (inStockColor) {
-      preferredColor = inStockColor;
-    }
-  }
-
-  // 1. If preferredColor is specified, try to match it first
+  // 1. If preferredColor is specified (e.g. from active color filter or swatch selection), try to match it first
   if (preferredColor) {
     const normColor = preferredColor.trim().toLowerCase();
 
-    // 1a. Check colorImages map
+    // 1a. If the product's primary image (images[0]) already matches this color, keep the primary image!
+    if (Array.isArray(product.images) && product.images.length > 0) {
+      const primary = product.images[0];
+      if (primary && !isUtilityOrInfographicImage(primary)) {
+        const alt = (primary?.altText || "").toLowerCase();
+        const url = (typeof primary === "string" ? primary : primary?.url || "").toLowerCase();
+        if (alt.includes(normColor) || url.includes(normColor.replace(/\s+/g, "-"))) {
+          const u = typeof primary === "string" ? primary : primary.url;
+          const clean = normalizeExternalImageUrl(u);
+          if (clean) return clean;
+        }
+      }
+    }
+
+    // 1b. Check images array for matching genuine photo of this color
+    if (Array.isArray(product.images) && product.images.length > 0) {
+      const matchedImg = product.images.find((img: any) => {
+        if (isUtilityOrInfographicImage(img)) return false;
+        const alt = (img?.altText || "").toLowerCase();
+        const url = (typeof img === "string" ? img : img?.url || "").toLowerCase();
+        return alt.includes(normColor) || url.includes(normColor.replace(/\s+/g, "-"));
+      });
+      const mUrl = typeof matchedImg === "string" ? matchedImg : matchedImg?.url;
+      if (mUrl && mUrl !== fallback) {
+        const clean = normalizeExternalImageUrl(mUrl);
+        if (clean) return clean;
+      }
+    }
+
+    // 1c. Check colorImages map
     if (product.colorImages) {
       const cMap: Record<string, string> = product.colorImages instanceof Map
         ? Object.fromEntries(product.colorImages)
@@ -512,7 +533,7 @@ export function getProductThumbnailUrl(
       }
     }
 
-    // 1b. Check variants
+    // 1d. Check variants
     const variantsList = Array.isArray(product.variants) && product.variants.length > 0
       ? product.variants
       : (Array.isArray(product.rawVariants) && product.rawVariants.length > 0 ? product.rawVariants : []);
@@ -529,35 +550,9 @@ export function getProductThumbnailUrl(
         if (clean) return clean;
       }
     }
-
-    // 1c. Check images altText or url (strictly skipping utility images)
-    if (Array.isArray(product.images) && product.images.length > 0) {
-      const matchedImg = product.images.find((img: any) => {
-        if (isUtilityOrInfographicImage(img)) return false;
-        const alt = (img?.altText || "").toLowerCase();
-        const url = (typeof img === "string" ? img : img?.url || "").toLowerCase();
-        return alt.includes(normColor) || url.includes(normColor.replace(/\s+/g, "-"));
-      });
-      const mUrl = typeof matchedImg === "string" ? matchedImg : matchedImg?.url;
-      if (mUrl && mUrl !== fallback) {
-        const clean = normalizeExternalImageUrl(mUrl);
-        if (clean) return clean;
-      }
-    }
   }
 
-  // 2. Explicit thumbnail (if genuine product photo)
-  if (
-    product.thumbnail &&
-    typeof product.thumbnail === "string" &&
-    product.thumbnail !== fallback &&
-    !isUtilityOrInfographicImage(product.thumbnail)
-  ) {
-    const clean = normalizeExternalImageUrl(product.thumbnail);
-    if (clean) return clean;
-  }
-
-  // 3. First genuine product gallery image (skipping utility/safety graphics)
+  // 2. Primary genuine product photo (images[0] set as Primary by merchant in admin)
   if (Array.isArray(product.images) && product.images.length > 0) {
     const genuinePhoto = product.images.find(
       (img: any) => !isUtilityOrInfographicImage(img) && (typeof img === "string" ? img : img?.url) !== fallback
@@ -567,6 +562,17 @@ export function getProductThumbnailUrl(
       const clean = normalizeExternalImageUrl(u);
       if (clean) return clean;
     }
+  }
+
+  // 3. Explicit thumbnail (if genuine product photo)
+  if (
+    product.thumbnail &&
+    typeof product.thumbnail === "string" &&
+    product.thumbnail !== fallback &&
+    !isUtilityOrInfographicImage(product.thumbnail)
+  ) {
+    const clean = normalizeExternalImageUrl(product.thumbnail);
+    if (clean) return clean;
   }
 
   // 4. Explicit image field (if genuine product photo)

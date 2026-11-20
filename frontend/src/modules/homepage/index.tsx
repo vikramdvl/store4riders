@@ -70,7 +70,7 @@ export const HomepageModule: React.FC<{
           ? p.specialPrice : effectivePrice;
 
         const preferredColor = getPreferredInStockColor(p);
-        const imageUrl = getProductThumbnailUrl(p, preferredColor || undefined);
+        const imageUrl = getProductThumbnailUrl(p);
         const ctaUrl = preferredColor ? `/${p.slug || p._id}?color=${encodeURIComponent(preferredColor)}` : `/${p.slug || p._id}`;
 
         return {
@@ -227,7 +227,7 @@ export const HomepageModule: React.FC<{
           ? p.specialPrice : effectivePrice;
 
         const preferredColor = getPreferredInStockColor(p);
-        const imageUrl = getProductThumbnailUrl(p, preferredColor || undefined);
+        const imageUrl = getProductThumbnailUrl(p);
         const productUrl = preferredColor
           ? `/${p.slug || p._id}?color=${encodeURIComponent(preferredColor)}`
           : `/${p.slug || p._id}`;
@@ -301,7 +301,7 @@ export const HomepageModule: React.FC<{
         const catParts = (p.magentoCategories || "").split(",")[0].split("/");
         const catName = catParts.filter((c: string) => !c.toLowerCase().includes("root")).pop()?.trim() || "TOURING GEAR";
         const preferredColor = getPreferredInStockColor(p);
-        const imageUrl = getProductThumbnailUrl(p, preferredColor || undefined);
+        const imageUrl = getProductThumbnailUrl(p);
         const productUrl = preferredColor ? `/${p.slug || p._id}?color=${encodeURIComponent(preferredColor)}` : `/${p.slug || p._id}`;
 
         return {
@@ -481,7 +481,7 @@ export const HomepageModule: React.FC<{
         ? p.specialPrice : effectivePrice;
 
       const preferredColor = getPreferredInStockColor(p);
-      const imageUrl = getProductThumbnailUrl(p, preferredColor || undefined);
+      const imageUrl = getProductThumbnailUrl(p);
       const productUrl = preferredColor ? `/${p.slug || p._id}?color=${encodeURIComponent(preferredColor)}` : `/${p.slug || p._id}`;
 
       return {

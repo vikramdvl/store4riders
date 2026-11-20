@@ -151,10 +151,10 @@ export const ProductsPageModule = ({ initialCategoryNode }: { initialCategoryNod
       category: cleanCat,
       priceFormatted,
       imageUrl: (() => {
-        const preferredColor = activeColorParam 
+        const explicitColor = activeColorParam 
           ? activeColorParam.split(",")[0]?.trim() 
-          : getPreferredInStockColor(p) || undefined;
-        return getProductThumbnailUrl(p, preferredColor);
+          : undefined;
+        return getProductThumbnailUrl(p, explicitColor);
       })(),
       rating: 4.9,
       isFeatured: Boolean(p.isFeatured),

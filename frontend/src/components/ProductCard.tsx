@@ -94,11 +94,12 @@ const ProductCard = ({ product, showBuyNow = false, priority = false }: ProductC
 
   const searchParams = useSearchParams();
   const activeColorParam = searchParams?.get("colour") || searchParams?.get("color");
-  const preferredColor = activeColorParam 
+  const explicitColor = activeColorParam 
     ? activeColorParam.split(",")[0]?.trim() 
-    : getPreferredInStockColor(product) || undefined;
+    : undefined;
+  const preferredColor = explicitColor;
 
-  const imageUrl = getProductThumbnailUrl(product, preferredColor);
+  const imageUrl = getProductThumbnailUrl(product, explicitColor);
 
   const FALLBACK_IMAGE = "/no-image.svg";
   const [imgSrc, setImgSrc] = useState(imageUrl);

@@ -337,7 +337,7 @@ const mapToKitProduct = (p: IBackendProduct): KitProduct => {
   const price = (p.specialPrice && p.specialPrice > 0 && effectivePrice > 0 && p.specialPrice < effectivePrice)
     ? p.specialPrice : effectivePrice;
   const preferredColor = getPreferredInStockColor(p);
-  const imageUrl = getProductThumbnailUrl(p, preferredColor || undefined);
+  const imageUrl = getProductThumbnailUrl(p);
   const productUrl = preferredColor ? `/${p.slug}?color=${encodeURIComponent(preferredColor)}` : `/${p.slug}`;
 
   return {
@@ -688,9 +688,21 @@ const mapProductToPDP = (
   }
 
   // 3. Deduplicate images by (color, angle) and sequence angles 1, 2, 3...
-  const gallery = rawGalleryImages.length > 0 
+  let gallery = rawGalleryImages.length > 0 
     ? deduplicateProductImages(rawGalleryImages, colorNames, product.name)
-    : [{ url: "/no-image.svg", altText: "Placeholder" }];
+    : [{ url: "/no-image.svg", altText: "Placeholder", angle: 1 }];
+
+  // Keep Primary Image (Photo #1 / product.images[0]) as the initial gallery hero
+  const primaryUrl = product.images?.[0]?.url ? normalizeExternalImageUrl(product.images[0].url) : null;
+  if (primaryUrl && gallery.length > 1) {
+    const primaryIdx = gallery.findIndex((img) => img.url === primaryUrl);
+    if (primaryIdx > 0) {
+      const [primaryImg] = gallery.splice(primaryIdx, 1);
+      if (primaryImg) {
+        gallery.unshift(primaryImg);
+      }
+    }
+  }
 
   const rawMappedColors = colorNames.length > 0
     ? colorNames.map(name => {
