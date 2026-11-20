@@ -22,6 +22,13 @@ export function middleware(request: NextRequest) {
     return new NextResponse("Not Found", { status: 404 });
   }
 
+  // 301 Permanent Redirect: Strip legacy .html extension from old Magento/HTML URLs
+  if (pathname.endsWith(".html") || lowerPath.endsWith(".html")) {
+    const cleanPath = pathname.replace(/\.html$/i, "") || "/";
+    const destinationUrl = new URL(`${cleanPath}${request.nextUrl.search}`, request.url);
+    return NextResponse.redirect(destinationUrl, 301);
+  }
+
   // Block known bandwidth-hogging crawlers that ignore robots.txt and drain origin bandwidth
   const userAgent = (request.headers.get("user-agent") || "").toLowerCase();
   if (
@@ -39,17 +46,26 @@ export function middleware(request: NextRequest) {
   const isLocalhost = host.startsWith("localhost") || host.startsWith("127.0.0.1") || host.includes(".local");
   const isVercelPreview = host.endsWith(".vercel.app");
 
+  // Helper to attach development SEO headers (X-Robots-Tag: noindex, nofollow)
+  const applySeoHeaders = (res: NextResponse) => {
+    const isIndexingAllowed = process.env.NEXT_PUBLIC_ALLOW_INDEXING === "true";
+    if (!isIndexingAllowed) {
+      res.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+    }
+    return res;
+  };
+
   // 1. If accessing via the dedicated admin domain (e.g. admin.store4riders.com)
   if (host.startsWith("admin.")) {
     // If navigating to root on the admin subdomain, rewrite to /admin
     if (pathname === "/") {
-      return NextResponse.rewrite(new URL("/admin", request.url));
+      return applySeoHeaders(NextResponse.rewrite(new URL("/admin", request.url)));
     }
     // Convenience: direct /secret-slug rewrites to /admin/secret-slug
     if (pathname === `/${secretPath}`) {
-      return NextResponse.rewrite(new URL(`/admin/${secretPath}`, request.url));
+      return applySeoHeaders(NextResponse.rewrite(new URL(`/admin/${secretPath}`, request.url)));
     }
-    return NextResponse.next();
+    return applySeoHeaders(NextResponse.next());
   }
 
   // 2. If accessing via the public storefront on IP 1 (store4riders.com / www)
@@ -60,7 +76,7 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  return applySeoHeaders(NextResponse.next());
 }
 
 export const config = {

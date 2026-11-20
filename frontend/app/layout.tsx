@@ -7,7 +7,7 @@ import { NavigationProgress } from "@/components/NavigationProgress";
 import { BlinkitFloatingCart } from "@/components/ui/BlinkitFloatingCart";
 import { CartDrawer } from "@/components/ui/CartDrawer";
 import { FloatingWhatsApp } from "@/components/ui/FloatingWhatsApp";
-import { buildWebSiteSchema, buildOrganizationSchema } from "@/core/utils/seo-schema";
+import { buildWebSiteSchema, buildOrganizationSchema, getRobotsMetadata } from "@/core/utils/seo-schema";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -50,17 +50,7 @@ export const metadata: Metadata = {
   authors: [{ name: "Store4Riders" }],
   creator: "Store4Riders",
   publisher: "Store4Riders",
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
-  },
+  robots: getRobotsMetadata(),
   openGraph: {
     type: "website",
     locale: "en_IN",

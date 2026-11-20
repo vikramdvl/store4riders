@@ -1,3 +1,4 @@
+import { getRobotsMetadata } from "@/core/utils/seo-schema";
 import type { Metadata } from "next";
 import {
   GuidesCategoryModule,
@@ -76,17 +77,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     alternates: {
       canonical,
     },
-    robots: {
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-        "max-video-preview": -1,
-        "max-image-preview": "large",
-        "max-snippet": -1,
-      },
-    },
+    robots: getRobotsMetadata(),
     openGraph: {
       title,
       description,

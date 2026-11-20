@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { getRobotsMetadata } from "@/core/utils/seo-schema";
 import {
   GuidesCategoryModule,
   GuideDetailModule,
@@ -41,17 +42,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title,
       description,
       alternates: { canonical },
-      robots: {
-        index: true,
-        follow: true,
-        googleBot: {
-          index: true,
-          follow: true,
-          "max-video-preview": -1,
-          "max-image-preview": "large",
-          "max-snippet": -1,
-        },
-      },
+      robots: getRobotsMetadata(),
       openGraph: {
         title,
         description,
@@ -73,17 +64,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description,
       keywords: post.tags,
       alternates: { canonical },
-      robots: {
-        index: true,
-        follow: true,
-        googleBot: {
-          index: true,
-          follow: true,
-          "max-video-preview": -1,
-          "max-image-preview": "large",
-          "max-snippet": -1,
-        },
-      },
+      robots: getRobotsMetadata(),
       openGraph: {
         title,
         description,

@@ -419,3 +419,40 @@ export function buildFAQSchema(faqs?: SchemaFaqItem[]) {
     mainEntity: validItems,
   };
 }
+
+/**
+ * SEO Crawling & Indexation Policy
+ * Defaults to false (noindex, nofollow) during development / staging.
+ * Set NEXT_PUBLIC_ALLOW_INDEXING=true in environment variables for production launch.
+ */
+export const isIndexingAllowed = process.env.NEXT_PUBLIC_ALLOW_INDEXING === "true";
+
+export function getRobotsMetadata(customIndex: boolean = true) {
+  if (!isIndexingAllowed || !customIndex) {
+    return {
+      index: false,
+      follow: false,
+      googleBot: {
+        index: false,
+        follow: false,
+        noimageindex: true,
+        "max-video-preview": -1,
+        "max-image-preview": "none" as const,
+        "max-snippet": -1,
+      },
+    };
+  }
+
+  return {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large" as const,
+      "max-snippet": -1,
+    },
+  };
+}
+

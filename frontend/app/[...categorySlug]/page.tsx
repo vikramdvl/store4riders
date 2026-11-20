@@ -10,6 +10,7 @@ import {
   buildCollectionSchema,
   buildFAQSchema,
   cleanText,
+  getRobotsMetadata,
 } from "@/core/utils/seo-schema";
 
 const rawApiBase = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
@@ -105,17 +106,7 @@ export async function generateMetadata({ params, searchParams }: CategoryPagePro
         alternates: {
           canonical: canonicalPath,
         },
-        robots: {
-          index: true,
-          follow: true,
-          googleBot: {
-            index: true,
-            follow: true,
-            "max-video-preview": -1,
-            "max-image-preview": "large",
-            "max-snippet": -1,
-          },
-        },
+        robots: getRobotsMetadata(),
         openGraph: {
           title,
           description: cleanDescription,
@@ -164,19 +155,13 @@ export async function generateMetadata({ params, searchParams }: CategoryPagePro
         title,
         description,
       },
-      robots: {
-        index: true,
-        follow: true,
-      },
+      robots: getRobotsMetadata(),
     };
   }
 
   return {
     title: "Page Not Found | Store4Riders",
-    robots: {
-      index: false,
-      follow: false,
-    },
+    robots: getRobotsMetadata(false),
   };
 }
 

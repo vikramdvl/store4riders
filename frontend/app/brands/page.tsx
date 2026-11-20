@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { BrandsDirectoryModule } from "@/modules/brands";
+import { getRobotsMetadata } from "@/core/utils/seo-schema";
 
 export const revalidate = 60;
 
@@ -52,17 +53,7 @@ export async function generateMetadata(): Promise<Metadata> {
     alternates: {
       canonical,
     },
-    robots: {
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-        "max-video-preview": -1,
-        "max-image-preview": "large",
-        "max-snippet": -1,
-      },
-    },
+    robots: getRobotsMetadata(),
     openGraph: {
       title,
       description,

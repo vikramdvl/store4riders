@@ -7,6 +7,7 @@ import {
   buildBreadcrumbSchema,
   buildCollectionSchema,
   buildFAQSchema,
+  getRobotsMetadata,
 } from "@/core/utils/seo-schema";
 
 const rawApiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
@@ -62,17 +63,7 @@ export async function generateMetadata({ params }: BrandPageProps): Promise<Meta
     alternates: {
       canonical: canonicalUrl,
     },
-    robots: {
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-        "max-video-preview": -1,
-        "max-image-preview": "large",
-        "max-snippet": -1,
-      },
-    },
+    robots: getRobotsMetadata(),
     openGraph: {
       title,
       description: cleanDescription,
