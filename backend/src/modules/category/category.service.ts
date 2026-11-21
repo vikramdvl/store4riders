@@ -1,6 +1,6 @@
 import { CategoryRepository } from "./category.repository";
 import { ICategory } from "@store4riders/shared-types";
-import { ValidationError, NotFoundError } from "../../core/errors/AppError";
+import { ValidationError, NotFoundError, ConflictError } from "../../core/errors/AppError";
 import { getCache, setCache, deleteCache } from "../../core/cache/redis";
 import { CATEGORY_ALIAS_MAP } from "../product/product.category-constants";
 
@@ -37,7 +37,9 @@ export class CategoryService {
     if (slug) {
       const existing = await CategoryRepository.findBySlug(slug);
       if (existing) {
-        slug = `${slug}-${Date.now().toString().slice(-4)}`;
+        throw new ConflictError(
+          `Category with slug '${slug}' already exists ("${existing.name}"). Please choose a unique name or slug.`
+        );
       }
     }
 
@@ -68,6 +70,14 @@ export class CategoryService {
     if (data.name && !data.slug) {
       data.slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     }
+    if (data.slug) {
+      const existing = await CategoryRepository.findBySlug(data.slug);
+      if (existing && String(existing._id) !== String(id)) {
+        throw new ConflictError(
+          `Category with slug '${data.slug}' already exists ("${existing.name}"). Please choose a unique slug.`
+        );
+      }
+    }
     // Safety guard: Never wipe an existing category image/banner with empty string during text/FAQ updates
     if (data.image === "" || data.image === null) {
       delete data.image;
@@ -83,13 +93,21 @@ export class CategoryService {
 
   static async deleteCategory(id: string): Promise<void> {
     const category = await CategoryRepository.findById(id);
-    if (!category) throw new NotFoundError("Category not found");
+    if (!category) {
+      // Idempotent: category already does not exist in DB. Evict cache and return cleanly.
+      await this.invalidateCache();
+      return;
+    }
     
     // Promote direct children to this category's parent (or root) to prevent orphan categories
     const newParentId = category.parentId || undefined;
-    await CategoryRepository.updateMany({ parentId: id }, { parentId: newParentId });
+    const catIdStr = String(category._id);
+    await CategoryRepository.updateMany({ parentId: catIdStr }, { parentId: newParentId });
+    if (category.slug) {
+      await CategoryRepository.updateMany({ parentId: category.slug }, { parentId: newParentId });
+    }
 
-    await CategoryRepository.delete(id);
+    await CategoryRepository.delete(catIdStr);
     await this.invalidateCache();
   }
 
@@ -132,6 +150,12 @@ export class CategoryService {
 
   static async invalidateCache() {
     await deleteCache(CACHE_KEY);
+    try {
+      const { clearProductCaches } = await import("../../core/cache/redis");
+      await clearProductCaches();
+    } catch {
+      // Non-blocking cache clear
+    }
   }
 
   private static buildTree(categories: any[], parentId?: string, visited = new Set<string>()): any[] {

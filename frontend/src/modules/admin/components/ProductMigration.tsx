@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import axios from "axios";
 import { apiClient } from "@/core/api/client";
 import { useBrands } from "@/core/hooks/useBrands";
 import { downloadBrandProductCsv } from "@/core/utils/exportCsv";
@@ -31,6 +32,8 @@ export function ProductMigration() {
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [progress, setProgress] = useState<number>(0);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [stage, setStage] = useState<"idle" | "uploading_s3" | "queueing" | "processing">("idle");
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -47,15 +50,17 @@ export function ProductMigration() {
             clearInterval(interval);
             setJobId(null);
             setIsUploading(false);
+            setStage("idle");
             setStatus({ 
               type: "success", 
-              message: `Upload Complete! Successfully processed ${data.result?.successCount || 0} products.` 
+              message: `Upload Complete! Successfully processed ${data.result?.successCount || 0} products into the catalog.` 
             });
           } else if (data.state === "failed") {
             clearInterval(interval);
             setJobId(null);
             setIsUploading(false);
-            setStatus({ type: "error", message: `Upload failed: ${data.failedReason || "Unknown error"}` });
+            setStage("idle");
+            setStatus({ type: "error", message: `Upload failed: ${data.failedReason || "Processing error occurred in queue worker."}` });
           }
         } catch (error) {
           console.error("Failed to fetch job status", error);
@@ -78,35 +83,92 @@ export function ProductMigration() {
 
     setIsUploading(true);
     setProgress(0);
-    setStatus({ type: "idle", message: "" });
-
-    const formData = new FormData();
-    formData.append("file", file);
+    setUploadProgress(0);
+    setStatus({ type: "idle", message: "Initializing upload..." });
 
     try {
-      const response = await apiClient.post("/migration/upload", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      let activeJobId: string | null = null;
 
-      const newJobId = response.data?.data?.jobId;
-      if (newJobId) {
-        setJobId(newJobId);
-        setStatus({ type: "idle", message: "File uploaded. Processing..." });
+      // STEP 1: Attempt direct-to-S3 presigned upload (Supports files > 4.5MB, bypassing Vercel payload limits)
+      try {
+        setStage("uploading_s3");
+        setStatus({ type: "idle", message: "Step 1/2: Uploading CSV directly to AWS S3 storage..." });
+
+        const presignedRes = await apiClient.post("/migration/presigned-url", {
+          fileName: file.name,
+          fileType: file.type || "text/csv",
+        });
+
+        const { uploadUrl, s3Key } = presignedRes.data.data;
+
+        // Direct PUT to S3 using raw axios (omits bearer token headers that S3 signature rejects)
+        await axios.put(uploadUrl, file, {
+          headers: {
+            "Content-Type": file.type || "text/csv",
+          },
+          onUploadProgress: (progressEvent) => {
+            if (progressEvent.total) {
+              const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              setUploadProgress(percent);
+            }
+          },
+        });
+
+        // STEP 2: Enqueue background migration job from S3 key
+        setStage("queueing");
+        setStatus({ type: "idle", message: "Step 2/2: Enqueueing background migration job..." });
+
+        const startRes = await apiClient.post("/migration/start", {
+          s3Key,
+          fileName: file.name,
+        });
+
+        activeJobId = startRes.data?.data?.jobId;
+      } catch (s3Error: any) {
+        console.warn("Direct S3 upload failed; evaluating fallback options", s3Error);
+
+        // If file is > 4.5MB, Vercel will reject it with 413, so explain clearly
+        if (file.size > 4.5 * 1024 * 1024) {
+          throw new Error(
+            s3Error.response?.data?.message ||
+            s3Error.message ||
+            `S3 direct upload failed and file (${(file.size / 1024 / 1024).toFixed(1)} MB) exceeds serverless payload limits. Please verify AWS S3 credentials.`
+          );
+        }
+
+        // Small file fallback to multipart
+        setStatus({ type: "idle", message: "Direct S3 unavailable. Uploading via server route..." });
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await apiClient.post("/migration/upload", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+
+        activeJobId = response.data?.data?.jobId;
+      }
+
+      if (activeJobId) {
+        setJobId(activeJobId);
+        setStage("processing");
+        setStatus({ type: "idle", message: "CSV queued! BullMQ worker is processing catalog..." });
       } else {
         setIsUploading(false);
-        setStatus({ type: "error", message: "Failed to get Job ID from server." });
+        setStage("idle");
+        setStatus({ type: "error", message: "Failed to obtain migration Job ID from server." });
       }
-      
+
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      
+
     } catch (error: any) {
       setIsUploading(false);
+      setStage("idle");
       setStatus({ 
         type: "error", 
-        message: error.response?.data?.error || error.message || "Failed to upload the file. Please try again." 
+        message: error.response?.data?.error || error.response?.data?.message || error.message || "Failed to upload the file. Please try again." 
       });
     }
   };
@@ -258,14 +320,26 @@ export function ProductMigration() {
               <span className="font-medium">{status.message}</span>
             </div>
             
+            {stage === "uploading_s3" && (
+              <div className="mt-3">
+                <div className="flex justify-between text-xs mb-1 font-medium text-blue-800">
+                  <span>Uploading to AWS S3...</span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <div className="w-full bg-blue-200 rounded-full h-2.5">
+                  <div className="bg-amber-500 h-2.5 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
+                </div>
+              </div>
+            )}
+
             {jobId && (
               <div className="mt-3">
                 <div className="flex justify-between text-xs mb-1 font-medium text-blue-800">
-                  <span>Processing...</span>
+                  <span>Processing Catalog into Database...</span>
                   <span>{progress}%</span>
                 </div>
                 <div className="w-full bg-blue-200 rounded-full h-2.5">
-                  <div className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
+                  <div className="bg-emerald-600 h-2.5 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
                 </div>
               </div>
             )}

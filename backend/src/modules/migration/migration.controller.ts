@@ -7,6 +7,42 @@ import path from "path";
 import os from "os";
 
 export class MigrationController {
+  /**
+   * Generates direct S3 pre-signed upload URL for large CSV files
+   */
+  static async getPresignedUrl(req: NextRequest) {
+    const body = await req.json().catch(() => ({}));
+    const { fileName, fileType } = body;
+
+    if (!fileName) {
+      throw new AppError("fileName is required", 400);
+    }
+
+    const result = await MigrationService.getPresignedUploadUrl(fileName, fileType);
+    return ApiResponse.success(result, "Presigned URL generated successfully", 200);
+  }
+
+  /**
+   * Starts a background migration job from an S3 key
+   */
+  static async startMigration(req: NextRequest) {
+    const body = await req.json().catch(() => ({}));
+    const { s3Key, fileName } = body;
+
+    if (!s3Key) {
+      throw new AppError("s3Key is required", 400);
+    }
+
+    const adminId = req.headers.get("x-user-id") || "admin";
+    const result = await MigrationService.startCsvMigration({
+      s3Key,
+      fileName,
+      adminId,
+    });
+
+    return ApiResponse.success(result, "Migration started in background", 202);
+  }
+
   static async uploadCsv(req: NextRequest) {
     // We expect a multipart/form-data with a 'file' field
     const formData = await req.formData();

@@ -76,7 +76,7 @@ export const Footer: React.FC = () => {
   const showContact = footer?.showContact !== false;
   const showSocialLinks = footer?.showSocialLinks !== false;
 
-  const phone = footer?.contactPhone?.trim() || settings?.whatsappNumber || settings?.supportPhone || "";
+  const phone = footer?.contactPhone?.trim() || settings?.whatsappNumber || settings?.supportPhone || "+91 - 7263007788";
   const emailAddress = footer?.contactEmail?.trim() || settings?.supportEmail || "contact@store4riders.com";
   const address = footer?.contactAddress?.trim() || "";
 
@@ -171,24 +171,47 @@ export const Footer: React.FC = () => {
             )}
             
             {showContact && (
-              <div className="flex flex-col gap-2 sm:gap-2.5 text-xs sm:text-sm font-sans text-neutral-300">
+              <div 
+                className="flex flex-col gap-2 sm:gap-2.5 text-xs sm:text-sm font-sans text-neutral-300"
+                suppressHydrationWarning
+              >
                 {phone && (
-                  <div className="grid grid-cols-[65px_1fr] sm:grid-cols-[75px_1fr] gap-2">
-                    <span className="font-medium text-white">Contact</span>
-                    <span>: {phone}</span>
-                  </div>
+                  <a
+                    href={`tel:${phone.replace(/[^\d+]/g, "")}`}
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-neutral-300 hover:text-white transition-colors group"
+                    title={`Call Store4Riders at ${phone}`}
+                    suppressHydrationWarning
+                  >
+                    <span className="font-medium text-white group-hover:text-banner transition-colors shrink-0">
+                      Contact Us:
+                    </span>
+                    <span className="group-hover:underline">
+                      {phone}
+                    </span>
+                  </a>
                 )}
                 {emailAddress && (
-                  <div className="grid grid-cols-[65px_1fr] sm:grid-cols-[75px_1fr] gap-2">
-                    <span className="font-medium text-white">Email</span>
-                    <span className="break-all">: {emailAddress}</span>
-                  </div>
+                  <a
+                    href={`mailto:${emailAddress}`}
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-neutral-300 hover:text-white transition-colors group"
+                    title={`Email Store4Riders at ${emailAddress}`}
+                    suppressHydrationWarning
+                  >
+                    <span className="font-medium text-white group-hover:text-banner transition-colors shrink-0">
+                      Email:
+                    </span>
+                    <span className="truncate group-hover:underline">
+                      {emailAddress}
+                    </span>
+                  </a>
                 )}
                 {address && (
-                  <div className="grid grid-cols-[65px_1fr] sm:grid-cols-[75px_1fr] gap-2">
-                    <span className="font-medium text-white">Address</span>
+                  <div className="flex items-start gap-1.5 text-neutral-300">
+                    <span className="font-medium text-white shrink-0">
+                      Address:
+                    </span>
                     <span className="leading-relaxed">
-                      : {address}
+                      {address}
                     </span>
                   </div>
                 )}

@@ -323,6 +323,15 @@ export class ProductService {
         ...(Array.isArray(product.categorySlugs) ? product.categorySlugs : []),
       ].filter((s): s is string => typeof s === "string" && s.trim().length > 0);
 
+      if (product.magentoCategories) {
+        const parts = product.magentoCategories.split(",").flatMap((c: string) =>
+          c.split("/").map((p: string) => slugify(p.trim())).filter((p: string) => p && !p.includes("root") && !p.includes("default"))
+        );
+        for (const p of parts) {
+          if (!candidateSlugs.includes(p)) candidateSlugs.push(p);
+        }
+      }
+
       const orConditions: any[] = [];
       if (candidateSlugs.length > 0) {
         orConditions.push({ slug: { $in: candidateSlugs } });
@@ -353,8 +362,13 @@ export class ProductService {
               (LEAF_TO_PARENT_MAP[subCat.slug] && c.slug === LEAF_TO_PARENT_MAP[subCat.slug])
           );
 
-          if (!parentCat && mongoose.default.isValidObjectId(subCat.parentId)) {
-            parentCat = await CategoryModel.findById(subCat.parentId).lean().exec();
+          if (!parentCat && subCat.parentId) {
+            parentCat = await CategoryModel.findOne({
+              $or: [
+                ...(mongoose.default.isValidObjectId(subCat.parentId) ? [{ _id: subCat.parentId }] : []),
+                { slug: subCat.parentId }
+              ]
+            }).lean().exec();
           }
           if (!parentCat && LEAF_TO_PARENT_MAP[subCat.slug]) {
             parentCat = await CategoryModel.findOne({ slug: LEAF_TO_PARENT_MAP[subCat.slug] }).lean().exec();
@@ -415,18 +429,38 @@ export class ProductService {
         categoryHierarchy.push({ name: subCategoryName, slug: subCategorySlug });
       }
 
-      // DYNAMIC CATEGORY SIZE CHART INHERITANCE:
-      // If product has no explicit custom size chart, automatically inherit from its subcategory or parent category.
+      // DYNAMIC SIZE CHART RESOLUTION:
+      // 1. If product has no explicit sizeChart, check legacy Magento attributes (e.g. size_chart_01, sizechart)
       if (!product.sizeChart && !product.size_chart) {
-        const catWithChart =
-          (subCat && (subCat as any).sizeChart)
-            ? subCat
-            : (parentCat && (parentCat as any).sizeChart)
-              ? parentCat
-              : matchedCats.find((c) => (c as any).sizeChart);
+        if (product.attributes && typeof product.attributes === "object") {
+          for (const [k, v] of Object.entries(product.attributes)) {
+            const lowerK = k.toLowerCase();
+            if (lowerK.startsWith("size_chart") || lowerK.startsWith("sizechart")) {
+              if (v && typeof v === "string" && v.trim()) {
+                product.sizeChart = v.trim();
+                break;
+              }
+            }
+          }
+        }
+      }
 
-        if (catWithChart && (catWithChart as any).sizeChart) {
-          product.sizeChart = (catWithChart as any).sizeChart;
+      // 2. If still empty, automatically inherit from its subcategory or parent category.
+      if (!product.sizeChart && !product.size_chart) {
+        const getCatChart = (c: any) => (c ? (c.sizeChart || c.size_chart) : undefined);
+        const inheritedChart =
+          getCatChart(subCat) ||
+          getCatChart(parentCat) ||
+          (matchedCats.find((c) => getCatChart(c)) ? getCatChart(matchedCats.find((c) => getCatChart(c))) : undefined);
+
+        if (inheritedChart) {
+          product.sizeChart = inheritedChart;
+        } else if (categorySlug) {
+          const directCat = await CategoryModel.findOne({ slug: categorySlug }).lean().exec();
+          const chart = getCatChart(directCat);
+          if (chart) {
+            product.sizeChart = chart;
+          }
         }
       }
     } catch {
@@ -623,8 +657,15 @@ export class ProductService {
       const excludeConditions: any[] = [];
       if ((cleanSlug.includes("boot") || cleanSlug.includes("shoe")) && !cleanSlug.includes("sock") && !cleanSlug.includes("lace") && !cleanSlug.includes("insole") && !cleanSlug.includes("cover") && !cleanSlug.includes("slider")) {
         excludeConditions.push({ name: { $not: /\b(socks?|laces?|insole|covers?|toe\s*slider)\b/i } });
-      } else if (cleanSlug.includes("helmet") && !cleanSlug.includes("bag") && !cleanSlug.includes("visor") && !cleanSlug.includes("cleaner") && !cleanSlug.includes("balaclava") && !cleanSlug.includes("intercom") && !cleanSlug.includes("communicator") && !cleanSlug.includes("spoiler") && !cleanSlug.includes("pinlock") && !cleanSlug.includes("lens") && !cleanSlug.includes("shield")) {
-        excludeConditions.push({ name: { $not: /\b(visor|visors|pinlock|spoiler|deflector|pad|pads|screw|lock|chin\s*curtain|ratchet|pivot|vent|vents|replacement|cleaner|spray|mask|balaclava|lens|shield|glove|gloves|jacket|jackets|boots?|shoes?|pants?|backpacks?|bags?|luggage|hydration|tail\s*bag|tank\s*bag|saddle\s*bag|panniers?)\b/i } });
+      } else if (cleanSlug.includes("helmet") && !cleanSlug.includes("bag") && !cleanSlug.includes("visor") && !cleanSlug.includes("cleaner") && !cleanSlug.includes("balaclava") && !cleanSlug.includes("intercom") && !cleanSlug.includes("communicator") && !cleanSlug.includes("spoiler") && !cleanSlug.includes("pinlock") && !cleanSlug.includes("lens") && !cleanSlug.includes("shield") && !cleanSlug.includes("accessories")) {
+        excludeConditions.push({ name: { $not: /\b(communicator|communicators|intercom|intercoms|bluetooth|headset|camera|action\s*cam|pinlock|spoiler|deflector|pad|pads|screw|lock|chin\s*curtain|ratchet|pivot|vent|vents|replacement|cleaner|spray|mask|balaclava|lens|shield|glove|gloves|jacket|jackets|boots?|shoes?|pants?|backpacks?|bags?|luggage|hydration|tail\s*bag|tank\s*bag|saddle\s*bag|panniers?|goggle|goggles)\b/i } });
+        // Strictly exclude standalone replacement visors, but preserve genuine Dual Visor / Double Visor helmets
+        excludeConditions.push({
+          $or: [
+            { name: /\b(dual|double)\s+visor/i },
+            { name: { $not: /\bvisors?\b/i } }
+          ]
+        });
       } else if ((cleanSlug.includes("jacket") || cleanSlug.includes("suit") || cleanSlug.includes("pant") || cleanSlug.includes("jeans")) && !cleanSlug.includes("armor") && !cleanSlug.includes("armour") && !cleanSlug.includes("protector") && !cleanSlug.includes("guard") && !cleanSlug.includes("pad") && !cleanSlug.includes("insert") && !cleanSlug.includes("layer") && !cleanSlug.includes("liner")) {
         excludeConditions.push({ name: { $not: /\b((hip|knee|elbow|back|shoulder|chest)\s*(protector|armor|armour|insert|pad|pads)|armour\s*insert|armor\s*insert|base\s*layer|liner)\b/i } });
       } else if ((cleanSlug.includes("communicator") || cleanSlug.includes("intercom")) && !cleanSlug.includes("mount") && !cleanSlug.includes("cable") && !cleanSlug.includes("wire") && !cleanSlug.includes("battery") && !cleanSlug.includes("clamp") && !cleanSlug.includes("pad")) {
@@ -1670,9 +1711,21 @@ export class ProductService {
               }
 
               // 7. Swatches & Size Chart
-              const rawSizeChart = getCol(["size_chart", "sizeChart", "SizeChart"]);
+              const rawSizeChart = getCol([
+                "size_chart",
+                "sizeChart",
+                "SizeChart",
+                "sizechart",
+                "size_chart_01",
+                "size_guide",
+                "sizeGuide",
+                "SizeGuide",
+                "Size Chart",
+                "Size chart",
+              ]);
               if (rawSizeChart !== undefined && typeof rawSizeChart === "string" && rawSizeChart.trim()) {
                 updateData.sizeChart = rawSizeChart.trim();
+                updateData.size_chart = rawSizeChart.trim();
               }
 
               const rawColorSwatches = getCol(["color_swatches", "colorSwatches", "ColorSwatches"]);

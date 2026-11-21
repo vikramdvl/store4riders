@@ -37,7 +37,14 @@ describe("navCategories Suite — Storefront Navbar & Admin Categories Tree", ()
     expect(helmetSubSlugs).toContain("off-road-helmets");
     expect(helmetSubSlugs).toContain("open-face-helmets");
     expect(helmetSubSlugs).toContain("helmet-accessories");
-    expect(helmetSubSlugs).toContain("bluetooth-intercoms");
+    expect(helmetSubSlugs).toContain("balaclava");
+    expect(helmetSubSlugs).toContain("helmet-cleaners");
+
+    // Gadgets has communicators
+    const gadgetsNode = tree.find((n) => n.slug === "gadgets");
+    expect(gadgetsNode).toBeDefined();
+    const gadgetSubSlugs = gadgetsNode?.children?.map((c) => c.slug);
+    expect(gadgetSubSlugs).toContain("communicators");
 
     // 2. Riding Gear has groups and subcategories
     const ridingGearNode = tree.find((n) => n.slug === "riding-gear");
@@ -205,5 +212,40 @@ describe("navCategories Suite — Storefront Navbar & Admin Categories Tree", ()
     expect(isLegacyNonMenuCategory("merchandise")).toBe(true);
     expect(isLegacyNonMenuCategory("full-face-helmets")).toBe(false);
     expect(isLegacyNonMenuCategory("premium-full-face-helmets")).toBe(false);
+  });
+
+  it("prioritizes database category name when admin renames categories", () => {
+    const mockDbCategories = [
+      {
+        _id: "cat_boots_01",
+        name: "Motorcycle riding boots",
+        slug: "motorcycle-riding-boots",
+      },
+      {
+        _id: "cat_luggage_01",
+        name: "Motorcycle Bags / Bike Luggage",
+        slug: "motorcycle-bags-bike-luggage",
+      },
+      {
+        _id: "cat_jackets_01",
+        name: "Custom Armor & Jackets",
+        slug: "riding-jackets",
+      },
+    ];
+
+    const tree = getStoreNavbarCategoryTree(mockDbCategories);
+
+    // 1. Check boots
+    const gearNode = tree.find((n) => n.slug === "riding-gear");
+    const bootsNode = gearNode?.children?.find((c) => c.slug === "motorcycle-riding-boots");
+    expect(bootsNode?.name).toBe("Motorcycle riding boots");
+
+    // 2. Check luggage
+    const luggageNode = tree.find((n) => n.slug === "motorcycle-bags-bike-luggage");
+    expect(luggageNode?.name).toBe("Motorcycle Bags / Bike Luggage");
+
+    // 3. Check custom rename on jackets
+    const jacketsNode = gearNode?.children?.find((c) => c.slug === "riding-jackets");
+    expect(jacketsNode?.name).toBe("Custom Armor & Jackets");
   });
 });

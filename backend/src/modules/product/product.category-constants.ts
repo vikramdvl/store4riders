@@ -26,9 +26,9 @@ export const CATEGORY_ALIAS_MAP: Record<string, string[]> = {
   "helmet-accessories": ["helmet-accessories-helmet-visors", "helmet-visors", "helmet-accessories", "visors", "visor"],
   "helmet-visors": ["helmet-accessories-helmet-visors", "helmet-accessories", "helmet-visors", "visors", "visor"],
   "helmet-accessories-helmet-visors": ["helmet-accessories", "helmet-visors", "visors", "visor"],
-  "balaclava": ["balaclava", "face-mask", "head-mask"],
-  "bluetooth-intercoms": ["communicators", "communicator", "intercom", "bluetooth"],
-  "communicators": ["bluetooth-intercoms", "communicators", "communicator"],
+  "balaclava": ["balaclava", "balaclavas", "face-mask", "head-mask"],
+  "bluetooth-intercoms": ["bluetooth-intercoms", "communicators", "communicator", "intercom", "bluetooth", "motorcycle-intercoms"],
+  "communicators": ["bluetooth-intercoms", "communicators", "communicator", "intercom", "bluetooth", "motorcycle-intercoms"],
   "helmet-cleaners": ["helmet-cleaner", "motorcycle-care", "cleaner"],
 
   // ── Riding Jackets & Suits ──
@@ -42,9 +42,11 @@ export const CATEGORY_ALIAS_MAP: Record<string, string[]> = {
   "riding-gear-for-women": ["riding-gear-for-women", "women-riding-gear"],
   "off-road-motocross": ["off-road-motocross-riding-gear", "off-road-motocross"],
   "off-road-motocross-riding-gear": ["off-road-motocross", "off-road-motocross-riding-gear"],
-  "touring-gear": ["touring-gear", "touring-gears"],
-  "monsoon-gear": ["monsoon-gear-for-riders", "monsoon-gear", "monsoon-gear-for-rider"],
-  "monsoon-gear-for-riders": ["monsoon-gear-for-riders", "monsoon-gear", "monsoon-gear-for-rider"],
+  "touring-gear": ["touring-gear", "touring-gears", "motorcycle-touring-gear", "motorcycle-touring-gears"],
+  "motorcycle-touring-gear": ["touring-gear", "touring-gears", "motorcycle-touring-gear"],
+  "monsoon-gear": ["monsoon-gear-for-riders", "monsoon-gear", "monsoon-gear-for-rider", "motorcycle-rain-gear-for-bikers", "rain-gear", "rain-wear", "motorcycle-rain-wear"],
+  "monsoon-gear-for-riders": ["monsoon-gear-for-riders", "monsoon-gear", "monsoon-gear-for-rider", "motorcycle-rain-gear-for-bikers", "rain-gear", "rain-wear", "motorcycle-rain-wear"],
+  "motorcycle-rain-gear-for-bikers": ["monsoon-gear-for-riders", "monsoon-gear", "rain-gear", "rain-wear"],
 
   // ── Riding Pants ──
   "riding-pants": ["riding-pants", "touring-pants", "touring-pant"],
@@ -69,13 +71,15 @@ export const CATEGORY_ALIAS_MAP: Record<string, string[]> = {
   // ── Riding Boots ──
   "riding-boots": ["motorcycle-riding-boots", "premium-riding-boots", "short-biking-boots", "sports-riding-shoes"],
   "motorcycle-riding-boots": ["motorcycle-riding-boots", "premium-riding-boots", "riding-boots"],
-  "short-biking-boots": ["short-city-riding-biking-boots", "short-biking-boots", "short-biking-boot"],
-  "short-city-riding-biking-boots": ["short-biking-boots", "short-biking-boot"],
-  "sports-riding-shoes": ["sport-riding-shoes", "sports-riding-shoes", "sport-riding-shoe"],
-  "sport-riding-shoes": ["sports-riding-shoes", "sport-riding-shoes"],
-  "off-road-boots": ["off-road-riding-boots-motocross-boots", "off-road-riding-boots", "motocross-boots"],
-  "off-road-riding-boots": ["off-road-boots", "off-road-riding-boots", "motocross-boots"],
-  "off-road-riding-boots-motocross-boots": ["off-road-boots", "off-road-riding-boots", "motocross-boots"],
+  "short-biking-boots": ["short-city-riding-biking-boots", "short-biking-boots", "short-biking-boot", "short-riding-boots-city-riding-shoes"],
+  "short-city-riding-biking-boots": ["short-biking-boots", "short-biking-boot", "short-riding-boots-city-riding-shoes"],
+  "short-riding-boots-city-riding-shoes": ["short-biking-boots", "short-city-riding-biking-boots", "short-biking-boot", "sports-riding-shoes"],
+  "sports-riding-shoes": ["sport-riding-shoes", "sports-riding-shoes", "sport-riding-shoe", "sports-riding-shoe", "short-riding-boots-city-riding-shoes"],
+  "sport-riding-shoes": ["sports-riding-shoes", "sport-riding-shoes", "sport-riding-shoe"],
+  "off-road-boots": ["off-road-riding-boots-motocross-boots", "off-road-riding-boots", "motocross-boots", "adventure-off-road-riding-boots"],
+  "off-road-riding-boots": ["off-road-boots", "off-road-riding-boots", "motocross-boots", "adventure-off-road-riding-boots"],
+  "off-road-riding-boots-motocross-boots": ["off-road-boots", "off-road-riding-boots", "motocross-boots", "adventure-off-road-riding-boots"],
+  "adventure-off-road-riding-boots": ["off-road-riding-boots", "off-road-boots", "off-road-riding-boots-motocross-boots", "motocross-boots"],
 
   // ── Luggage ──
   "tank-bags": ["tank-bags-for-bike", "rynox-tank-bags", "tank-bags"],
@@ -86,14 +90,18 @@ export const CATEGORY_ALIAS_MAP: Record<string, string[]> = {
   "saddle-bags-for-bikes-panniers": ["saddle-bags", "saddle-bags-bikes", "rynox-saddle-bags"],
   "motorcycle-tail-bags": ["motorcycle-tail-bags", "rynox-tail-bags", "tail-bags"],
   "tail-bags": ["motorcycle-tail-bags", "rynox-tail-bags"],
-  "top-box": ["top-box", "top-case"],
-  "bike-top-box": ["top-box", "top-boxes", "bike-top-box"],
+  "top-box": ["top-box", "top-case", "bike-top-box", "bike-top-boxes-aluminium-top-box", "bike-top-box-cases"],
+  "bike-top-box": ["top-box", "top-boxes", "bike-top-box", "bike-top-boxes-aluminium-top-box", "bike-top-box-cases", "top-case"],
+  "bike-top-boxes-aluminium-top-box": ["bike-top-box", "top-box", "top-boxes", "bike-top-box-cases"],
+  "bike-top-box-cases": ["bike-top-box", "top-box", "bike-top-boxes-aluminium-top-box"],
   "hydration-bag": ["hydration-bag", "hydration-bags"],
   "hydration-bags": ["hydration-bag", "hydration-bags"],
-  "crash-bar-bags": ["crash-bar-bags", "crash-bar-bag", "frame-bags"],
-  "crash-bar-bag": ["crash-bar-bags", "crash-bar-bag", "frame-bags"],
-  "thigh-bags": ["thigh-bags", "thigh-bag", "thigh-pouch"],
-  "thigh-bag": ["thigh-bags", "thigh-bag", "thigh-pouch"],
+  "crash-bar-bags": ["crash-bar-bags", "crash-bar-bag", "frame-bags", "crash-bar-bags-for-motorcycles"],
+  "crash-bar-bag": ["crash-bar-bags", "crash-bar-bag", "frame-bags", "crash-bar-bags-for-motorcycles"],
+  "crash-bar-bags-for-motorcycles": ["crash-bar-bags", "crash-bar-bag", "frame-bags"],
+  "thigh-bags": ["thigh-bags", "thigh-bag", "thigh-pouch", "thigh-bags-for-motorcycle-riders"],
+  "thigh-bag": ["thigh-bags", "thigh-bag", "thigh-pouch", "thigh-bags-for-motorcycle-riders"],
+  "thigh-bags-for-motorcycle-riders": ["thigh-bags", "thigh-bag", "thigh-pouch"],
   "helmet-bags": ["helmet-bags", "helmet-bag"],
   "helmet-bag": ["helmet-bags", "helmet-bag"],
   "other-luggage": ["other-luggage"],
@@ -139,9 +147,9 @@ export const CATEGORY_ALIAS_MAP: Record<string, string[]> = {
   "chain-sprocket-kits": ["chain-sprocket-kits", "chain-sprocket-kit"],
   "iridium-spark-plugs": ["iridium-spark-plug", "iridium-spark-plugs"],
   "iridium-spark-plug": ["iridium-spark-plugs", "iridium-spark-plug"],
-  "performance-air-filters": ["performance-air-filters-for-bikes", "performance-air-filters-for-bike"],
-  "performance-air-filter-bike": ["performance-air-filters-for-bikes", "performance-air-filters", "performance-air-filter-bike"],
-  "performance-air-filters-for-bikes": ["performance-air-filters", "performance-air-filters-for-bike"],
+  "performance-air-filters": ["performance-air-filters-for-bikes", "performance-air-filters-for-bike", "performance-air-filter-bike"],
+  "performance-air-filter-bike": ["performance-air-filters-for-bikes", "performance-air-filters", "performance-air-filter-bike", "air-filter", "air-filters"],
+  "performance-air-filters-for-bikes": ["performance-air-filters", "performance-air-filters-for-bike", "performance-air-filter-bike"],
   "brake-pads": ["brake-pads", "brake-pad"],
 
   // ── Exhausts ──
@@ -704,7 +712,7 @@ export function resolveCanonicalCategorySlugs(product: {
   // Helmet Subtype Flags
   const isModularHelmet = isActualHelmet && /(modular|flip\s*up)/i.test(n);
   const isOpenFaceHelmet = isActualHelmet && /(open\s*face|half\s*face|jet\b)/i.test(n);
-  const isOffRoadHelmet = isActualHelmet && /(off\s*road|motocross|dirt\s*bike|allterra|x-cross)/i.test(n);
+  const isOffRoadHelmet = isActualHelmet && (/(off[-_\s]?road|motocross|dirt[-_\s]?bike|allterra|x[-_\s]?cross|dual[-_\s]?sport|moto[-_\s]?x|enduro)/i.test(n) || /off[-_\s]?road.*helmet|motocross.*helmet/i.test(mc) || (Array.isArray(product.categorySlugs) && product.categorySlugs.includes('off-road-helmets')));
   const isFullFaceHelmet = isActualHelmet && (/full\s*face/i.test(n) || (!isModularHelmet && !isOpenFaceHelmet && !isOffRoadHelmet)) && !isBalaclava && !isGoggles;
 
   // Luggage Subtype Flags

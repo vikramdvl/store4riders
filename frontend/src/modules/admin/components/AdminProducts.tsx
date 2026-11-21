@@ -697,6 +697,7 @@ export function AdminProducts() {
                 <div><span className="text-brand font-bold">name</span>: Title / Name</div>
                 <div><span className="text-brand font-bold">weight</span>: Weight (kg/g)</div>
                 <div><span className="text-brand font-bold">brand</span>: Brand Name</div>
+                <div><span className="text-brand font-bold">size_chart</span>: Image URL / HTML Table</div>
                 <div><span className="text-brand font-bold">hsn_code</span>: HSN / Tax Code</div>
                 <div><span className="text-brand font-bold">color_swatches</span>: Key=HEX</div>
               </div>

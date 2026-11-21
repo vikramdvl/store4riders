@@ -52,7 +52,8 @@ export async function generateMetadata({ params }: BrandPageProps): Promise<Meta
         .map((k: string) => k.trim())
         .filter(Boolean)
     : [formattedName, "riding gear", "helmets", "motorcycle accessories", "store4riders"];
-  const canonicalUrl = `https://www.store4riders.com/brands/${brandSlug}`;
+  const canonicalSlug = brand?.slug || brandSlug;
+  const canonicalUrl = `https://www.store4riders.com/brands/${canonicalSlug}`;
 
   return {
     title: {
@@ -115,10 +116,12 @@ export default async function BrandPage({ params }: BrandPageProps) {
     cleanRawDesc ||
     `Explore authentic ${formattedName} helmets, riding gear, and accessories at Store4Riders. High quality motorcycle gear with fast delivery across India.`;
 
+  const activeSlug = brand.slug || brandSlug;
+
   const collectionSchema = buildCollectionSchema({
     title: formattedName,
     description: brandDescription,
-    url: `${siteUrl}/brands/${brandSlug}`,
+    url: `${siteUrl}/brands/${activeSlug}`,
     siteUrl,
     products: collectionProducts,
   });
@@ -127,7 +130,7 @@ export default async function BrandPage({ params }: BrandPageProps) {
     [
       { name: "Home", url: "/" },
       { name: "Brands", url: "/brands" },
-      { name: formattedName, url: `/brands/${brandSlug}` },
+      { name: formattedName, url: `/brands/${activeSlug}` },
     ],
     siteUrl
   );

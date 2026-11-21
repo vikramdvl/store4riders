@@ -1,9 +1,10 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { logger } from "../utils/logger";
 import { AppError } from "../errors/AppError";
 import fs from "fs";
 import path from "path";
+import { Readable } from "stream";
 
 const REGION = process.env.AWS_REGION || process.env.S3_REGION || "ap-south-2";
 const BUCKET = process.env.AWS_S3_BUCKET || process.env.S3_BUCKET || "store4riders";
@@ -40,6 +41,52 @@ export const getPresignedUrl = async (fileName: string, fileType: string): Promi
   });
 
   return getSignedUrl(s3Client, command, { expiresIn: 3600 });
+};
+
+/**
+ * Generates a pre-signed URL for direct browser CSV migration uploads to S3.
+ * Completely bypasses Vercel/Serverless body limits.
+ */
+export const getMigrationPresignedUrl = async (
+  fileName: string,
+  fileType = "text/csv"
+): Promise<{ uploadUrl: string; s3Key: string }> => {
+  if (!s3Client) {
+    throw new AppError("AWS S3 credentials are not configured", 500);
+  }
+
+  const cleanName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const s3Key = `migrations/${Date.now()}-${cleanName}`;
+
+  const command = new PutObjectCommand({
+    Bucket: BUCKET,
+    Key: s3Key,
+    ContentType: fileType || "text/csv",
+  });
+
+  const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+  return { uploadUrl, s3Key };
+};
+
+/**
+ * Returns a readable stream from S3 for a given S3 key.
+ */
+export const getS3Stream = async (s3Key: string): Promise<Readable> => {
+  if (!s3Client) {
+    throw new AppError("AWS S3 credentials are not configured", 500);
+  }
+
+  const command = new GetObjectCommand({
+    Bucket: BUCKET,
+    Key: s3Key,
+  });
+
+  const response = await s3Client.send(command);
+  if (!response.Body) {
+    throw new AppError(`Empty body returned from S3 for key: ${s3Key}`, 500);
+  }
+
+  return response.Body as Readable;
 };
 
 /**

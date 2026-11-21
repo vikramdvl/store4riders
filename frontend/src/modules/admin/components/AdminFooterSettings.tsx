@@ -317,7 +317,7 @@ export function AdminFooterSettings() {
               {config.aboutText && <p className="text-neutral-400 text-[11px]">{config.aboutText}</p>}
               {config.showContact && (
                 <div className="text-neutral-400 space-y-1 text-[11px]">
-                  <p>Contact: {config.contactPhone || "+91 7263007788"}</p>
+                  <p>Contact Us: {config.contactPhone || "+91 7263007788"}</p>
                   <p>Email: {config.contactEmail || "contact@store4riders.com"}</p>
                   {config.contactAddress && <p>Address: {config.contactAddress}</p>}
                 </div>

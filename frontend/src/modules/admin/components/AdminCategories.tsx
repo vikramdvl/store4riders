@@ -8,7 +8,7 @@ import Modal from "@/components/ui/Modal";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Edit2, Trash2, Search, Folder, FolderOpen, FolderPlus, FolderTree, Package, Image as ImageIcon, Upload, HelpCircle, Compass, Eye, EyeOff, Layers, X, Sliders, FileText, Table as TableIcon, List, ChevronRight, ChevronDown, ChevronsUpDown, Check, Copy, Filter } from "lucide-react";
+import { Plus, Edit2, Trash2, Search, Folder, FolderOpen, FolderPlus, FolderTree, Package, Image as ImageIcon, Upload, HelpCircle, Compass, Eye, EyeOff, Layers, X, Sliders, FileText, Table as TableIcon, List, ChevronRight, ChevronDown, ChevronsUpDown, Check, Copy, Filter, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { SearchableSelect, Option } from "@/components/ui/SearchableSelect";
@@ -17,6 +17,7 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { compressImageToWebP, uploadImageToS3 } from "@/core/utils/imageCompressor";
 import { ISpecFieldDefinition } from "@store4riders/shared-types";
+import { slugify } from "@store4riders/shared-utils";
 import { CATEGORY_SPEC_DEFINITIONS } from "./product-form/product-specs.constants";
 import { SizeChartUploader } from "./SizeChartUploader";
 import {
@@ -34,9 +35,9 @@ const categoryFormSchema = z.object({
   description: z.string().optional(),
   image: z.string().optional().or(z.literal("")),
   bannerImage: z.string().optional().or(z.literal("")),
-  metaTitle: z.string().max(100).optional().or(z.literal("")),
-  metaDescription: z.string().max(500).optional().or(z.literal("")),
-  metaKeywords: z.string().max(500).optional().or(z.literal("")),
+  metaTitle: z.string().max(200).optional().or(z.literal("")),
+  metaDescription: z.string().max(1000).optional().or(z.literal("")),
+  metaKeywords: z.string().max(1000).optional().or(z.literal("")),
   videoUrl: z.string().optional().or(z.literal("")),
   includeInMenu: z.boolean().default(true),
   menuGroup: z.string().optional().or(z.literal("")),
@@ -79,6 +80,39 @@ export const AdminCategories = () => {
   const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(new Set());
   const [activeRootFilter, setActiveRootFilter] = useState<string>("all");
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
+  const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false);
+  const [isTogglingMenuId, setIsTogglingMenuId] = useState<string | null>(null);
+
+  const handleToggleIncludeInMenu = async (cat: any) => {
+    const catId = cat._id ? String(cat._id) : cat.id ? String(cat.id) : cat.slug;
+    if (!catId) return;
+
+    const currentVisible =
+      cat.includeInMenu === true ||
+      (cat.includeInMenu !== false && !isLegacyNonMenuCategory(cat.slug || ""));
+    const nextState = !currentVisible;
+
+    setIsTogglingMenuId(catId);
+    try {
+      await updateCategory.mutateAsync({
+        id: catId,
+        data: {
+          name: cat.name,
+          slug: cat.slug,
+          includeInMenu: nextState,
+        },
+      });
+      toast.success(
+        nextState
+          ? `"${cat.name}" is now included in the Storefront Menu!`
+          : `"${cat.name}" is now hidden from the Storefront Menu.`
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update category menu visibility.");
+    } finally {
+      setIsTogglingMenuId(null);
+    }
+  };
 
   const copySlug = (slug: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -122,7 +156,7 @@ export const AdminCategories = () => {
     const collect = (nodes: IStoreCategoryNode[]) => {
       nodes.forEach((n) => {
         if (n.children && n.children.length > 0) {
-          allCollapsible.add(String(n._id || n.id || n.slug));
+          allCollapsible.add(String(n.slug || n.id || n._id));
           collect(n.children);
         }
       });
@@ -277,6 +311,21 @@ export const AdminCategories = () => {
   });
 
   const cardImageUrl = watch("image");
+
+  const currentFormSlug = (watch("slug") || slugify(watch("name") || "")).toLowerCase().trim();
+
+  const slugConflictCategory = useMemo(() => {
+    if (!currentFormSlug || currentFormSlug.length < 2) return null;
+    const editingId = editingCategory ? String(editingCategory._id || (editingCategory as any).id || "") : null;
+    const editingSlug = editingCategory ? String(editingCategory.slug || "").toLowerCase().trim() : null;
+
+    return allCatalogCategories.find((c: any) => {
+      const cSlug = String(c.slug || "").toLowerCase().trim();
+      const cId = String(c._id || c.id || "");
+      if (editingId && (cId === editingId || cSlug === editingSlug)) return false;
+      return cSlug === currentFormSlug;
+    }) || null;
+  }, [currentFormSlug, allCatalogCategories, editingCategory]);
 
   const parentCategoryOptions: Option[] = useMemo(() => {
     // Collect all descendant IDs of the editing category to prevent circular hierarchy
@@ -453,6 +502,7 @@ export const AdminCategories = () => {
     if (category) {
       setEditingCategory(category);
       setParentForNewSubcategory(null);
+      setIsSlugManuallyEdited(true);
       if (category.specDefinitions && category.specDefinitions.length > 0) {
         setSpecDefinitions(category.specDefinitions.map((s) => ({ ...s, presets: [...(s.presets || [])] })));
       } else {
@@ -475,7 +525,9 @@ export const AdminCategories = () => {
         metaDescription: category.metaDescription || "",
         metaKeywords: category.metaKeywords || "",
         videoUrl: category.videoUrl || "",
-        includeInMenu: category.includeInMenu !== false,
+        includeInMenu:
+          category.includeInMenu === true ||
+          (category.includeInMenu !== false && !isLegacyNonMenuCategory(category.slug || "")),
         menuGroup: category.menuGroup || "",
         menuLabel: (category as any).menuLabel || "",
         menuNavSection: (category as any).menuNavSection || "",
@@ -490,6 +542,7 @@ export const AdminCategories = () => {
     } else if (parentCategory) {
       setEditingCategory(null);
       setParentForNewSubcategory(parentCategory);
+      setIsSlugManuallyEdited(false);
       setFaqs([]);
       setSelectedHeroCategoryIds([]);
       setFaqRichModes({});
@@ -529,6 +582,7 @@ export const AdminCategories = () => {
     } else {
       setEditingCategory(null);
       setParentForNewSubcategory(null);
+      setIsSlugManuallyEdited(false);
       setFaqs([]);
       setSelectedHeroCategoryIds([]);
       setFaqRichModes({});
@@ -589,6 +643,11 @@ export const AdminCategories = () => {
   };
 
   const onSubmit = (data: CategoryFormValues) => {
+    if (slugConflictCategory) {
+      toast.error(`Category slug "${currentFormSlug}" is already taken by "${slugConflictCategory.name}". Please choose a distinct name or custom slug.`);
+      return;
+    }
+
     const payload = {
       ...data,
       includeInMenu: data.includeInMenu !== false,
@@ -596,7 +655,8 @@ export const AdminCategories = () => {
       faqs: faqs.filter((f) => f.question.trim() && f.answer.trim()),
       specDefinitions: specDefinitions.filter((s) => s.label.trim() && s.key.trim()),
     };
-    if (!payload.parentId) delete payload.parentId;
+    if (!payload.parentId || payload.parentId === "" || payload.parentId === "null") delete payload.parentId;
+    if (!payload.slug || payload.slug.trim() === "") delete payload.slug;
 
     // Safety guard: Never wipe an existing category image/banner if left empty in the form during text/FAQ edits
     if (editingCategory) {
@@ -627,22 +687,34 @@ export const AdminCategories = () => {
   };
 
   const handleDelete = (category: any) => {
-    const id = category._id || category.id;
+    const id = category._id || category.id || category.slug;
     const isValidMongoId = id && /^[0-9a-fA-F]{24}$/.test(id);
-    if (!isValidMongoId) {
-      toast.info("This is a core storefront navigation item and cannot be deleted from the database.");
+
+    if (!isValidMongoId && !category.hasDbRecord) {
+      if (confirm(`"${category.name}" is part of the storefront navigation template and has no custom database document. Would you like to hide it from the navigation menu?`)) {
+        updateCategory.mutate({
+          id: category.slug || id,
+          data: {
+            name: category.name,
+            slug: category.slug,
+            includeInMenu: false,
+          },
+        });
+      }
       return;
     }
+
     if (confirm(`Are you sure you want to delete "${category.name}"? All subcategories might lose their parent.`)) {
-      deleteCategory.mutate(id);
+      deleteCategory.mutate(id || category.slug);
     }
   };
 
-  const renderCategoryNode = (category: IStoreCategoryNode, depth = 0): React.ReactNode => {
-    const nodeKey = String(category._id || category.id || category.slug);
+  const renderCategoryNode = (category: IStoreCategoryNode, depth = 0, index?: number): React.ReactNode => {
+    const collapseKey = String(category.slug || category.id || category._id);
+    const nodeKey = `${category.slug || category.id || "cat"}-${category._id || index || "tpl"}-${depth}`;
     const hasChildren = Boolean(category.children && category.children.length > 0);
     const isSearching = Boolean(categorySearch.trim());
-    const isCollapsed = !isSearching && collapsedNodeIds.has(nodeKey);
+    const isCollapsed = !isSearching && collapsedNodeIds.has(collapseKey);
     const isCopied = copiedSlug === category.slug;
 
     return (
@@ -661,7 +733,7 @@ export const AdminCategories = () => {
             {hasChildren ? (
               <button
                 type="button"
-                onClick={() => toggleCollapse(nodeKey)}
+                onClick={() => toggleCollapse(collapseKey)}
                 className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors shrink-0 cursor-pointer"
                 title={isCollapsed ? "Expand subcategories" : "Collapse subcategories"}
               >
@@ -697,7 +769,7 @@ export const AdminCategories = () => {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span
-                  onClick={hasChildren ? () => toggleCollapse(nodeKey) : undefined}
+                  onClick={hasChildren ? () => toggleCollapse(collapseKey) : undefined}
                   className={`truncate ${hasChildren ? "cursor-pointer hover:text-slate-900" : ""} ${
                     depth === 0
                       ? "font-bold text-sm text-slate-900"
@@ -780,7 +852,7 @@ export const AdminCategories = () => {
             {hasChildren ? (
               <button
                 type="button"
-                onClick={() => toggleCollapse(nodeKey)}
+                onClick={() => toggleCollapse(collapseKey)}
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 bg-slate-100/80 hover:bg-slate-200/80 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
               >
                 <span>{category.children!.length} subcategories</span>
@@ -796,17 +868,47 @@ export const AdminCategories = () => {
 
           {/* Column 4: Storefront Menu Status */}
           <div className="hidden sm:block sm:col-span-3 lg:col-span-2">
-            {category.includeInMenu !== false ? (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                In Menu
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                Hidden
-              </span>
-            )}
+            {(() => {
+              const isMenuVisible =
+                category.includeInMenu === true ||
+                (category.includeInMenu !== false && !isLegacyNonMenuCategory(category.slug || ""));
+              const catKey = String(category._id || (category as any).id || category.slug);
+              const isToggling = isTogglingMenuId === catKey;
+
+              return (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleIncludeInMenu(category);
+                  }}
+                  disabled={isToggling}
+                  className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-all cursor-pointer ${
+                    isMenuVisible
+                      ? "text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
+                      : "text-slate-500 bg-slate-100 border-slate-200 hover:bg-slate-200"
+                  }`}
+                  title={
+                    isMenuVisible
+                      ? "Currently in Storefront Menu. Click to Hide."
+                      : "Currently Hidden from Storefront Menu. Click to Include in Menu."
+                  }
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isToggling
+                        ? "bg-amber-500 animate-ping"
+                        : isMenuVisible
+                        ? "bg-emerald-500"
+                        : "bg-slate-400"
+                    }`}
+                  />
+                  <span>
+                    {isToggling ? "Updating..." : isMenuVisible ? "In Menu" : "Hidden"}
+                  </span>
+                </button>
+              );
+            })()}
           </div>
 
           {/* Column 5: Actions */}
@@ -851,7 +953,7 @@ export const AdminCategories = () => {
         {/* Children Rows */}
         {hasChildren && !isCollapsed && (
           <div className="relative">
-            {category.children!.map((child) => renderCategoryNode(child, depth + 1))}
+            {category.children!.map((child, idx) => renderCategoryNode(child, depth + 1, idx))}
           </div>
         )}
       </div>
@@ -1016,7 +1118,7 @@ export const AdminCategories = () => {
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {filteredTree.map((node) => renderCategoryNode(node, 0))}
+              {filteredTree.map((node, idx) => renderCategoryNode(node, 0, idx))}
             </div>
           )
         ) : (
@@ -1026,7 +1128,7 @@ export const AdminCategories = () => {
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {filteredUnmapped.map((category) => renderCategoryNode(category as any, category.depth || 0))}
+              {filteredUnmapped.map((category, idx) => renderCategoryNode(category as any, category.depth || 0, idx))}
             </div>
           )
         )}
@@ -1067,12 +1169,54 @@ export const AdminCategories = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700">Category Name *</label>
-              <Input {...register("name")} placeholder="e.g., Full Face Helmet" />
+              <Input
+                {...register("name")}
+                onChange={(e) => {
+                  register("name").onChange(e);
+                  if (!isSlugManuallyEdited && !editingCategory) {
+                    setValue("slug", slugify(e.target.value), { shouldValidate: true, shouldDirty: true });
+                  }
+                }}
+                placeholder="e.g., Full Face Helmet"
+              />
               {errors.name && <p className="text-red-500 text-xs">{errors.name.message}</p>}
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-700">Custom Slug (Optional)</label>
-              <Input {...register("slug")} placeholder="Leave blank to auto-generate" />
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700">Custom Slug (Optional)</label>
+                {isSlugManuallyEdited && !editingCategory && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSlugManuallyEdited(false);
+                      setValue("slug", slugify(watch("name") || ""), { shouldValidate: true, shouldDirty: true });
+                    }}
+                    className="text-[10px] text-blue-600 hover:underline cursor-pointer"
+                  >
+                    Reset to auto
+                  </button>
+                )}
+              </div>
+              <Input
+                {...register("slug")}
+                onChange={(e) => {
+                  register("slug").onChange(e);
+                  setIsSlugManuallyEdited(true);
+                }}
+                placeholder="Auto-generated from name"
+              />
+              {slugConflictCategory ? (
+                <p className="text-[11px] font-medium text-rose-600 mt-1 flex items-center gap-1.5 bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg">
+                  <AlertCircle size={13} className="shrink-0 text-rose-600" />
+                  <span>
+                    Slug <code className="font-bold font-mono">/{currentFormSlug}</code> is already in use by &ldquo;<strong>{slugConflictCategory.name}</strong>&rdquo;. Please choose a distinct name or slug.
+                  </span>
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-500 mt-1 truncate">
+                  Preview URL: <code className="text-brand font-mono font-medium">/{currentFormSlug || "your-slug"}</code>
+                </p>
+              )}
             </div>
           </div>
 
@@ -1705,6 +1849,7 @@ export const AdminCategories = () => {
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700">Meta Title (SEO)</label>
                 <Input {...register("metaTitle")} placeholder="e.g. Buy Full Face Helmets Online in India | Store4Riders" />
+                {errors.metaTitle && <p className="text-red-500 text-xs">{errors.metaTitle.message}</p>}
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700">Meta Description (SEO)</label>
@@ -1714,10 +1859,12 @@ export const AdminCategories = () => {
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                   rows={2}
                 />
+                {errors.metaDescription && <p className="text-red-500 text-xs">{errors.metaDescription.message}</p>}
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-700">Meta Keywords</label>
                 <Input {...register("metaKeywords")} placeholder="motorcycle helmets, full face, safety, gear" />
+                {errors.metaKeywords && <p className="text-red-500 text-xs">{errors.metaKeywords.message}</p>}
               </div>
             </div>
           </div>
@@ -1919,7 +2066,11 @@ export const AdminCategories = () => {
 
           <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
             <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-            <Button type="submit" isLoading={createCategory.isPending || updateCategory.isPending}>
+            <Button 
+              type="submit" 
+              disabled={Boolean(slugConflictCategory) || createCategory.isPending || updateCategory.isPending}
+              isLoading={createCategory.isPending || updateCategory.isPending}
+            >
               {editingCategory ? "Save Changes" : "Create Category"}
             </Button>
           </div>

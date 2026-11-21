@@ -34,6 +34,7 @@ export interface ICategory {
   taxClassName?: string;
   weightUnit?: "kg" | "g" | "ml" | "L";
   sizeChart?: string;
+  size_chart?: string;
   specDefinitions?: ISpecFieldDefinition[];
 }
 

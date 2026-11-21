@@ -5,7 +5,6 @@ import Link from "next/link";
 import { StarIcon } from "@heroicons/react/24/solid";
 import { ColorOption } from "../types/product-detail.types";
 import { cleanRichContent, handleRichTextClick } from "@/core/utils/cleanRichContent";
-import { SizeChartModal } from "./SizeChartModal";
 
 interface ProductInfoProps {
   id: string;
@@ -65,7 +64,6 @@ export const ProductInfo: React.FC<ProductInfoProps> = ({
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [showReadMore, setShowReadMore] = useState(false);
-  const [showSizeChart, setShowSizeChart] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const descRef = React.useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -337,14 +335,6 @@ export const ProductInfo: React.FC<ProductInfoProps> = ({
 
 
       </div>
-
-      {/* Size Chart Modal */}
-      <SizeChartModal
-        isOpen={showSizeChart}
-        onClose={() => setShowSizeChart(false)}
-        sizeChart={sizeChart}
-        productName={name}
-      />
     </>
   );
 };

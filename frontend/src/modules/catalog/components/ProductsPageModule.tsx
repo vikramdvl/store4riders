@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useSearchParams, useParams } from "next/navigation";
 import { useProducts } from "@/core/hooks/useProducts";
 import { useCategoryTree } from "@/core/hooks/useCategories";
@@ -8,6 +9,7 @@ import { CatalogModule } from "@/modules/catalog";
 import { CatalogProduct } from "@/modules/catalog/types/catalog.types";
 import { inferRichColorFromUrl, isValidCssSwatch, parseColorToBackground } from "@/modules/product-detail/components/ProductDetailPageModule";
 import { getProductThumbnailUrl, getPreferredInStockColor, normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
+import { CATEGORY_SLUG_ALIASES } from "@/core/utils/navCategories";
 
 export const ProductsPageModule = ({ initialCategoryNode }: { initialCategoryNode?: any }) => {
   const searchParams = useSearchParams();
@@ -47,9 +49,18 @@ export const ProductsPageModule = ({ initialCategoryNode }: { initialCategoryNod
   const { data: brandData } = useBrand(brand && !category ? brand : "");
   let categoryNode = initialCategoryNode;
   if (!categoryNode && category && catTreeData) {
+    const cleanCat = category.toLowerCase().trim();
+    const catAliases = CATEGORY_SLUG_ALIASES[cleanCat] || [];
     const findNode = (nodes: any[]): any => {
       for (const n of nodes) {
-        if (n.slug === category || n.slug.replace(/s$/, '') === category.replace(/s$/, '')) return n;
+        const nSlug = (n.slug || "").toLowerCase().trim();
+        if (
+          nSlug === cleanCat ||
+          nSlug.replace(/s$/, '') === cleanCat.replace(/s$/, '') ||
+          catAliases.includes(nSlug)
+        ) {
+          return n;
+        }
         if (n.children) {
           const f = findNode(n.children);
           if (f) return f;
@@ -61,6 +72,46 @@ export const ProductsPageModule = ({ initialCategoryNode }: { initialCategoryNod
   } else if (!categoryNode && brand && brandData) {
     categoryNode = brandData;
   }
+
+  // Size Chart inheritance: If current category has no sizeChart, inherit from closest ancestor in category tree
+  const finalCategoryNode = useMemo(() => {
+    if (!categoryNode) return categoryNode;
+    if (categoryNode.sizeChart || categoryNode.size_chart) return categoryNode;
+    
+    if (catTreeData && (categoryNode.parentId || category)) {
+      const target = categoryNode.slug || category || String(categoryNode._id || categoryNode.id || "");
+      const findAncestors = (nodes: any[], targetSlugOrId: string, ancestors: any[] = []): any[] | null => {
+        for (const n of nodes) {
+          const id = String(n._id || n.id || "");
+          const slug = n.slug || "";
+          if (id === targetSlugOrId || slug === targetSlugOrId || slug.replace(/s$/, "") === targetSlugOrId.replace(/s$/, "")) {
+            return ancestors;
+          }
+          if (n.children && n.children.length > 0) {
+            const found = findAncestors(n.children, targetSlugOrId, [...ancestors, n]);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+
+      const ancestors = findAncestors(catTreeData, target);
+      if (ancestors && ancestors.length > 0) {
+        // Find closest ancestor that has a sizeChart
+        const ancestorWithChart = [...ancestors].reverse().find(
+          (a) => a.sizeChart || a.size_chart
+        );
+        const inheritedChart = ancestorWithChart?.sizeChart || ancestorWithChart?.size_chart;
+        if (inheritedChart) {
+          return {
+            ...categoryNode,
+            sizeChart: inheritedChart,
+          };
+        }
+      }
+    }
+    return categoryNode;
+  }, [categoryNode, catTreeData, category]);
 
   const { data, isLoading, isFetching, error } = useProducts({ 
     category, 
@@ -317,7 +368,7 @@ export const ProductsPageModule = ({ initialCategoryNode }: { initialCategoryNod
       totalCount={data?.totalCount || 0} 
       isLoading={isLoading && !data}
       isFetching={isFetching}
-      categoryNode={categoryNode}
+      categoryNode={finalCategoryNode}
     />
   );
 };

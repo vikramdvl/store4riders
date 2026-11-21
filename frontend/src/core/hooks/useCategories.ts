@@ -7,6 +7,20 @@ export interface ICategoryTree extends ICategory {
   children?: ICategoryTree[];
 }
 
+const formatApiError = (error: any, fallback: string): string => {
+  const err = error.response?.data?.error;
+  if (typeof err === "string") return err;
+  if (Array.isArray(err)) {
+    return err
+      .map((i: any) => (typeof i === "object" ? i.message || `${i.path?.join(".")}: invalid` : String(i)))
+      .join(", ");
+  }
+  if (err && typeof err === "object") {
+    return err.message || JSON.stringify(err);
+  }
+  return fallback;
+};
+
 export function useCategoryTree() {
   return useQuery({
     queryKey: ["categoryTree"],
@@ -29,7 +43,7 @@ export function useCreateCategory() {
       queryClient.invalidateQueries({ queryKey: ["categoryTree"] });
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || "Failed to create category");
+      toast.error(formatApiError(error, "Failed to create category"));
     },
   });
 }
@@ -46,7 +60,7 @@ export function useUpdateCategory() {
       queryClient.invalidateQueries({ queryKey: ["categoryTree"] });
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || "Failed to update category");
+      toast.error(formatApiError(error, "Failed to update category"));
     },
   });
 }
@@ -63,7 +77,7 @@ export function useDeleteCategory() {
       queryClient.invalidateQueries({ queryKey: ["categoryTree"] });
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || "Failed to delete category");
+      toast.error(formatApiError(error, "Failed to delete category"));
     },
   });
 }

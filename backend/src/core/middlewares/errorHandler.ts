@@ -14,7 +14,14 @@ export const errorHandler = (error: unknown): NextResponse => {
   // Zod validation errors, if thrown manually or via interceptor
   if (error instanceof Error && error.name === "ZodError") {
     try {
-      return ApiResponse.error(JSON.parse(error.message), 400);
+      const parsed = JSON.parse(error.message);
+      if (Array.isArray(parsed)) {
+        const errorMsg = parsed
+          .map((issue: any) => issue.message || `${issue.path?.join(".") || "field"}: invalid`)
+          .join(", ");
+        return ApiResponse.error(errorMsg, 400);
+      }
+      return ApiResponse.error(typeof parsed === "string" ? parsed : error.message, 400);
     } catch {
       return ApiResponse.error(error.message, 400);
     }

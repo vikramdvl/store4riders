@@ -3,16 +3,18 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { Footer } from "../Footer";
 
+let mockPublicSettingsData: Record<string, unknown> = {
+  footerConfig: {
+    column1Title: "EXCHANGE & REPLACEMENTS",
+    column2Title: "SUPPORT AND SERVICES",
+    column3Title: "POLICIES & LEGAL",
+    column4Title: "ABOUT US",
+  },
+};
+
 vi.mock("@/core/hooks/usePaymentSettings", () => ({
   usePublicSettings: () => ({
-    data: {
-      footerConfig: {
-        column1Title: "EXCHANGE & REPLACEMENTS",
-        column2Title: "SUPPORT AND SERVICES",
-        column3Title: "POLICIES & LEGAL",
-        column4Title: "ABOUT US",
-      },
-    },
+    data: mockPublicSettingsData,
   }),
 }));
 
@@ -45,5 +47,28 @@ describe("Footer Component Navigation Architecture", () => {
     expect(screen.getByRole("link", { name: "Your Account" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Rider Assist" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cash on Delivery" })).toBeInTheDocument();
+  });
+
+  it("renders Contact Us phone as a clickable tel link on one line without breaking", () => {
+    mockPublicSettingsData = {
+      footerConfig: {
+        showContact: true,
+        contactPhone: "+91 7263007788",
+        contactEmail: "contact@store4riders.com",
+      },
+    };
+
+    render(<Footer />);
+
+    const contactLink = screen.getByRole("link", { name: /Contact Us:/i });
+    expect(contactLink).toBeInTheDocument();
+    expect(contactLink).toHaveAttribute("href", "tel:+917263007788");
+    expect(contactLink).toHaveClass("whitespace-nowrap");
+    expect(contactLink).toHaveTextContent("+91 7263007788");
+
+    const emailLink = screen.getByRole("link", { name: /Email:/i });
+    expect(emailLink).toBeInTheDocument();
+    expect(emailLink).toHaveAttribute("href", "mailto:contact@store4riders.com");
+    expect(emailLink).toHaveClass("whitespace-nowrap");
   });
 });

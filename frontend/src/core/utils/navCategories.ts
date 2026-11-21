@@ -51,7 +51,7 @@ export const CORE_PRODUCT_PARENTS: Record<string, { name: string; slug: string; 
     linkUrl: "/riding-gear",
   },
   luggage: {
-    name: "Luggage & Bags",
+    name: "Motorcycle Bags / Bike Luggage",
     slug: "motorcycle-bags-bike-luggage",
     linkUrl: "/motorcycle-bags-bike-luggage",
   },
@@ -89,8 +89,8 @@ export const CATEGORY_SLUG_ALIASES: Record<string, string[]> = {
   "off-road-helmets": ["off-road-helmets", "off-road-helmets-motocross-helmet", "motocross-helmet", "off-road-helmet", "motocross-helmets"],
   "open-face-helmets": ["open-face-helmets", "half-face-helmets", "open-face", "open-face-helmet", "half-face-helmet"],
   "helmet-accessories": ["helmet-accessories", "helmet-accessories-helmet-visors", "helmet-visors", "visors", "visor"],
-  "balaclava": ["balaclava", "face-mask", "head-mask"],
-  "bluetooth-intercoms": ["bluetooth-intercoms", "communicators", "communicator", "intercom", "bluetooth"],
+  "balaclava": ["balaclava", "balaclavas", "face-mask", "head-mask"],
+  "bluetooth-intercoms": ["bluetooth-intercoms", "communicators", "communicator", "intercom", "bluetooth", "motorcycle-intercoms"],
   "helmet-cleaners": ["helmet-cleaners", "helmet-cleaner", "motorcycle-care", "cleaner"],
 
   // Riding Gear
@@ -106,11 +106,15 @@ export const CATEGORY_SLUG_ALIASES: Record<string, string[]> = {
   "touring-pants": ["touring-pants", "touring-pant"],
   "knee-guards-bikers": ["knee-guards-bikers", "knee-guards-for-bikers", "knee-guard", "knee-guards"],
   "motorcycle-riding-boots": ["motorcycle-riding-boots", "riding-boots"],
-  "short-biking-boots": ["short-biking-boots", "short-city-riding-biking-boots", "short-biking-boot"],
-  "sports-riding-shoes": ["sports-riding-shoes", "sport-riding-shoes", "sport-riding-shoe"],
-  "off-road-riding-boots": ["off-road-riding-boots", "off-road-boots", "off-road-riding-boots-motocross-boots", "motocross-boots"],
-  "touring-gear": ["touring-gear", "touring-gears"],
-  "monsoon-gear-for-riders": ["monsoon-gear-for-riders", "monsoon-gear", "monsoon-gear-for-rider"],
+  "short-biking-boots": ["short-biking-boots", "short-riding-boots-city-riding-shoes", "short-city-riding-biking-boots", "short-biking-boot"],
+  "short-riding-boots-city-riding-shoes": ["short-biking-boots", "short-city-riding-biking-boots", "short-biking-boot", "sports-riding-shoes"],
+  "sports-riding-shoes": ["sports-riding-shoes", "sport-riding-shoes", "sport-riding-shoe", "sports-riding-shoe", "short-riding-boots-city-riding-shoes"],
+  "off-road-riding-boots": ["off-road-riding-boots", "off-road-boots", "adventure-off-road-riding-boots", "off-road-riding-boots-motocross-boots", "motocross-boots"],
+  "adventure-off-road-riding-boots": ["off-road-riding-boots", "off-road-boots", "off-road-riding-boots-motocross-boots", "motocross-boots"],
+  "touring-gear": ["touring-gear", "touring-gears", "motorcycle-touring-gear", "motorcycle-touring-gears"],
+  "motorcycle-touring-gear": ["touring-gear", "touring-gears", "motorcycle-touring-gear"],
+  "monsoon-gear-for-riders": ["monsoon-gear-for-riders", "monsoon-gear", "monsoon-gear-for-rider", "motorcycle-rain-gear-for-bikers", "rain-gear", "rain-wear", "motorcycle-rain-wear"],
+  "monsoon-gear": ["monsoon-gear-for-riders", "monsoon-gear", "monsoon-gear-for-rider", "motorcycle-rain-gear-for-bikers", "rain-gear", "rain-wear", "motorcycle-rain-wear"],
   "riding-gear-for-women": ["riding-gear-for-women", "women-riding-gear"],
   "off-road-motocross-riding-gear": ["off-road-motocross-riding-gear", "off-road-motocross"],
 
@@ -119,9 +123,12 @@ export const CATEGORY_SLUG_ALIASES: Record<string, string[]> = {
   "tank-bags-bikes": ["tank-bags-bikes", "tank-bags", "tank-bags-for-bike"],
   "saddle-bags-bikes": ["saddle-bags-bikes", "saddle-bags", "saddle-bags-for-bikes-panniers"],
   "motorcycle-tail-bags": ["motorcycle-tail-bags", "tail-bags"],
-  "bike-top-box": ["bike-top-box", "top-box", "top-boxes", "top-case"],
-  "crash-bar-bags": ["crash-bar-bags", "crash-bar-bag", "frame-bags"],
-  "thigh-bags": ["thigh-bags", "thigh-bag", "thigh-pouch"],
+  "bike-top-box": ["bike-top-box", "bike-top-boxes-aluminium-top-box", "bike-top-box-cases", "top-box", "top-boxes", "top-case"],
+  "bike-top-boxes-aluminium-top-box": ["bike-top-box", "top-box", "top-boxes", "bike-top-box-cases"],
+  "crash-bar-bags": ["crash-bar-bags", "crash-bar-bags-for-motorcycles", "crash-bar-bag", "frame-bags"],
+  "crash-bar-bags-for-motorcycles": ["crash-bar-bags", "crash-bar-bag", "frame-bags"],
+  "thigh-bags": ["thigh-bags", "thigh-bags-for-motorcycle-riders", "thigh-bag", "thigh-pouch"],
+  "thigh-bags-for-motorcycle-riders": ["thigh-bags", "thigh-bag", "thigh-pouch"],
   "helmet-bags": ["helmet-bags", "helmet-bag"],
   "hydration-bag": ["hydration-bag", "hydration-bags"],
   "motorcycle-other-luggage": ["motorcycle-other-luggage", "other-luggage", "other-luggages"],
@@ -143,7 +150,8 @@ export const CATEGORY_SLUG_ALIASES: Record<string, string[]> = {
   "spares": ["spares", "bike-spares"],
   "chain-sprocket-kits": ["chain-sprocket-kits", "chain-sprockets", "sprockets"],
   "iridium-spark-plug": ["iridium-spark-plug", "spark-plugs", "spark-plug"],
-  "performance-air-filter-bike": ["performance-air-filter-bike", "performance-air-filters", "air-filter"],
+  "performance-air-filter-bike": ["performance-air-filter-bike", "performance-air-filters-for-bikes", "performance-air-filters", "air-filter", "air-filters"],
+  "performance-air-filters-for-bikes": ["performance-air-filter-bike", "performance-air-filters"],
   "brake-pads": ["brake-pads", "brake-pad"],
 
   // Exhausts
@@ -217,6 +225,15 @@ export const LEGACY_NON_MENU_SLUGS = new Set<string>([
   "performance-air-filters-for-bikes",
   "smk-gullwing-helmets",
   "smk-typhoon-helmets",
+  "carbon-fibre-helmets",
+  "ls2-ff800-storm-ii-helmets-touring-range",
+  "ls2-ff320-stream-ii-daily-rider-range",
+  "axor-brutale-dual-spoiler-helmet",
+  "smk-agnar-helmet-full-face-protection-with-race-ready-styling",
+  "smk-nova-helmets",
+  "axor-agera-full-face-helmets",
+  "best-helmets-under-rs5000",
+  "best-helmets-under-rs-5000",
 ]);
 
 export function isLegacyNonMenuCategory(slug?: string): boolean {
@@ -279,19 +296,75 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
     const cleanName = name.toLowerCase().trim();
     const leafSlug = cleanSlug.split("/").filter(Boolean).pop() || cleanSlug;
 
-    // 1. Direct slug match
-    if (dbBySlug.has(cleanSlug)) return dbBySlug.get(cleanSlug);
-    if (dbBySlug.has(leafSlug)) return dbBySlug.get(leafSlug);
+    const isAvailable = (doc: any) => {
+      if (!doc || !doc._id) return false;
+      return !matchedDbIds.has(String(doc._id));
+    };
 
-    // 2. Alias match
+    const tryClaim = (doc: any) => {
+      if (isAvailable(doc)) {
+        matchedDbIds.add(String(doc._id));
+        return doc;
+      }
+      return null;
+    };
+
+    // 1. Direct slug match
+    if (dbBySlug.has(cleanSlug)) {
+      const match = tryClaim(dbBySlug.get(cleanSlug));
+      if (match) return match;
+    }
+    if (dbBySlug.has(leafSlug)) {
+      const match = tryClaim(dbBySlug.get(leafSlug));
+      if (match) return match;
+    }
+
+    // 2. Alias match (direct + reverse)
     const aliases = CATEGORY_SLUG_ALIASES[leafSlug] || CATEGORY_SLUG_ALIASES[cleanSlug] || [];
     for (const alias of aliases) {
       const aliasClean = alias.toLowerCase().trim();
-      if (dbBySlug.has(aliasClean)) return dbBySlug.get(aliasClean);
+      if (dbBySlug.has(aliasClean)) {
+        const match = tryClaim(dbBySlug.get(aliasClean));
+        if (match) return match;
+      }
+    }
+    for (const [key, aliasList] of Object.entries(CATEGORY_SLUG_ALIASES)) {
+      if (aliasList.includes(leafSlug) || aliasList.includes(cleanSlug)) {
+        if (dbBySlug.has(key)) {
+          const match = tryClaim(dbBySlug.get(key));
+          if (match) return match;
+        }
+        for (const a of aliasList) {
+          if (dbBySlug.has(a)) {
+            const match = tryClaim(dbBySlug.get(a));
+            if (match) return match;
+          }
+        }
+      }
     }
 
-    // 3. Exact name match
-    if (dbByName.has(cleanName)) return dbByName.get(cleanName);
+    // 3. Singular / plural slug variant
+    const singular = leafSlug.endsWith("s") ? leafSlug.slice(0, -1) : `${leafSlug}s`;
+    if (dbBySlug.has(singular)) {
+      const match = tryClaim(dbBySlug.get(singular));
+      if (match) return match;
+    }
+
+    // 4. Exact name match
+    if (dbByName.has(cleanName)) {
+      const match = tryClaim(dbByName.get(cleanName));
+      if (match) return match;
+    }
+
+    // 5. Normalized exact name match (ignoring special characters & casing)
+    for (const [dbCatName, doc] of dbByName.entries()) {
+      if (!isAvailable(doc)) continue;
+      const strippedDb = dbCatName.replace(/[^a-z0-9]/g, "");
+      const strippedClean = cleanName.replace(/[^a-z0-9]/g, "");
+      if (strippedDb && strippedDb === strippedClean) {
+        return tryClaim(doc);
+      }
+    }
 
     return null;
   };
@@ -300,10 +373,18 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
     if (dbDoc && dbDoc._id) {
       matchedDbIds.add(String(dbDoc._id));
     }
+    const resolvedName = (dbDoc?.name && dbDoc.name.trim()) || node.name || "";
+    const normalizedName =
+      (node.slug === "motorcycle-riding-boots" || dbDoc?.slug === "motorcycle-riding-boots") && resolvedName === "Riding Boots"
+        ? "Motorcycle riding boots"
+        : (node.slug === "motorcycle-bags-bike-luggage" || dbDoc?.slug === "motorcycle-bags-bike-luggage") && resolvedName === "Luggage & Bags"
+        ? "Motorcycle Bags / Bike Luggage"
+        : resolvedName;
+
     return {
       _id: dbDoc?._id ? String(dbDoc._id) : node.slug || node.id || "",
       id: node.id || node.slug || "",
-      name: node.name || dbDoc?.name || "",
+      name: normalizedName,
       slug: node.slug || dbDoc?.slug || "",
       linkUrl: node.linkUrl || `/${node.slug}`,
       parentId: node.parentId || (dbDoc?.parentId ? String(dbDoc.parentId) : undefined),
@@ -334,7 +415,7 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
           bannerImage: hc.bannerImage || dbMatch?.bannerImage || "",
         };
       }),
-      includeInMenu: dbDoc?.includeInMenu !== false,
+      includeInMenu: dbDoc?.includeInMenu === true || (dbDoc?.includeInMenu !== false && !isLegacyNonMenuCategory(node.slug || dbDoc?.slug)),
       menuGroup: dbDoc?.menuGroup || node.groupName || "",
       menuLabel: dbDoc?.menuLabel || "",
       menuNavSection: dbDoc?.menuNavSection || "",
@@ -401,7 +482,10 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
                 mergeDbProps(
                   {
                     id: groupSlug,
-                    name: section.group,
+                    name:
+                      groupSlug === "motorcycle-riding-boots" && section.group === "Riding Boots"
+                        ? "Motorcycle riding boots"
+                        : section.group,
                     slug: groupSlug,
                     linkUrl: section.groupHref,
                     parentId: parentDbDoc?._id ? String(parentDbDoc._id) : nav.id,
@@ -465,6 +549,19 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
       // Skip duplicate aliases of existing menu items (e.g. "full-face-helmet", "helmets", "riding-jacket")
       if (seenSlugs.has(dbSlug) || isCanonicalMenuAlias(dbSlug)) return;
 
+      // Skip legacy non-menu categories so they remain in "Unmapped Legacy Categories" tab unless explicitly placed into a menuNavSection by admin
+      if (isLegacyNonMenuCategory(dbSlug) && !dbCat.menuNavSection) return;
+
+      // Parse menuNavSection (e.g. "helmets:Types")
+      const navSection = (dbCat.menuNavSection || "").trim();
+      let targetNavId = "";
+      let targetSectionGroup = "";
+      if (navSection && navSection.includes(":")) {
+        const [navId, ...grpParts] = navSection.split(":");
+        targetNavId = navId.trim().toLowerCase();
+        targetSectionGroup = grpParts.join(":").trim();
+      }
+
       // Case A: Custom Subcategory created under an existing parent or group
       if (dbCat.parentId) {
         const pId = String(dbCat.parentId).toLowerCase();
@@ -485,6 +582,7 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
                     slug: dbSlug,
                     linkUrl: `/${node.slug}/${dbSlug}`,
                     parentId: node._id || node.id,
+                    groupName: targetSectionGroup || dbCat.menuGroup || undefined,
                     children: [],
                     isCustom: true,
                   },
@@ -503,6 +601,59 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
         };
 
         attachToParent(tree);
+      } else if (targetNavId) {
+        // Case B: Category has Target Submenu Section (e.g. "helmets:Types") without explicit parentId
+        const rootNode = tree.find(
+          (n) =>
+            n.id.toLowerCase() === targetNavId ||
+            n.slug.toLowerCase() === targetNavId ||
+            (CORE_PRODUCT_PARENTS[n.id] && CORE_PRODUCT_PARENTS[n.id].slug.toLowerCase() === targetNavId)
+        );
+
+        if (rootNode) {
+          const matchingGroupChild = rootNode.children?.find(
+            (c) =>
+              c.name.toLowerCase() === targetSectionGroup.toLowerCase() ||
+              (c.groupName && c.groupName.toLowerCase() === targetSectionGroup.toLowerCase())
+          );
+
+          if (matchingGroupChild && matchingGroupChild.children) {
+            matchingGroupChild.children.push(
+              mergeDbProps(
+                {
+                  id: dbSlug,
+                  name: dbCat.name,
+                  slug: dbSlug,
+                  linkUrl: `/${rootNode.slug}/${matchingGroupChild.slug}/${dbSlug}`,
+                  parentId: matchingGroupChild._id || matchingGroupChild.id,
+                  groupName: targetSectionGroup,
+                  children: [],
+                  isCustom: true,
+                },
+                dbCat
+              )
+            );
+          } else {
+            rootNode.children = rootNode.children || [];
+            rootNode.children.push(
+              mergeDbProps(
+                {
+                  id: dbSlug,
+                  name: dbCat.name,
+                  slug: dbSlug,
+                  linkUrl: `/${rootNode.slug}/${dbSlug}`,
+                  parentId: rootNode._id || rootNode.id,
+                  groupName: targetSectionGroup || undefined,
+                  children: [],
+                  isCustom: true,
+                },
+                dbCat
+              )
+            );
+          }
+          matchedDbIds.add(dbId);
+          seenSlugs.add(dbSlug);
+        }
       } else if (dbCat.menuGroup === "admin-custom") {
         // Case B: Explicit custom Root Parent category created by Admin
         tree.push(
@@ -563,9 +714,14 @@ export function getUnmappedLegacyCategories(
   };
   traverseDb(dbCategories);
 
+  const seenUnmapped = new Set<string>();
   return flatList.filter((cat) => {
     const slug = (cat.slug || "").toLowerCase().trim();
-    const id = String(cat._id || "");
-    return !menuSlugs.has(slug) && !menuIds.has(id);
+    const id = String(cat._id || cat.id || "");
+    if (menuSlugs.has(slug) || (id && menuIds.has(id))) return false;
+    const uniqueKey = id || slug;
+    if (!uniqueKey || seenUnmapped.has(uniqueKey)) return false;
+    seenUnmapped.add(uniqueKey);
+    return true;
   });
 }

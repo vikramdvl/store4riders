@@ -10,6 +10,7 @@ import { useCartStore } from "@/stores/useCartStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useLogout } from "@/core/hooks/useAuth";
 import { useBrands } from "@/core/hooks/useBrands";
+import { useCategoryTree } from "@/core/hooks/useCategories";
 import { SearchAutocomplete } from "@/modules/search/components/SearchAutocomplete";
 import { NavItem } from "../types/homepage.types";
 import { DEFAULT_NAV_ITEMS } from "./navbar/nav.constants";
@@ -119,33 +120,124 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isLight = theme === "light" || isScrolled;
   
   const { data: dbBrands } = useBrands();
-  // Preserves strict DEFAULT_NAV_ITEMS structure, overlaying Popular badges dynamically only when configured in DB
+  const { data: dbCategories } = useCategoryTree();
+
+  // Preserves strict DEFAULT_NAV_ITEMS structure, overlaying dynamic subcategories, badges & visibility from DB
   const activeNavItems = useMemo(() => {
     const baseItems = navItems || DEFAULT_NAV_ITEMS;
-    if (!dbBrands || !Array.isArray(dbBrands) || dbBrands.length === 0) {
-      return baseItems;
+
+    // Flatten DB categories
+    const flatDbCategories: any[] = [];
+    const traverse = (nodes: any[]) => {
+      if (!Array.isArray(nodes)) return;
+      for (const n of nodes) {
+        flatDbCategories.push(n);
+        if (n.children && n.children.length > 0) traverse(n.children);
+      }
+    };
+    if (dbCategories && Array.isArray(dbCategories)) {
+      traverse(dbCategories);
     }
 
-    const popularBrandsList = dbBrands.filter(
-      (b) =>
-        b.isActive !== false &&
-        ((b.menuGroups && b.menuGroups.some((g) => g.toLowerCase().includes("popular"))) ||
-          (b.menuGroup && b.menuGroup.toLowerCase().includes("popular")))
-    );
+    // Set of slugs explicitly hidden from menu
+    const hiddenSlugs = new Set<string>();
+    flatDbCategories.forEach((c) => {
+      if (c.includeInMenu === false && c.slug) {
+        hiddenSlugs.add(c.slug.trim().toLowerCase());
+      }
+    });
+
+    // Custom items mapped by Target Submenu Section (e.g. "helmets:types")
+    const customBySection = new Map<string, any[]>();
+    flatDbCategories.forEach((c) => {
+      if (c.includeInMenu === false) return;
+
+      let secKey = c.menuNavSection ? c.menuNavSection.trim().toLowerCase() : "";
+
+      // If no explicit menuNavSection, auto-resolve section from parent category
+      if (!secKey && c.parentId) {
+        const pId = String(c.parentId).toLowerCase();
+        const parentDoc = flatDbCategories.find(
+          (p) =>
+            String(p._id).toLowerCase() === pId ||
+            String(p.slug).toLowerCase() === pId ||
+            String(p.id).toLowerCase() === pId
+        );
+        const parentSlug = (parentDoc?.slug || pId).toLowerCase().trim();
+        const parentName = (parentDoc?.name || "").toLowerCase().trim();
+
+        for (const baseNav of baseItems) {
+          if (!baseNav.megaMenuItems) continue;
+          // Strictly exclude Brand navigation and Guides from category auto-resolution
+          if (
+            baseNav.id === "shop-by-brand" ||
+            baseNav.id === "guides" ||
+            baseNav.href === "/brands" ||
+            baseNav.href === "/guides" ||
+            baseNav.label.toLowerCase().includes("brand")
+          ) {
+            continue;
+          }
+
+          for (const grp of baseNav.megaMenuItems) {
+            const grpHrefLeaf = grp.groupHref ? grp.groupHref.split("?")[0].split("/").filter(Boolean).pop()?.toLowerCase() || "" : "";
+            const matchesGroup = grpHrefLeaf === parentSlug || (grp.group && grp.group.toLowerCase().trim() === parentName);
+            const matchesSubItem = grp.items.some((sub) => {
+              const subLeaf = sub.href.split("?")[0].split("/").filter(Boolean).pop()?.toLowerCase() || "";
+              return subLeaf === parentSlug || (sub.label && sub.label.toLowerCase().trim() === parentName);
+            });
+
+            // Auto-resolve when parent matches a group or an existing subcategory item in this group
+            if (matchesGroup || matchesSubItem) {
+              secKey = `${baseNav.id.toLowerCase()}:${(grp.group || "").toLowerCase().trim()}`;
+              break;
+            }
+          }
+          if (secKey) break;
+        }
+      }
+
+      if (
+        secKey &&
+        !secKey.startsWith("shop-by-brand") &&
+        !secKey.startsWith("brands") &&
+        !secKey.startsWith("guides")
+      ) {
+        if (!customBySection.has(secKey)) customBySection.set(secKey, []);
+        customBySection.get(secKey)!.push(c);
+      }
+    });
+
+    const popularBrandsList = Array.isArray(dbBrands)
+      ? dbBrands.filter(
+          (b) =>
+            b.isActive !== false &&
+            ((b.menuGroups && b.menuGroups.some((g) => g.toLowerCase().includes("popular"))) ||
+              (b.menuGroup && b.menuGroup.toLowerCase().includes("popular")))
+        )
+      : [];
 
     return baseItems.map((item) => {
+      if (!item.megaMenuItems) return item;
+
       const isBrandNav =
         item.id === "shop-by-brand" ||
         item.href === "/brands" ||
         item.label.toLowerCase().includes("brand");
 
-      if (!isBrandNav || !item.megaMenuItems) return item;
+      const updatedMegaMenuItems = item.megaMenuItems.map((group) => {
+        const groupKey = `${item.id.toLowerCase()}:${(group.group || "").toLowerCase().trim()}`;
+        const sectionCustomCategories = customBySection.get(groupKey) || [];
 
-      return {
-        ...item,
-        megaMenuItems: item.megaMenuItems.map((group) => ({
-          ...group,
-          items: group.items.map((subItem) => {
+        // 1. Filter out hidden items
+        let visibleItems = group.items.filter((subItem) => {
+          const leaf = subItem.href.split("?")[0].split("/").filter(Boolean).pop()?.toLowerCase() || "";
+          return !hiddenSlugs.has(leaf);
+        });
+
+        // 2. Overlay brand popular badges if brand nav
+        if (isBrandNav && popularBrandsList.length > 0) {
+          visibleItems = visibleItems.map((subItem) => {
             const targetSlug = subItem.href.replace(/^\/brands\/?/, "").trim().toLowerCase();
             const targetLabel = subItem.label.trim().toLowerCase();
 
@@ -159,9 +251,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               if (pbSlug && (pbSlug === targetSlug || targetSlug.startsWith(pbSlug) || pbSlug.startsWith(targetSlug))) {
                 return true;
               }
-              if (aliases.includes(targetSlug)) {
-                return true;
-              }
+              if (aliases.includes(targetSlug)) return true;
               if (pbName && (pbName === targetLabel || targetLabel.includes(pbName) || pbName.includes(targetLabel))) {
                 return true;
               }
@@ -173,11 +263,50 @@ export const Navbar: React.FC<NavbarProps> = ({
               badge: isPopular ? "Popular" : undefined,
               badgeColor: isPopular ? "bg-brand" : undefined,
             };
-          }),
-        })),
+          });
+        }
+
+        // 3. Append custom categories configured for this section (Never into Brands or Guides)
+        if (!isBrandNav && item.id !== "guides" && item.href !== "/guides" && sectionCustomCategories.length > 0) {
+          sectionCustomCategories.forEach((cat) => {
+            const catSlug = (cat.slug || "").trim().toLowerCase();
+            const existingIndex = visibleItems.findIndex((sub) => {
+              const subLeaf = sub.href.split("?")[0].split("/").filter(Boolean).pop()?.toLowerCase() || "";
+              return subLeaf === catSlug;
+            });
+
+            if (existingIndex >= 0) {
+              // Update label/badge if already in menu
+              visibleItems[existingIndex] = {
+                ...visibleItems[existingIndex],
+                label: cat.menuLabel || visibleItems[existingIndex].label,
+                badge: cat.badge || visibleItems[existingIndex].badge,
+                badgeColor: cat.badgeColor || visibleItems[existingIndex].badgeColor,
+              };
+            } else {
+              // Append new submenu item
+              visibleItems.push({
+                label: cat.menuLabel || cat.name,
+                href: cat.linkUrl || `/${item.href.replace(/^\//, '')}/${cat.slug}`,
+                badge: cat.badge || undefined,
+                badgeColor: cat.badgeColor || undefined,
+              });
+            }
+          });
+        }
+
+        return {
+          ...group,
+          items: visibleItems,
+        };
+      });
+
+      return {
+        ...item,
+        megaMenuItems: updatedMegaMenuItems,
       };
     });
-  }, [navItems, dbBrands]);
+  }, [navItems, dbBrands, dbCategories]);
 
   return (
     <>

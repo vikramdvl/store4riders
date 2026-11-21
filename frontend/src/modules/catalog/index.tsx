@@ -14,6 +14,7 @@ import { SidebarFilters } from "./components/SidebarFilters";
 import { CatalogGrid } from "./components/CatalogGrid";
 import { StoreReviews } from "@/modules/product-detail/components/StoreReviews";
 import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
+import { SizeChartModal } from "@/modules/product-detail/components/SizeChartModal";
 import { Suspense, useState } from "react";
 import { useSearchParams, useRouter, useParams, usePathname } from "next/navigation";
 
@@ -31,10 +32,13 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams();
+  const [showSizeChart, setShowSizeChart] = useState(false);
   
   const { data: publicSettings } = usePublicSettings();
   const dynamicRating = publicSettings?.googleRating ?? 4.8;
   const dynamicReviewCount = publicSettings?.googleReviewCount ?? "800+";
+
+  const activeSizeChart = categoryNode?.sizeChart || categoryNode?.size_chart || "";
   
   let categoryParam = searchParams.get("category") || "";
   if (!categoryParam && params?.categorySlug) {
@@ -136,15 +140,47 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
       {/* 2. Main Catalog Area (Structured exactly as user wireframe) */}
       <main className="flex-1 max-w-[1400px] w-full mx-auto px-3 sm:px-6 pt-3 pb-16 md:pb-20">
         
-        {/* Category Heading (SEO H1) */}
-        <div className="mb-2">
-          <h1 className="font-sans text-lg min-[375px]:text-xl sm:text-2xl md:text-3xl font-extrabold uppercase tracking-wide text-neutral-900 leading-tight">
-            {pageTitle}
-          </h1>
-          {searchQuery && (
-            <p className="text-xs sm:text-sm text-neutral-500 font-medium mt-1">
-              Found <strong className="text-neutral-900 font-bold">{totalCount || products.length}</strong> {totalCount === 1 ? "product" : "products"} for &ldquo;<span className="text-neutral-900 font-semibold">{searchQuery}</span>&rdquo;
-            </p>
+        {/* Category Heading (SEO H1) & Size Guide */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+          <div className="min-w-0">
+            <h1 className="font-sans text-lg min-[375px]:text-xl sm:text-2xl md:text-3xl font-extrabold uppercase tracking-wide text-neutral-900 leading-tight">
+              {pageTitle}
+            </h1>
+            {searchQuery && (
+              <p className="text-xs sm:text-sm text-neutral-500 font-medium mt-1">
+                Found <strong className="text-neutral-900 font-bold">{totalCount || products.length}</strong> {totalCount === 1 ? "product" : "products"} for &ldquo;<span className="text-neutral-900 font-semibold">{searchQuery}</span>&rdquo;
+              </p>
+            )}
+          </div>
+
+          {activeSizeChart && (
+            <button
+              type="button"
+              onClick={() => setShowSizeChart(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-800 text-xs sm:text-sm font-bold shadow-2xs hover:border-neutral-300 active:scale-95 transition-all cursor-pointer select-none"
+              title={`View ${pageTitle} Size Guide`}
+              aria-label={`View ${pageTitle} Size Guide`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-brand shrink-0"
+              >
+                <rect x="2" y="8" width="20" height="8" rx="1" />
+                <line x1="6" y1="16" x2="6" y2="12" />
+                <line x1="10" y1="16" x2="10" y2="12" />
+                <line x1="14" y1="16" x2="14" y2="12" />
+                <line x1="18" y1="16" x2="18" y2="12" />
+              </svg>
+              <span>Size Guide</span>
+            </button>
           )}
         </div>
 
@@ -196,7 +232,7 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
                       STORE REVIEWS
                     </span>
                     <span className="inline-flex items-center gap-1 bg-white border border-neutral-200/80 px-2 py-0.5 rounded-full text-[10px] font-bold text-neutral-800 shadow-2xs ml-0.5">
-                      <span className="text-amber-500">★ {dynamicRating}</span>
+                      <span suppressHydrationWarning className="text-amber-500">★ {dynamicRating}</span>
                     </span>
                   </div>
                 ),
@@ -212,7 +248,11 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
           
           {/* Left Sidebar Filters — Desktop only (On mobile, accessed via bottom floating bar) */}
           <aside className="hidden lg:block w-64 xl:w-72 shrink-0 lg:sticky lg:top-[90px] self-start max-h-[calc(100vh-120px)] overflow-y-auto hide-scrollbar">
-            <SidebarFilters isFetching={isFetching} />
+            <SidebarFilters 
+              isFetching={isFetching} 
+              sizeChart={activeSizeChart} 
+              onOpenSizeChart={() => setShowSizeChart(true)} 
+            />
           </aside>
 
           {/* Right Product Grid (2 columns on mobile with dark gradient name & price overlay) */}
@@ -231,12 +271,43 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
                 )}
               </div>
 
-              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+                {activeSizeChart && (
+                  <button
+                    type="button"
+                    suppressHydrationWarning
+                    onClick={() => setShowSizeChart(true)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-neutral-700 hover:text-neutral-900 text-[11px] sm:text-xs font-bold transition-all cursor-pointer shadow-2xs select-none"
+                    title="View Size Chart"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="text-brand shrink-0"
+                    >
+                      <rect x="2" y="8" width="20" height="8" rx="1" />
+                      <line x1="6" y1="16" x2="6" y2="12" />
+                      <line x1="10" y1="16" x2="10" y2="12" />
+                      <line x1="14" y1="16" x2="14" y2="12" />
+                      <line x1="18" y1="16" x2="18" y2="12" />
+                    </svg>
+                    <span>Size Chart</span>
+                  </button>
+                )}
+
                 <label htmlFor="catalog-sort" className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500 whitespace-nowrap">
                   Sort by:
                 </label>
                 <select
                   id="catalog-sort"
+                  suppressHydrationWarning
                   value={sortParam}
                   onChange={(e) => handleSortChange(e.target.value)}
                   className="text-[11px] sm:text-xs font-semibold bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-md py-1.5 px-2 sm:px-2.5 focus:outline-none focus:border-neutral-400 cursor-pointer text-neutral-800 shadow-xs transition-colors"
@@ -284,7 +355,19 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
           isFetching={isFetching} 
           averageRating={dynamicRating}
           reviewCount={dynamicReviewCount}
+          sizeChart={activeSizeChart}
+          onOpenSizeChart={() => setShowSizeChart(true)}
         />
+
+        {/* Category Size Chart Modal (Desktop & Mobile) */}
+        {activeSizeChart && (
+          <SizeChartModal
+            isOpen={showSizeChart}
+            onClose={() => setShowSizeChart(false)}
+            sizeChart={activeSizeChart}
+            productName={`${pageTitle} Size Guide`}
+          />
+        )}
       </main>
     </>
   );

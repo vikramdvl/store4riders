@@ -1,18 +1,43 @@
-import { addMigrationJob } from "../../core/queue/migration.queue";
+import { addMigrationJob, MigrationJobData } from "../../core/queue/migration.queue";
+import { getMigrationPresignedUrl } from "../../core/storage/s3";
 import { AppError } from "../../core/errors/AppError";
 
 export class MigrationService {
   /**
-   * Starts a background migration job for a given CSV file
+   * Generates a pre-signed S3 upload URL for direct browser CSV upload
    */
-  static async startCsvMigration(filePath: string, adminId: string) {
-    if (!filePath) {
-      throw new AppError("File path is required", 400);
+  static async getPresignedUploadUrl(fileName: string, fileType = "text/csv") {
+    if (!fileName) {
+      throw new AppError("File name is required", 400);
     }
-    
+    if (!fileName.toLowerCase().endsWith(".csv")) {
+      throw new AppError("Only CSV files are allowed", 400);
+    }
+    return await getMigrationPresignedUrl(fileName, fileType);
+  }
+
+  /**
+   * Starts a background migration job for a given CSV file (via S3 or local path)
+   */
+  static async startCsvMigration(
+    pathOrData: string | MigrationJobData,
+    adminId?: string
+  ) {
+    let jobData: MigrationJobData;
+
+    if (typeof pathOrData === "string") {
+      jobData = { filePath: pathOrData, adminId: adminId || "admin" };
+    } else {
+      jobData = pathOrData;
+    }
+
+    if (!jobData.filePath && !jobData.s3Key) {
+      throw new AppError("Either filePath or s3Key must be provided", 400);
+    }
+
     // Add job to BullMQ
-    const job = await addMigrationJob(filePath, adminId);
-    
+    const job = await addMigrationJob(jobData);
+
     return {
       jobId: job.id,
       message: "Migration job added successfully. Processing in background.",

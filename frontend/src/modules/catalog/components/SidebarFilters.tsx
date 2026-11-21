@@ -41,7 +41,17 @@ function AccordionSection({ title, children, defaultOpen = true }: { title: stri
   );
 }
 
-export function SidebarFilters({ isFetching = false }: { isFetching?: boolean }) {
+interface SidebarFiltersProps {
+  isFetching?: boolean;
+  sizeChart?: string;
+  onOpenSizeChart?: () => void;
+}
+
+export function SidebarFilters({ 
+  isFetching = false, 
+  sizeChart, 
+  onOpenSizeChart 
+}: SidebarFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams();
@@ -362,6 +372,8 @@ export function SidebarFilters({ isFetching = false }: { isFetching?: boolean })
           </div>
           {activePills.length > 0 && (
             <button 
+              type="button"
+              suppressHydrationWarning
               onClick={clearAllFilters}
               className="text-[11px] font-bold text-banner hover:text-red-700 uppercase tracking-wider cursor-pointer"
             >
@@ -369,6 +381,26 @@ export function SidebarFilters({ isFetching = false }: { isFetching?: boolean })
             </button>
           )}
         </div>
+        {sizeChart && (
+          <button
+            type="button"
+            suppressHydrationWarning
+            onClick={onOpenSizeChart}
+            className="w-full mt-3 px-3 py-2 rounded-lg bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 flex items-center justify-between text-xs font-bold text-neutral-800 transition-all cursor-pointer group shadow-2xs"
+          >
+            <div className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand shrink-0">
+                <rect x="2" y="8" width="20" height="8" rx="1" />
+                <line x1="6" y1="16" x2="6" y2="12" />
+                <line x1="10" y1="16" x2="10" y2="12" />
+                <line x1="14" y1="16" x2="14" y2="12" />
+                <line x1="18" y1="16" x2="18" y2="12" />
+              </svg>
+              <span>Size Guide</span>
+            </div>
+            <span className="text-[10px] text-brand uppercase font-extrabold group-hover:underline">View Chart</span>
+          </button>
+        )}
       </div>
 
       {/* NOW SHOPPING BY - Active Filters Summary */}
@@ -383,6 +415,8 @@ export function SidebarFilters({ isFetching = false }: { isFetching?: boolean })
                   <span className="text-[13px] font-semibold text-neutral-900">{pill.displayValue}</span>
                 </div>
                 <button 
+                  type="button"
+                  suppressHydrationWarning
                   onClick={() => {
                     if (pill.param === 'price') handlePriceSelect({ id: 'all' });
                     else removeArrayParamItem(pill.param, pill.value);
@@ -511,6 +545,8 @@ export function SidebarFilters({ isFetching = false }: { isFetching?: boolean })
                     const active = activePriceId === range.id;
                     return (
                       <button
+                        type="button"
+                        suppressHydrationWarning
                         key={range.id}
                         onClick={() => handlePriceSelect(range)}
                         className="flex items-center gap-2 text-[14px] text-left cursor-pointer group py-1"
@@ -537,6 +573,23 @@ export function SidebarFilters({ isFetching = false }: { isFetching?: boolean })
             }
             return (
               <AccordionSection key="size" title={sizeLabel} defaultOpen={false}>
+                {sizeChart && (
+                  <button
+                    type="button"
+                    suppressHydrationWarning
+                    onClick={onOpenSizeChart}
+                    className="w-full text-left text-xs font-bold text-brand hover:underline flex items-center gap-1.5 pb-2 mb-1 border-b border-neutral-100 cursor-pointer"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand shrink-0">
+                      <rect x="2" y="8" width="20" height="8" rx="1" />
+                      <line x1="6" y1="16" x2="6" y2="12" />
+                      <line x1="10" y1="16" x2="10" y2="12" />
+                      <line x1="14" y1="16" x2="14" y2="12" />
+                      <line x1="18" y1="16" x2="18" y2="12" />
+                    </svg>
+                    <span>View {sizeLabel} Size Chart</span>
+                  </button>
+                )}
                 <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto scrollbar-thin pr-2">
                   {SIZES.map((sz: any) => {
                     const active = isParamActive("size", sz.name, activeSizes);

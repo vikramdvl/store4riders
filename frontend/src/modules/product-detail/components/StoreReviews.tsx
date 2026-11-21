@@ -119,7 +119,7 @@ export const StoreReviews: React.FC<{ reviews?: ReviewData[]; hideHeader?: boole
               Store Reviews
             </h3>
             <span className="hidden sm:inline-flex items-center gap-1.5 bg-white border border-neutral-200/80 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-neutral-800 shadow-xs ml-1">
-              <span className="text-amber-500">★ {dynamicRating}</span>
+              <span suppressHydrationWarning className="text-amber-500">★ {dynamicRating}</span>
             </span>
           </div>
           <a 

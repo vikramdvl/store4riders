@@ -318,6 +318,25 @@ describe("mediaUrlHelper - Enterprise Gallery & Color Swapping", () => {
       const url = getProductThumbnailUrl(productWithCertFirst);
       expect(url).toBe("https://store4riders.s3.ap-south-2.amazonaws.com/catalog/product/a/x/axor-apex-helmet-photo-1.jpg");
     });
+
+    it("respects admin-selected Photo #1 (images[0]) as primary catalog thumbnail", () => {
+      const productWithAdminPhotoFirst = {
+        name: "Axor X-Cross X1 Off Road Helmet",
+        images: [
+          {
+            url: "https://d2zuvpvc0pfkya.cloudfront.net/uploads/1793886456220-Axor%20X-Cross%20X1%20Off%20Road%20Helmet.webp",
+            altText: "Axor X-Cross X1 Off Road Helmet Cover",
+          },
+          {
+            url: "https://d2zuvpvc0pfkya.cloudfront.net/axor-xcross-x1-neon-yellow-blue-_1_.jpg",
+            altText: "Axor X-Cross X1 Helmet - Neon Yellow Blue",
+          },
+        ],
+      };
+      // Must respect Photo #1 configured by admin
+      const url = getProductThumbnailUrl(productWithAdminPhotoFirst);
+      expect(url).toBe("https://d2zuvpvc0pfkya.cloudfront.net/uploads/1793886456220-Axor%20X-Cross%20X1%20Off%20Road%20Helmet.webp?v=2");
+    });
   });
 
   describe("isUtilityOrInfographicImage - Anti-Leak Protection", () => {

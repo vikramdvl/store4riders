@@ -837,7 +837,19 @@ const mapProductToPDP = (
     priceFormatted,
     shortDescription: product.shortDescription || (product as any).short_description || "",
     fullDescription: product.description || "",
-    sizeChart: product.sizeChart || product.size_chart,
+    sizeChart: (() => {
+      if (product.sizeChart) return product.sizeChart;
+      if (product.size_chart) return product.size_chart;
+      if (product.attributes && typeof product.attributes === "object") {
+        for (const [k, v] of Object.entries(product.attributes)) {
+          const lowerK = k.toLowerCase();
+          if (lowerK.startsWith("size_chart") || lowerK.startsWith("sizechart")) {
+            if (typeof v === "string" && v.trim()) return v.trim();
+          }
+        }
+      }
+      return undefined;
+    })(),
     images: gallery,
     colorImages: product.colorImages instanceof Map ? Object.fromEntries(product.colorImages) : (product.colorImages || {}),
     colorSwatches: (product as any).colorSwatches || {},

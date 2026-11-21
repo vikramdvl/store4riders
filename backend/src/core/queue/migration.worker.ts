@@ -27,13 +27,25 @@ const KNOWN_FIELDS = new Set([
 ]);
 
 export const migrationWorker = new Worker("migrationQueue", async (job: Job) => {
-  const { filePath, adminId } = job.data;
-  logger.info(`Processing migration job ${job.id} for file ${filePath}`);
+  const { filePath, s3Key, adminId } = job.data;
+  logger.info(`Processing migration job ${job.id}. S3 Key: ${s3Key || "none"}, Local Path: ${filePath || "none"}`);
 
   // Connect to mongoose if not connected (Worker might run in separate process depending on setup)
   if (mongoose.connection.readyState === 0) {
-
     await connectToDatabase();
+  }
+
+  // Get stream: either from AWS S3 or local file system
+  let stream: NodeJS.ReadableStream;
+  if (s3Key) {
+    const { getS3Stream } = await import("../storage/s3");
+    stream = await getS3Stream(s3Key);
+    logger.info(`Job ${job.id}: Streaming CSV directly from AWS S3 (key: ${s3Key})`);
+  } else if (filePath && fs.existsSync(filePath)) {
+    stream = fs.createReadStream(filePath);
+    logger.info(`Job ${job.id}: Streaming CSV from local file system (${filePath})`);
+  } else {
+    throw new Error(`CSV file source missing or not found on server (s3Key: ${s3Key || "none"}, filePath: ${filePath || "none"})`);
   }
 
   // We will keep track of configurable products and their simple children
@@ -44,11 +56,13 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
 
   // Pass 1: Stream and Parse the CSV
   await new Promise((resolve, reject) => {
-    fs.createReadStream(filePath)
-      .pipe(csv())
+    stream
+      .pipe(csv({
+        mapHeaders: ({ header }) => header.trim().replace(/^\ufeff/, ''),
+      }))
       .on("data", (row) => {
-        const sku = row.sku?.trim();
-        if (!sku) return; // Skip empty rows
+        const sku = (row.sku || row["\ufeffsku"] || row["ï»¿sku"])?.trim();
+        if (!sku || sku.toLowerCase() === "sku") return; // Skip empty rows or duplicate headers
 
         if (row.brand) brandsToCreate.add(row.brand.trim());
         if (row.categories) categoriesToCreate.add(row.categories.trim());
@@ -165,7 +179,8 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
 
     // Parse numbers safely
     const basePrice = parseFloat(row.price) || 0;
-    const specialPrice = row.special_price ? parseFloat(row.special_price) : undefined;
+    const rawSpecial = parseFloat(row.special_price);
+    const specialPrice = (!isNaN(rawSpecial) && rawSpecial > 0) ? rawSpecial : undefined;
     const weight = row.weight ? parseFloat(row.weight) : undefined;
     const stockStatus = row.is_in_stock ? parseInt(row.is_in_stock) : 0;
     const qty = row.qty ? parseInt(row.qty) : 0;
@@ -242,6 +257,7 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
           if (slug.includes('full-face')) { mapped.add('full-face-helmets'); mapped.add('full-face-helmet'); }
           if (slug.includes('open-face')) { mapped.add('open-face-helmets'); mapped.add('open-face-helmet'); }
           if (slug.includes('flip-up') || slug.includes('modular')) { mapped.add('flip-up-helmets'); mapped.add('modular-helmets'); }
+          if (slug.includes('off-road') || slug.includes('motocross')) { mapped.add('off-road-helmets'); mapped.add('off-road-helmet'); }
           if (slug.includes('tail-bag')) { mapped.add('tail-bags'); }
           if (slug.includes('saddle-bag')) { mapped.add('saddle-bags'); mapped.add('saddle-bags-bikes'); }
         });

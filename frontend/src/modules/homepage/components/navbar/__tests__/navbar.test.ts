@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEFAULT_NAV_ITEMS, NAV_SUBMENU_SECTIONS } from "../nav.constants";
+import { isLegacyNonMenuCategory } from "@/core/utils/navCategories";
 
 describe("Navbar & Submenu Navigation Integrity Suite", () => {
   it("should have all primary navigation items defined with valid labels and hrefs", () => {
@@ -113,5 +114,20 @@ describe("Navbar & Submenu Navigation Integrity Suite", () => {
       expect(section.label.trim()).toBeTruthy();
       expect(section.groupName.trim()).toBeTruthy();
     });
+  });
+
+  it("should filter out legacy Magento non-menu categories so they do not pollute the mega menu", () => {
+    // Specific legacy slugs from Magento product-model/SEO collections
+    expect(isLegacyNonMenuCategory("smk-stellar-helmet")).toBe(true);
+    expect(isLegacyNonMenuCategory("smk-titan-carbon-fibre-helmets")).toBe(true);
+    expect(isLegacyNonMenuCategory("axor-apex-helmet-sport-touring-performance")).toBe(true);
+    expect(isLegacyNonMenuCategory("ls2-ff800-storm-ii-helmets-touring-range")).toBe(true);
+    expect(isLegacyNonMenuCategory("ls2-ff320-stream-ii-daily-rider-range")).toBe(true);
+    expect(isLegacyNonMenuCategory("best-helmets-under-rs5000")).toBe(true);
+
+    // Official canonical categories should NOT be filtered
+    expect(isLegacyNonMenuCategory("motorcycle-helmets")).toBe(false);
+    expect(isLegacyNonMenuCategory("full-face-helmets")).toBe(false);
+    expect(isLegacyNonMenuCategory("riding-gloves")).toBe(false);
   });
 });

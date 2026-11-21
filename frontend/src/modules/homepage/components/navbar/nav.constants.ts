@@ -21,7 +21,6 @@ export const DEFAULT_NAV_ITEMS: NavItem[] = [
         items: [
           { label: "Helmet Visors/Helmet Accessories", href: "/motorcycle-helmets/helmet-accessories" },
           { label: "Balaclava", href: "/motorcycle-helmets/balaclava" },
-          { label: "Bluetooth Intercoms", href: "/motorcycle-helmets/bluetooth-intercoms" },
           { label: "Helmet Cleaners", href: "/motorcycle-helmets/helmet-cleaners" },
         ],
       },

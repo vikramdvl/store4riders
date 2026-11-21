@@ -11,6 +11,8 @@ interface FloatingCatalogBarProps {
   reviewCount?: string | number;
   averageRating?: number;
   isFetching?: boolean;
+  sizeChart?: string;
+  onOpenSizeChart?: () => void;
 }
 
 export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
@@ -18,7 +20,17 @@ export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
   reviewCount = "800+",
   averageRating = 4.8,
   isFetching = false,
+  sizeChart,
+  onOpenSizeChart,
 }) => {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const displayReviewCount = mounted ? reviewCount : "800+";
+  const displayRating = mounted ? averageRating : 4.8;
+
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -78,7 +90,7 @@ export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
             
             <div className="flex flex-col items-start">
               <div className="flex items-center gap-1.5">
-                <span className="text-neutral-900 font-black text-[13px] leading-none tracking-tight mt-px">{averageRating}</span>
+                <span suppressHydrationWarning className="text-neutral-900 font-black text-[13px] leading-none tracking-tight mt-px">{displayRating}</span>
                 {/* 4.5 Stars */}
                 <div className="flex gap-[1px] text-[#FBBC05]">
                    <svg className="w-[11px] h-[11px]" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
@@ -88,7 +100,7 @@ export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
                    <svg className="w-[11px] h-[11px]" viewBox="0 0 20 20" fill="url(#halfStarMobile)"><defs><linearGradient id="halfStarMobile"><stop offset="50%" stopColor="currentColor"/><stop offset="50%" stopColor="#e5e7eb"/></linearGradient></defs><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
                 </div>
               </div>
-              <span className="text-neutral-500 font-medium text-[10px] tracking-wide mt-0.5">Based on {reviewCount} reviews</span>
+              <span suppressHydrationWarning className="text-neutral-500 font-medium text-[10px] tracking-wide mt-0.5">Based on {displayReviewCount} reviews</span>
             </div>
           </div>
           
@@ -160,6 +172,31 @@ export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
 
             {/* Drawer Body with Filters */}
             <div className="flex-1 overflow-y-auto p-4 overscroll-contain">
+              {sizeChart && (
+                <div className="mb-4 p-3 bg-red-50/60 rounded-xl border border-red-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand shrink-0">
+                      <rect x="2" y="8" width="20" height="8" rx="1" />
+                      <line x1="6" y1="16" x2="6" y2="12" />
+                      <line x1="10" y1="16" x2="10" y2="12" />
+                      <line x1="14" y1="16" x2="14" y2="12" />
+                      <line x1="18" y1="16" x2="18" y2="12" />
+                    </svg>
+                    <span className="text-xs font-bold text-neutral-800 truncate">Looking for size measurements?</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsFilterDrawerOpen(false);
+                      onOpenSizeChart?.();
+                    }}
+                    className="text-xs font-black text-brand uppercase tracking-wider hover:underline shrink-0 ml-2 cursor-pointer"
+                  >
+                    Size Guide
+                  </button>
+                </div>
+              )}
+
               {/* Mobile Drawer Sort By */}
               <div className="mb-4 pb-3.5 border-b border-neutral-200">
                 <div className="flex items-center justify-between mb-2">
@@ -191,7 +228,14 @@ export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
                 </select>
               </div>
 
-              <SidebarFilters isFetching={isFetching} />
+              <SidebarFilters 
+                isFetching={isFetching} 
+                sizeChart={sizeChart} 
+                onOpenSizeChart={() => {
+                  setIsFilterDrawerOpen(false);
+                  onOpenSizeChart?.();
+                }} 
+              />
             </div>
 
             {/* Drawer Footer Action */}

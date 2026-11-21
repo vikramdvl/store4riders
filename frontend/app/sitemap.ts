@@ -81,6 +81,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     const catRes = await fetch(`${normalizedApi}/categories/tree`, {
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(3000),
     });
     if (catRes.ok) {
       const catJson = await catRes.json();
@@ -112,6 +113,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     const brandRes = await fetch(`${normalizedApi}/brands`, {
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(3000),
     });
     if (brandRes.ok) {
       const brandJson = await brandRes.json();
@@ -136,6 +138,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     const prodRes = await fetch(`${normalizedApi}/products?limit=2000`, {
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(3000),
     });
     if (prodRes.ok) {
       const prodJson = await prodRes.json();
@@ -161,9 +164,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     const blogPostsRes = await fetch(`${normalizedApi}/blog/posts?limit=100`, {
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(3000),
     });
     const blogCatsRes = await fetch(`${normalizedApi}/blog/categories`, {
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(3000),
     });
 
     if (blogCatsRes.ok) {

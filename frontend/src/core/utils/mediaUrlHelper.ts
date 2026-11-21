@@ -184,6 +184,54 @@ export function isUtilityOrInfographicImage(
 }
 
 /**
+ * Detects whether an image is a lifestyle / action shot / banner image
+ * rather than a clean studio product cutout.
+ */
+export function isLifestyleOrBannerImage(
+  img?: { url?: string; altText?: string } | string | null
+): boolean {
+  if (!img) return false;
+  const url = typeof img === "string" ? img : img.url || "";
+  const alt = typeof img === "string" ? "" : img.altText || "";
+  const text = `${url} ${alt}`.toLowerCase();
+
+  // Keyword check
+  if (/\b(lifestyle|action[-_]?shot|action[-_]?photo|banner|in[-_]?use|promotional|riding[-_]?photo|outdoor)\b/i.test(text)) {
+    return true;
+  }
+
+  // Uploaded banners often have paths like /uploads/<timestamp>-<name> without angle indicators
+  const filename = url.split("?")[0].split("/").pop() || "";
+  if (url.includes("/uploads/") && /^\d+[-_]/.test(filename) && !/(?:[-_])\d+(?:_\d+|_)?(?:\.[a-z0-9]+|$)/i.test(filename)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Detects whether an image is an Angle 1 / primary studio product cutout:
+ * e.g., filenames with _1_., -1_., _1., -1., _1_1., angle-1, angle1.
+ */
+export function isAngle1StudioImage(
+  img?: { url?: string; altText?: string } | string | null
+): boolean {
+  if (!img) return false;
+  if (isUtilityOrInfographicImage(img)) return false;
+  if (isLifestyleOrBannerImage(img)) return false;
+
+  const url = typeof img === "string" ? img : img.url || "";
+  const alt = typeof img === "string" ? "" : img.altText || "";
+  const text = `${url} ${alt}`.toLowerCase();
+
+  const filename = url.split("?")[0].split("/").pop() || "";
+  return (
+    /(?:[-_]1(?:_\d+|_)?|[-_]photo[-_]?1|[-_]image[-_]?1|[-_]front)(?:\.[a-z0-9]+|\?|$)/i.test(filename) ||
+    /\b(?:angle[-_\s]?1|front[-_\s]?view|studio[-_\s]?1)\b/i.test(text)
+  );
+}
+
+/**
  * Detects which known color an image belongs to based on altText or URL tokens.
  * Accurately parses altText formats: 'Product - Color', 'Product-Color', 'Product- Color', etc.
  */
@@ -470,14 +518,22 @@ export function getPreferredInStockColor(product: any): string | null {
  * homepage, search, admin, and cart.
  *
  * Priority:
- * 1. If preferredColor is supplied, finds matching image from colorImages, variants, or images
- * 2. If no preferredColor, checks for preferred in-stock color so out-of-stock items aren't featured
- * 3. product.thumbnail (explicit thumbnail)
- * 4. product.images[0].url (first valid gallery image)
- * 5. product.image (legacy image field)
- * 6. First image from product.colorImages map
- * 7. First variant image from product.variants
- * 8. Fallback: fallback string (defaults to "/no-image.svg")
+ * 1. If preferredColor is supplied:
+ *    1a. Matching Angle 1 studio cutout of that color in images
+ *    1b. Matching non-lifestyle studio photo of that color in images
+ *    1c. Matching entry in colorImages map
+ *    1d. Matching variant imageUrl in variants
+ *    1e. Any matching image in images
+ * 2. If no preferredColor (standard catalog / card view):
+ *    2a. Angle 1 studio cutout from product.images (_1_., -1_., _1., etc.)
+ *    2b. First valid studio image from colorImages map (curated per-color cutouts)
+ *    2c. First valid variant imageUrl from variants list
+ *    2d. First clean, non-lifestyle studio photo from product.images
+ *    2e. product.thumbnail (if genuine, not utility/lifestyle)
+ *    2f. product.image (if genuine, not utility/lifestyle)
+ *    2g. Any genuine photo from product.images (fallback if only lifestyle images exist)
+ *    2h. Explicit thumbnail or image fallback
+ *    2i. Fallback placeholder ("/no-image.svg")
  */
 export function getProductThumbnailUrl(
   product: any,
@@ -486,35 +542,37 @@ export function getProductThumbnailUrl(
 ): string {
   if (!product) return fallback;
 
-  // 1. If preferredColor is specified (e.g. from active color filter or swatch selection), try to match it first
+  // 1. If preferredColor is specified, try to match it with highest studio fidelity
   if (preferredColor) {
     const normColor = preferredColor.trim().toLowerCase();
 
-    // 1a. If the product's primary image (images[0]) already matches this color, keep the primary image!
+    // 1a. Angle 1 studio cutout matching this color in images array
     if (Array.isArray(product.images) && product.images.length > 0) {
-      const primary = product.images[0];
-      if (primary && !isUtilityOrInfographicImage(primary)) {
-        const alt = (primary?.altText || "").toLowerCase();
-        const url = (typeof primary === "string" ? primary : primary?.url || "").toLowerCase();
-        if (alt.includes(normColor) || url.includes(normColor.replace(/\s+/g, "-"))) {
-          const u = typeof primary === "string" ? primary : primary.url;
-          const clean = normalizeExternalImageUrl(u);
-          if (clean) return clean;
-        }
-      }
-    }
-
-    // 1b. Check images array for matching genuine photo of this color
-    if (Array.isArray(product.images) && product.images.length > 0) {
-      const matchedImg = product.images.find((img: any) => {
-        if (isUtilityOrInfographicImage(img)) return false;
+      const matchedAngle1 = product.images.find((img: any) => {
+        if (isUtilityOrInfographicImage(img) || isLifestyleOrBannerImage(img)) return false;
+        if (!isAngle1StudioImage(img)) return false;
         const alt = (img?.altText || "").toLowerCase();
         const url = (typeof img === "string" ? img : img?.url || "").toLowerCase();
         return alt.includes(normColor) || url.includes(normColor.replace(/\s+/g, "-"));
       });
-      const mUrl = typeof matchedImg === "string" ? matchedImg : matchedImg?.url;
-      if (mUrl && mUrl !== fallback) {
-        const clean = normalizeExternalImageUrl(mUrl);
+      if (matchedAngle1) {
+        const u = typeof matchedAngle1 === "string" ? matchedAngle1 : matchedAngle1.url;
+        const clean = normalizeExternalImageUrl(u);
+        if (clean) return clean;
+      }
+    }
+
+    // 1b. Non-lifestyle photo matching this color in images array
+    if (Array.isArray(product.images) && product.images.length > 0) {
+      const matchedImg = product.images.find((img: any) => {
+        if (isUtilityOrInfographicImage(img) || isLifestyleOrBannerImage(img)) return false;
+        const alt = (img?.altText || "").toLowerCase();
+        const url = (typeof img === "string" ? img : img?.url || "").toLowerCase();
+        return alt.includes(normColor) || url.includes(normColor.replace(/\s+/g, "-"));
+      });
+      if (matchedImg) {
+        const u = typeof matchedImg === "string" ? matchedImg : matchedImg.url;
+        const clean = normalizeExternalImageUrl(u);
         if (clean) return clean;
       }
     }
@@ -550,9 +608,26 @@ export function getProductThumbnailUrl(
         if (clean) return clean;
       }
     }
+
+    // 1e. Any matching image in images (even if lifestyle/non-angle1)
+    if (Array.isArray(product.images) && product.images.length > 0) {
+      const matchedImg = product.images.find((img: any) => {
+        if (isUtilityOrInfographicImage(img)) return false;
+        const alt = (img?.altText || "").toLowerCase();
+        const url = (typeof img === "string" ? img : img?.url || "").toLowerCase();
+        return alt.includes(normColor) || url.includes(normColor.replace(/\s+/g, "-"));
+      });
+      if (matchedImg) {
+        const u = typeof matchedImg === "string" ? matchedImg : matchedImg.url;
+        const clean = normalizeExternalImageUrl(u);
+        if (clean) return clean;
+      }
+    }
   }
 
-  // 2. Primary genuine product photo (images[0] set as Primary by merchant in admin)
+  // 2. Default thumbnail resolution
+  // Photo #1 (product.images[0]) is explicitly configured as the primary cover / card thumbnail by the admin.
+  // We strictly respect the admin's chosen image, shielding only against utility graphics (size charts / safety certs).
   if (Array.isArray(product.images) && product.images.length > 0) {
     const genuinePhoto = product.images.find(
       (img: any) => !isUtilityOrInfographicImage(img) && (typeof img === "string" ? img : img?.url) !== fallback
@@ -564,7 +639,7 @@ export function getProductThumbnailUrl(
     }
   }
 
-  // 3. Explicit thumbnail (if genuine product photo)
+  // 3. Explicit thumbnail field (if genuine product photo)
   if (
     product.thumbnail &&
     typeof product.thumbnail === "string" &&
@@ -614,7 +689,7 @@ export function getProductThumbnailUrl(
     }
   }
 
-  // 7. Last resort fallback to any gallery image (even utility if that's literally all that exists)
+  // 7. Last resort fallback to any gallery image
   if (Array.isArray(product.images) && product.images.length > 0) {
     for (const img of product.images) {
       const u = typeof img === "string" ? img : img?.url;
@@ -668,10 +743,12 @@ export function getProductCandidateImages(product: any): string[] {
     });
   }
 
-  // Prioritize genuine product photos before utility/infographic graphics
-  const nonUtility = candidates.filter((u) => !isUtilityOrInfographicImage(u));
+  // Prioritize Angle 1 studio cutouts, then studio photos, then lifestyle, then utility
+  const angle1 = candidates.filter((u) => isAngle1StudioImage(u));
+  const studio = candidates.filter((u) => !isAngle1StudioImage(u) && !isLifestyleOrBannerImage(u) && !isUtilityOrInfographicImage(u));
+  const lifestyle = candidates.filter((u) => isLifestyleOrBannerImage(u) && !isUtilityOrInfographicImage(u));
   const utility = candidates.filter((u) => isUtilityOrInfographicImage(u));
-  return [...nonUtility, ...utility];
+  return [...angle1, ...studio, ...lifestyle, ...utility];
 }
 
 export const S3_MEDIA_BASE = "https://store4riders.s3.ap-south-2.amazonaws.com";

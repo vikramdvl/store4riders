@@ -12,6 +12,7 @@ import {
   cleanText,
   getRobotsMetadata,
 } from "@/core/utils/seo-schema";
+import { CATEGORY_SLUG_ALIASES } from "@/core/utils/navCategories";
 
 const rawApiBase = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
 const API_BASE = rawApiBase.includes("/v1")
@@ -41,9 +42,18 @@ const getCategoryNode = cache(async (categorySlug: string) => {
     const res = await fetch(treeUrl, { next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) });
     if (res.ok) {
       const data = await res.json();
+      const cleanTarget = categorySlug.toLowerCase().trim();
+      const targetAliases = CATEGORY_SLUG_ALIASES[cleanTarget] || [];
       const findCategory = (nodes: any[]): any => {
         for (const n of nodes) {
-          if (n.slug === categorySlug || n.slug.replace(/s$/, "") === categorySlug.replace(/s$/, "")) return n;
+          const nSlug = (n.slug || "").toLowerCase().trim();
+          if (
+            nSlug === cleanTarget ||
+            nSlug.replace(/s$/, "") === cleanTarget.replace(/s$/, "") ||
+            targetAliases.includes(nSlug)
+          ) {
+            return n;
+          }
           if (n.children) {
             const found = findCategory(n.children);
             if (found) return found;

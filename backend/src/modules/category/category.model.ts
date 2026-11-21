@@ -17,6 +17,7 @@ const categorySchema = new Schema<ICategory>(
     bannerImage: { type: String },
     metaTitle: { type: String },
     metaDescription: { type: String },
+    metaKeywords: { type: String, default: "" },
     videoUrl: { type: String },
     includeInMenu: { type: Boolean, default: true },
     menuGroup: { type: String },
@@ -30,6 +31,7 @@ const categorySchema = new Schema<ICategory>(
     taxClassName: { type: String },
     weightUnit: { type: String, enum: ["kg", "g", "ml", "L"] },
     sizeChart: { type: String },
+    size_chart: { type: String },
     specDefinitions: [
       {
         key: { type: String, required: true },
@@ -48,5 +50,9 @@ const categorySchema = new Schema<ICategory>(
   },
   { timestamps: true }
 );
+
+if (mongoose.models.Category && !mongoose.models.Category.schema.path("metaKeywords")) {
+  delete (mongoose.models as any).Category;
+}
 
 export const CategoryModel = mongoose.models.Category || mongoose.model<ICategory>("Category", categorySchema);

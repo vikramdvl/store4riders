@@ -149,13 +149,12 @@ describe('CategoryService — Comprehensive Unit Tests', () => {
   });
 
   describe('5. Slug Sanitization & Unique Collision Prevention', () => {
-    it('should sanitize slugs and append timestamp if slug already exists', async () => {
-      vi.mocked(CategoryRepository.findBySlug).mockResolvedValueOnce({ _id: 'existing', slug: 'gloves' } as any);
-      vi.mocked(CategoryRepository.create).mockImplementation(async (data: any) => data);
+    it('should throw ConflictError if slug already exists', async () => {
+      vi.mocked(CategoryRepository.findBySlug).mockResolvedValueOnce({ _id: 'existing', name: 'Gloves', slug: 'gloves' } as any);
 
-      const created = await CategoryService.createCategory({ name: 'Gloves', slug: 'gloves' });
-      expect(created.slug).toMatch(/^gloves-\d{4}$/);
-      expect(CategoryRepository.create).toHaveBeenCalled();
+      await expect(
+        CategoryService.createCategory({ name: 'Gloves', slug: 'gloves' })
+      ).rejects.toThrow("Category with slug 'gloves' already exists");
     });
   });
 });

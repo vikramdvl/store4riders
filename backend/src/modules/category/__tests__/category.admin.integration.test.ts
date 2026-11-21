@@ -127,6 +127,7 @@ describe("Admin Category & Submenu Persistence — End-to-End Vitest Suite", () 
       expect(json.data.faqs).toHaveLength(2);
       expect(json.data.description).toContain("<table");
       expect(json.data.hsnCode).toBe("6506");
+      expect(json.data.metaKeywords).toBe("helmets, full face, ece 22.06, riding gear");
       expect(json.data.specDefinitions).toHaveLength(2);
       expect(json.data.specDefinitions[0].presets).toContain("100% Carbon Fiber");
 

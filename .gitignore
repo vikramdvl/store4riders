@@ -99,3 +99,4 @@ backend/src/scripts/
 backend/src/scrape-to-db.ts
 backend/clear.ts
 powershell.exe
+store4riders-web/

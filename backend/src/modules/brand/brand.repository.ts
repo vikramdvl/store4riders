@@ -16,11 +16,13 @@ export class BrandRepository {
   }
 
   static async findBySlug(slug: string): Promise<IBrand | null> {
-    const clean = slug.toLowerCase();
+    const clean = (slug || "").toLowerCase().replace(/\.html$/i, "").trim();
     return BrandModel.findOne({
       $or: [
         { slug: clean },
-        { aliases: clean }
+        { aliases: clean },
+        { slug: new RegExp(`^${clean.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&")}$`, "i") },
+        { aliases: new RegExp(`^${clean.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&")}$`, "i") },
       ]
     }).lean().exec() as unknown as IBrand | null;
   }
