@@ -12,6 +12,7 @@ import TopBanner from "@/modules/homepage/components/TopBanner";
 import Navbar from "@/modules/homepage/components/Navbar";
 import Footer from "@/modules/homepage/components/Footer";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { resolveProductBreadcrumbs } from "@/core/utils/navCategories";
 import { ProductDetailProps } from "./types/product-detail.types";
 import { ProductGallery } from "./components/ProductGallery";
 import { normalizeColorKey } from "./components/ProductDetailPageModule";
@@ -119,6 +120,41 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
     setSelectedSize(resolveProductInitialSize(product, targetColor));
   }, [product.slug, colorQuery]);
 
+  // Robust helpers to extract size and color from variant attributes
+  const extractSizeFromAttrs = (attrs: Record<string, any>): string => {
+    if (!attrs) return "";
+    if (attrs.size) return String(attrs.size).trim();
+    if (attrs.eu_size_for_boots) return String(attrs.eu_size_for_boots).trim();
+    if (attrs.Size) return String(attrs.Size).trim();
+    for (const [k, v] of Object.entries(attrs)) {
+      const kl = k.toLowerCase();
+      if (kl === 'size' || kl.includes('size') || kl.startsWith('eu_')) {
+        return String(v).trim();
+      }
+    }
+    for (const [k, v] of Object.entries(attrs)) {
+      const kl = k.toLowerCase();
+      if (kl !== 'sku' && kl !== 'price' && kl !== 'stock' && kl !== 'qty' && !kl.includes('color') && !kl.includes('colour')) {
+        return String(v).trim();
+      }
+    }
+    return "";
+  };
+
+  const extractColorFromAttrs = (attrs: Record<string, any>): string => {
+    if (!attrs) return "";
+    if (attrs.color) return String(attrs.color).trim();
+    if (attrs.colour) return String(attrs.colour).trim();
+    if (attrs.Color) return String(attrs.Color).trim();
+    for (const [k, v] of Object.entries(attrs)) {
+      const kl = k.toLowerCase();
+      if (kl.includes('color') || kl.includes('colour')) {
+        return String(v).trim();
+      }
+    }
+    return "";
+  };
+
   // Calculate disabled colors based on variant stock
   const disabledColors = React.useMemo(() => {
     if (!product.rawVariants || product.rawVariants.length === 0) return [];
@@ -128,11 +164,8 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
     product.rawVariants.forEach(v => {
       if (v.stock > 0 || product.allowBackorders) {
         const attrs = v.attributes || {};
-        const col = Object.entries(attrs).find(([k]) => {
-          const kl = k.toLowerCase();
-          return kl === 'color' || kl === 'colour' || kl.includes('color') || kl.includes('colour');
-        })?.[1];
-        if (col) validColors.add(normalizeColorKey(String(col)));
+        const col = extractColorFromAttrs(attrs);
+        if (col) validColors.add(normalizeColorKey(col));
       }
     });
 
@@ -149,42 +182,31 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
     
     product.rawVariants.forEach(v => {
       const attrs = v.attributes || {};
-      const col = Object.entries(attrs).find(([k]) => {
-        const kl = k.toLowerCase();
-        return kl === 'color' || kl === 'colour' || kl.includes('color') || kl.includes('colour');
-      })?.[1] || "";
-      
-      const colStr = String(col).trim();
+      const colStr = extractColorFromAttrs(attrs);
       const isColStandard = !colStr || ["standard", "default", "none", "n/a", "na", "-", "--"].includes(colStr.toLowerCase());
 
       if (!selectedColor || isColStandard || normalizeColorKey(colStr) === normalizeColorKey(selectedColor)) {
         // Only mark size as valid if stock is strictly > 0 OR backorders are allowed
         if (v.stock > 0 || product.allowBackorders) {
-          const sz = Object.entries(attrs).find(([k]) => {
-            const kl = k.toLowerCase();
-            const isColor = kl === 'color' || kl === 'colour' || kl.includes('color') || kl.includes('colour');
-            return !isColor;
-          })?.[1];
-          if (sz) validSizesForColor.add(String(sz).trim());
+          const sz = extractSizeFromAttrs(attrs);
+          if (sz) validSizesForColor.add(sz.toLowerCase());
         }
       }
     });
 
-    // If no size restrictions found for this color (e.g. all out of stock), disable all sizes
     if (validSizesForColor.size === 0) {
       const hasAnyStock = product.rawVariants.some(v => v.stock > 0 || product.allowBackorders);
       if (!hasAnyStock) return product.sizes || [];
       return [];
     }
 
-    // Disable sizes that are not in validSizesForColor
-    return (product.sizes || []).filter(s => !validSizesForColor.has(s));
+    return (product.sizes || []).filter(s => !validSizesForColor.has(s.trim().toLowerCase()));
   }, [selectedColor, product.sizes, product.rawVariants, product.allowBackorders]);
 
   // Auto-select the first valid size if the current one becomes disabled
   useEffect(() => {
-    if (disabledSizes.includes(selectedSize) && product.sizes.length > 0) {
-      const firstValid = product.sizes.find(s => !disabledSizes.includes(s));
+    if (disabledSizes.some(d => d.trim().toLowerCase() === selectedSize?.trim().toLowerCase()) && product.sizes.length > 0) {
+      const firstValid = product.sizes.find(s => !disabledSizes.some(d => d.trim().toLowerCase() === s.trim().toLowerCase()));
       if (firstValid) setSelectedSize(firstValid);
     }
   }, [selectedColor, disabledSizes, selectedSize, product.sizes]);
@@ -192,20 +214,15 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
   // Dynamically calculate active price based on selected variants
   const activeVariant = product.rawVariants?.find(v => {
     const attrs = v.attributes || {};
-    const colorMatch = !selectedColor || Object.entries(attrs).some(([k, val]) => {
-      const kl = k.toLowerCase();
-      const valStr = String(val).trim().toLowerCase();
-      const isColStandard = ["standard", "default", "none", "n/a", "na", "-", "--"].includes(valStr);
-      return (kl === 'color' || kl === 'colour' || kl.includes('color') || kl.includes('colour')) &&
-        (valStr === selectedColor.toLowerCase() || (!selectedColor && isColStandard));
-    });
-    const sizeMatch = !selectedSize || Object.entries(attrs).some(([k, val]) => {
-      const kl = k.toLowerCase();
-      const isColor = kl === 'color' || kl === 'colour' || kl.includes('color') || kl.includes('colour');
-      const valStr = String(val).trim().toLowerCase();
-      const isSzStandard = ["standard", "default", "none", "n/a", "na", "-", "--"].includes(valStr);
-      return !isColor && (String(val).trim() === selectedSize || (!selectedSize && isSzStandard));
-    });
+    const colStr = extractColorFromAttrs(attrs);
+    const szStr = extractSizeFromAttrs(attrs);
+
+    const isColStandard = !colStr || ["standard", "default", "none", "n/a", "na", "-", "--"].includes(colStr.toLowerCase());
+    const isSzStandard = !szStr || ["standard", "default", "none", "n/a", "na", "-", "--"].includes(szStr.toLowerCase());
+
+    const colorMatch = !selectedColor || isColStandard || normalizeColorKey(colStr) === normalizeColorKey(selectedColor);
+    const sizeMatch = !selectedSize || isSzStandard || szStr.toLowerCase() === selectedSize.trim().toLowerCase();
+
     return colorMatch && sizeMatch;
   });
 
@@ -305,11 +322,32 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
         ]
       : product.images;
 
+    const matchingVariant = product.rawVariants?.find(v => {
+      const attrs = v.attributes || {};
+      const colorMatch = !color || Object.entries(attrs).some(([k, val]) => {
+        const kl = k.toLowerCase();
+        const valStr = String(val).trim().toLowerCase();
+        const isColStandard = ["standard", "default", "none", "n/a", "na", "-", "--"].includes(valStr);
+        return (kl === 'color' || kl === 'colour' || kl.includes('color') || kl.includes('colour')) &&
+          (valStr === color.toLowerCase() || isColStandard);
+      });
+      const sizeMatch = !size || Object.entries(attrs).some(([k, val]) => {
+        const kl = k.toLowerCase();
+        const isColor = kl === 'color' || kl === 'colour' || kl.includes('color') || kl.includes('colour');
+        const valStr = String(val).trim().toLowerCase();
+        const isSzStandard = ["standard", "default", "none", "n/a", "na", "-", "--"].includes(valStr);
+        return !isColor && (String(val).trim() === size || isSzStandard);
+      });
+      return colorMatch && sizeMatch;
+    }) || activeVariant;
+
+    const resolvedVariantId = matchingVariant?.sku?.trim() || (hasColor || hasSize ? `${color.trim()}-${size.trim()}` : product.id);
+
     addItem({
       id: crypto.randomUUID(),
       productId: product.id,
       quantity: 1,
-      variantId: activeVariant?.sku || (hasColor || hasSize ? `${color}-${size}` : product.id),
+      variantId: resolvedVariantId,
       image: variantImageUrl,
       product: {
         _id: product.id,
@@ -320,8 +358,8 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
         image: variantImageUrl,
         images: reorderedImages,
         slug: product.slug,
-        selectedColor: hasColor ? color : undefined,
-        selectedSize: hasSize ? size : undefined,
+        selectedColor: hasColor ? color.trim() : undefined,
+        selectedSize: hasSize ? size.trim() : undefined,
         isFreeShipping: isFreeShipping,
         shippingFee: (product as any).shippingFee || Number(product.attributes?.ship_cost || (product.attributes instanceof Map ? product.attributes.get("ship_cost") : 0)) || undefined,
         weight: product.weight,
@@ -330,38 +368,27 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
   };
 
   return (
-    <div className="w-full min-h-screen flex flex-col font-sans bg-white relative">
+    <div className="w-full min-h-screen flex flex-col font-sans bg-[#faf8f5] text-[#111111] relative">
       
       {/* 1. Header Global Area */}
       <TopBanner
-        message="Discount 20% For New Member,"
-        highlightText="ONLY FOR TODAY!!"
+        message="Helmets, jackets, gloves: 100% genuine, EMI and COD available."
       />
-      <div className="bg-white border-b border-neutral-200 relative z-[60]">
+      <div className="bg-[#161616] relative z-[60]">
         <Navbar
           logoText="Store4Riders"
-          theme="light"
-          
+          theme="dark-solid"
         />
       </div>
 
-      {/* Breadcrumbs matching URL structure: /products/[slug] (Category hierarchy strictly) */}
-      <Breadcrumb items={[
-        { label: "HOME", href: "/" },
-        { label: "PRODUCTS", href: "/products" },
-        ...(product.category ? [{ 
-          label: product.category.toUpperCase(), 
-          href: product.categorySlug ? (product.categorySlug.startsWith("/") ? product.categorySlug : `/${product.categorySlug}`) : `/${product.category.toLowerCase().replace(/\s+/g, '-')}` 
-        }] : []),
-        ...(product.subCategory ? [{ 
-          label: product.subCategory.toUpperCase(), 
-          href: product.subCategorySlug ? (product.subCategorySlug.startsWith("/") ? product.subCategorySlug : `/${product.subCategorySlug}`) : `/${product.subCategory.toLowerCase().replace(/\s+/g, '-')}` 
-        }] : []),
-        { label: product.name }
-      ]} />
+      {/* Authoritative breadcrumbs matching storefront category taxonomy strictly */}
+      <Breadcrumb 
+        className="bg-[#faf8f5] border-b border-[#e6e1da]"
+        items={resolveProductBreadcrumbs(product)} 
+      />
 
       {/* 2. Main Product Hero Area */}
-      <main className="max-w-[1400px] w-full mx-auto px-4 md:px-6 pt-2 md:pt-4">
+      <main className="max-w-[1440px] w-full mx-auto px-4 md:px-8 pt-4 md:pt-6">
         <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-start">
           
           {/* Left: Gallery (50% width on large screens) */}
@@ -403,20 +430,23 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
               isFreeShipping={isFreeShipping}
               onColorChange={setSelectedColor}
               onSizeChange={setSelectedSize}
+              onAddToCart={handleAddToCart}
+              stockStatus={product.stockStatus}
+              allowBackorders={product.allowBackorders}
             />
             
             {/* Complete Kit - Displays right under short description in its own box when available */}
             {product.kitProducts && product.kitProducts.length > 0 && (
-              <div className="mt-3 md:mt-4">
+              <div className="mt-4 md:mt-6">
                 <CompleteKitSlider products={product.kitProducts} />
               </div>
             )}
-            
-            {/* Store Reviews (Desktop only, hidden on mobile as requested) */}
-            <div className="mt-3 hidden md:block">
-              <StoreReviews reviews={product.storeReviews} />
-            </div>
           </div>
+        </div>
+
+        {/* Google Store Reviews - Full Width across both columns (Desktop/Tablet only, hidden on mobile) */}
+        <div className="mt-5 md:mt-8 w-full hidden md:block">
+          <StoreReviews reviews={product.storeReviews} />
         </div>
 
         {/* 3. Bottom Detail Areas */}
@@ -496,6 +526,8 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
         onAddToCart={handleAddToCart}
         stockStatus={product.stockStatus}
         allowBackorders={product.allowBackorders}
+        googleRating={publicSettings?.googleRating}
+        googleReviewCount={publicSettings?.googleReviewCount}
       />
 
     </div>

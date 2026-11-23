@@ -25,12 +25,32 @@ export class CartService {
   static async addItem(userId: string, item: ICartItem): Promise<ICart> {
     const cart = await this.getCart(userId);
     
-    const normVariantId = item.variantId || "";
+    const normVariantId = (item.variantId || "").trim().toLowerCase();
+    const itemColor = (item.product?.selectedColor || "").trim().toLowerCase();
+    const itemSize = (item.product?.selectedSize || "").trim().toLowerCase();
+    const itemProdId = String(item.productId || item.product?.id || item.product?._id || "").trim();
 
     // Check if item exists in cart
-    const existingIndex = cart.items.findIndex(
-      (i) => i.productId === item.productId && (i.variantId || "") === normVariantId
-    );
+    const existingIndex = cart.items.findIndex((i) => {
+      const iProdId = String(i.productId || i.product?.id || i.product?._id || "").trim();
+      const sameProduct =
+        (iProdId && itemProdId && iProdId === itemProdId) ||
+        (Boolean(i.product?.slug) && Boolean(item.product?.slug) && i.product.slug === item.product.slug);
+
+      if (!sameProduct) return false;
+
+      // 1. If both items have selectedColor and/or selectedSize, compare them directly
+      const iColor = (i.product?.selectedColor || "").trim().toLowerCase();
+      const iSize = (i.product?.selectedSize || "").trim().toLowerCase();
+      if ((itemColor || itemSize) && (iColor || iSize)) {
+        return iColor === itemColor && iSize === itemSize;
+      }
+
+      // 2. Otherwise match by variantId
+      const iVariant = String(i.variantId || "").trim().toLowerCase();
+      return iVariant === normVariantId;
+    });
+
     if (existingIndex > -1) {
       cart.items[existingIndex].quantity += item.quantity;
       if (item.product) {
@@ -50,16 +70,25 @@ export class CartService {
 
   static async updateQuantity(userId: string, productId: string, quantity: number, variantId?: string | null): Promise<ICart> {
     const cart = await this.getCart(userId);
-    const normVariantId = variantId || "";
+    const normVariantId = (variantId || "").trim().toLowerCase();
+    const pIdStr = String(productId).trim();
+
+    const matchesItem = (i: ICartItem) => {
+      const matchProd =
+        String(i.productId).trim() === pIdStr ||
+        (i.product && (
+          String(i.product.id || "").trim() === pIdStr ||
+          String(i.product._id || "").trim() === pIdStr ||
+          String(i.product.slug || "").trim() === pIdStr
+        ));
+      const matchVar = String(i.variantId || "").trim().toLowerCase() === normVariantId;
+      return matchProd && matchVar;
+    };
 
     if (quantity <= 0) {
-      cart.items = cart.items.filter(
-        (i) => !(i.productId === productId && (i.variantId || "") === normVariantId)
-      );
+      cart.items = cart.items.filter((i) => !matchesItem(i));
     } else {
-      const item = cart.items.find(
-        (i) => i.productId === productId && (i.variantId || "") === normVariantId
-      );
+      const item = cart.items.find((i) => matchesItem(i));
       if (item) {
         item.quantity = quantity;
       }
@@ -71,24 +100,30 @@ export class CartService {
 
   static async removeItem(userId: string, productId?: string, variantId?: string | null, itemId?: string | null): Promise<ICart> {
     const cart = await this.getCart(userId);
-    const normVariantId = variantId || "";
+    const normVariantId = (variantId || "").trim().toLowerCase();
+    const pIdStr = productId ? String(productId).trim() : null;
 
     cart.items = cart.items.filter((i) => {
       // 1. If itemId is provided, match by item.id OR item._id
       if (itemId) {
-        if (i.id && String(i.id) === String(itemId)) return false;
-        if ((i as any)._id && String((i as any)._id) === String(itemId)) return false;
+        if (i.id && String(i.id).trim() === String(itemId).trim()) return false;
+        if ((i as any)._id && String((i as any)._id).trim() === String(itemId).trim()) return false;
       }
 
-      // 2. If productId is provided, match by productId or product._id/id
-      if (productId) {
+      // 2. If productId is provided, match by productId or product._id/id/slug
+      if (pIdStr) {
         const matchesProductId =
-          i.productId === productId ||
-          (i.product && (String(i.product.id) === String(productId) || String(i.product._id) === String(productId)));
+          String(i.productId).trim() === pIdStr ||
+          (i.product && (
+            String(i.product.id || "").trim() === pIdStr ||
+            String(i.product._id || "").trim() === pIdStr ||
+            String(i.product.slug || "").trim() === pIdStr
+          ));
 
         if (matchesProductId) {
           if (variantId !== undefined && variantId !== null && variantId !== "") {
-            return (i.variantId || "") !== normVariantId;
+            const iVariant = String(i.variantId || "").trim().toLowerCase();
+            return iVariant !== normVariantId;
           }
           return false;
         }

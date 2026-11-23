@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ColorOption } from "../types/product-detail.types";
 import { useCartStore } from "@/stores/useCartStore";
 import { useUIStore } from "@/stores/useUIStore";
+import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
 import { SizeChartModal } from "./SizeChartModal";
 
 interface StickyFooterBarProps {
@@ -41,14 +42,17 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
   disabledSizes = [],
   onColorChange,
   onSizeChange,
-  googleRating = 4.8,
-  googleReviewCount = "800+",
+  googleRating: propGoogleRating,
+  googleReviewCount: propGoogleReviewCount,
   sizeChart,
   onAddToCart,
   stockStatus = 1,
   allowBackorders = false,
 }) => {
   const router = useRouter();
+  const { data: publicSettings } = usePublicSettings();
+  const googleRating = propGoogleRating ?? publicSettings?.googleRating ?? 4.8;
+  const googleReviewCount = propGoogleReviewCount ?? publicSettings?.googleReviewCount;
   const [hasAdded, setHasAdded] = useState(false);
   const [showSizeChart, setShowSizeChart] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<"color" | "size" | null>(null);
@@ -149,7 +153,9 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
                     <svg className="w-[11px] h-[11px]" viewBox="0 0 20 20" fill="url(#halfStarPDPSticky)"><defs><linearGradient id="halfStarPDPSticky"><stop offset="50%" stopColor="currentColor"/><stop offset="50%" stopColor="#e5e7eb"/></linearGradient></defs><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
                   </div>
                 </div>
-                <span className="text-neutral-500 font-medium text-[10px] tracking-wide mt-0.5">Based on {googleReviewCount} reviews</span>
+                <span className="text-neutral-500 font-medium text-[10px] tracking-wide mt-0.5">
+                  {googleReviewCount ? `Based on ${googleReviewCount} reviews` : "Based on verified reviews"}
+                </span>
               </div>
             </div>
             
@@ -402,7 +408,7 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
                   className={`w-full h-full flex items-center justify-center gap-1 rounded-md font-black uppercase tracking-tighter sm:tracking-wider text-[11px] sm:text-xs shadow-sm active:scale-95 duration-100 transition-all select-none ${
                     (isOutOfStock || priceFormatted === "Contact for Price")
                       ? 'bg-neutral-200 text-neutral-500 cursor-not-allowed border border-neutral-300' 
-                      : 'bg-gradient-to-r from-banner to-orange-600 text-white hover:from-orange-600 hover:to-orange-700'
+                      : 'bg-[#d9480f] hover:bg-[#b83b0a] text-white'
                   }`}
                 >
                   {priceFormatted === "Contact for Price" ? "PRICE UNAVAILABLE" : isOutOfStock ? "RESTOCKING SOON" : "ADD TO CART"}
@@ -420,7 +426,7 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
             <span className="font-heading text-xs md:text-sm font-medium text-neutral-900 truncate leading-tight">
               {productName}
             </span>
-            <span className="text-brand font-extrabold text-base md:text-lg leading-tight mt-0.5">
+            <span className="text-[#111111] font-extrabold text-base md:text-xl leading-tight mt-0.5">
               {priceFormatted}
             </span>
           </div>
@@ -447,7 +453,7 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
                         disabled={isDisabled}
                         className={`w-7 h-7 rounded-full border-2 transition-all duration-150 relative ${
                           isSelected
-                            ? "border-brand scale-110 ring-2 ring-brand/30 ring-offset-1 z-10"
+                            ? "border-[#111111] scale-110 ring-2 ring-[#111111]/30 ring-offset-1 z-10"
                             : "border-neutral-300/90 hover:border-neutral-500 opacity-85 hover:opacity-100"
                         } ${isDisabled ? "opacity-30 cursor-not-allowed hover:border-neutral-300" : ""}`}
                         style={{ background: colorObj.background }}
@@ -537,8 +543,8 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
                   className={`${
                     (isOutOfStock || priceFormatted === "Contact for Price")
                       ? 'bg-neutral-200 text-neutral-500 cursor-not-allowed border border-neutral-300' 
-                      : 'bg-gradient-to-r from-banner to-orange-600 hover:from-orange-600 hover:to-brand text-white'
-                  } px-8 py-3 rounded-xl font-extrabold tracking-widest text-sm flex items-center gap-2 shadow-md transition-all whitespace-nowrap`}
+                      : 'bg-[#d9480f] hover:bg-[#b83b0a] text-white'
+                  } px-8 py-3 rounded-lg font-extrabold uppercase tracking-wider text-sm flex items-center gap-2 shadow-sm transition-all whitespace-nowrap active:scale-[0.99]`}
                 >
                   {!(isOutOfStock || priceFormatted === "Contact for Price") && <ShoppingCartIcon className="w-4 h-4" />}
                   <span>{priceFormatted === "Contact for Price" ? "PRICE UNAVAILABLE" : isOutOfStock ? "RESTOCKING SOON" : "ADD TO CART"}</span>

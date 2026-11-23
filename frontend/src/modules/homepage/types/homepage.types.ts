@@ -56,7 +56,7 @@ export interface NavbarProps {
   /** Callback triggered when user clicks account icon */
   onAccountClick?: () => void;
   /** Visual theme of the navbar */
-  theme?: "light" | "dark";
+  theme?: "light" | "dark" | "dark-solid";
   /** Whether promotional announcement banner is active above navbar */
   hasTopBanner?: boolean;
 }

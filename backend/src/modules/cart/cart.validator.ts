@@ -53,8 +53,22 @@ export class CartValidator {
    */
   static async validateRemoveItem(req: NextRequest) {
     const userId = extractUserFromAuth(req);
-    const body = await req.json().catch(() => ({}));
-    const data = removeCartItemSchema.parse(body);
+    const searchParams = req.nextUrl?.searchParams;
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+    const productId = body.productId || searchParams?.get("productId") || undefined;
+    const variantId = body.variantId !== undefined ? body.variantId : (searchParams?.get("variantId") || undefined);
+    const itemId = body.itemId || searchParams?.get("itemId") || undefined;
+
+    const data = removeCartItemSchema.parse({
+      productId,
+      variantId,
+      itemId,
+    });
     return { userId, data };
   }
 

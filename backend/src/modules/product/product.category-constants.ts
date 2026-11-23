@@ -394,6 +394,14 @@ export const MAGENTO_PATH_TO_NAVBAR_SLUG: Record<string, string> = {
   "smk glide modular helmet": "modular-helmets",
   "smk titan helmet": "open-face-helmets",
   "smk hybrid evo": "off-road-helmets",
+  "axor agera full face helmets": "full-face-helmets",
+  "axor agera helmets": "full-face-helmets",
+  "axor agera helmet": "full-face-helmets",
+  "axor agera": "full-face-helmets",
+  "axor apex helmet": "full-face-helmets",
+  "axor apex helmets": "full-face-helmets",
+  "axor brutale helmet": "full-face-helmets",
+  "axor brutale helmets": "full-face-helmets",
 
   // Jackets
   "riding jackets": "riding-jackets",

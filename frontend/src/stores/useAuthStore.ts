@@ -34,16 +34,23 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isAuthenticated: false,
       setAuth: (user, token, refreshToken) => {
-        const userId = user.id || user.email;
-        useCartStore.getState().switchUserCart(userId);
+        const isCustomer = !user.role || user.role === "customer";
+        if (isCustomer) {
+          const userId = user.id || user.email;
+          useCartStore.getState().switchUserCart(userId);
+        } else {
+          useCartStore.getState().switchUserCart(null);
+        }
         set({ user, token, refreshToken: refreshToken || null, isAuthenticated: true });
       },
       setToken: (token, refreshToken) => {
         set((s) => ({ token, ...(refreshToken ? { refreshToken } : {}) }));
       },
       setUser: (user) => {
-        if (user) {
+        if (user && (!user.role || user.role === "customer")) {
           useCartStore.getState().switchUserCart(user.id || user.email);
+        } else {
+          useCartStore.getState().switchUserCart(null);
         }
         set({ user, isAuthenticated: !!user });
       },

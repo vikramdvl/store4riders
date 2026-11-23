@@ -36,7 +36,7 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
   
   const { data: publicSettings } = usePublicSettings();
   const dynamicRating = publicSettings?.googleRating ?? 4.8;
-  const dynamicReviewCount = publicSettings?.googleReviewCount ?? "800+";
+  const dynamicReviewCount = publicSettings?.googleReviewCount;
 
   const activeSizeChart = categoryNode?.sizeChart || categoryNode?.size_chart || "";
   

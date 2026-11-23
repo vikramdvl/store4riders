@@ -167,12 +167,35 @@ export const useCartStore = create<CartState>((set, get) => ({
   addItem: (rawItem) => {
     const item = sanitizeCartItem(rawItem);
     const { items, currentUserId } = get();
-    const normVariantId = item.variantId || "";
-    const existingIndex = items.findIndex(
-      (i) =>
-        (i.id && item.id && i.id === item.id) ||
-        (i.productId === item.productId && (i.variantId || "") === normVariantId)
-    );
+
+    const normVariantId = (item.variantId || "").trim().toLowerCase();
+    const itemColor = (item.product?.selectedColor || "").trim().toLowerCase();
+    const itemSize = (item.product?.selectedSize || "").trim().toLowerCase();
+    const itemProdId = String(item.productId || item.product?.id || item.product?._id || "").trim();
+
+    const existingIndex = items.findIndex((i) => {
+      // 1. Direct ID match if both items have the exact same item id
+      if (i.id && item.id && String(i.id) === String(item.id)) return true;
+
+      // 2. Product match: check productId, product.id, product._id, or slug
+      const iProdId = String(i.productId || i.product?.id || i.product?._id || "").trim();
+      const sameProduct =
+        (iProdId && itemProdId && iProdId === itemProdId) ||
+        (Boolean(i.product?.slug) && Boolean(item.product?.slug) && i.product.slug === item.product.slug);
+
+      if (!sameProduct) return false;
+
+      // 3. Match by selectedColor & selectedSize when present
+      const iColor = (i.product?.selectedColor || "").trim().toLowerCase();
+      const iSize = (i.product?.selectedSize || "").trim().toLowerCase();
+      if ((itemColor || itemSize) && (iColor || iSize)) {
+        return iColor === itemColor && iSize === itemSize;
+      }
+
+      // 4. Match by variantId
+      const iVariant = String(i.variantId || "").trim().toLowerCase();
+      return iVariant === normVariantId;
+    });
 
     let updated: LocalCartItem[];
     if (existingIndex > -1) {
@@ -207,7 +230,13 @@ export const useCartStore = create<CartState>((set, get) => ({
   updateQuantity: (productId, quantity, variantId) => {
     const { items, currentUserId, removeItem } = get();
     if (quantity <= 0) {
-      removeItem(productId, variantId);
+      const normVariantId = (variantId || "").trim().toLowerCase();
+      const targetItem = items.find((i) => {
+        const prodMatch = i.productId === productId || i.product?.id === productId || i.product?._id === productId;
+        const varMatch = String(i.variantId || "").trim().toLowerCase() === normVariantId;
+        return prodMatch && varMatch;
+      });
+      removeItem(productId, variantId, targetItem?.id || (targetItem as any)?._id);
       return;
     }
     const normVariantId = variantId || "";
@@ -239,7 +268,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   removeItem: (productId, variantId, itemId) => {
     const { items, currentUserId } = get();
-    const normVariantId = variantId || "";
+    const normVariantId = (variantId || "").trim().toLowerCase();
 
     const filterItem = (i: LocalCartItem) => {
       // 1. If itemId provided, match by item.id or MongoDB _id
@@ -251,10 +280,16 @@ export const useCartStore = create<CartState>((set, get) => ({
       if (i.id && String(i.id) === String(productId)) return false;
       if ((i as any)._id && String((i as any)._id) === String(productId)) return false;
 
-      // 3. Match on productId
-      if (i.productId === productId) {
+      // 3. Match on productId or product._id or product.id or product.slug
+      const iProdId = String(i.productId || i.product?._id || i.product?.id || "");
+      const matchProd =
+        iProdId === String(productId) ||
+        (i.product?.slug && String(i.product.slug) === String(productId));
+
+      if (matchProd) {
         if (variantId !== undefined && variantId !== null && variantId !== "") {
-          return (i.variantId || "") !== normVariantId;
+          const iVariant = String(i.variantId || "").trim().toLowerCase();
+          return iVariant !== normVariantId;
         }
         return false;
       }
@@ -266,11 +301,13 @@ export const useCartStore = create<CartState>((set, get) => ({
     // Save to current user's storage
     saveItemsToStorage(currentUserId, updated);
 
-    // Scrub guest storage so guest storage can never restore this item!
+    // ALWAYS clean up guest storage too so deleted items can NEVER resurface from guest storage!
     const guestItems = loadItemsFromStorage(null);
     if (guestItems.length > 0) {
       const updatedGuest = guestItems.filter(filterItem);
       saveItemsToStorage(null, updatedGuest);
+    } else {
+      saveItemsToStorage(null, []);
     }
 
     set({ items: updated });
@@ -282,11 +319,18 @@ export const useCartStore = create<CartState>((set, get) => ({
         if (variantId) payload.variantId = variantId;
         if (itemId) payload.itemId = itemId;
 
-        const res = await apiClient.delete("/cart/items", { data: payload });
+        const queryParams = new URLSearchParams();
+        if (productId) queryParams.set("productId", productId);
+        if (variantId) queryParams.set("variantId", variantId);
+        if (itemId) queryParams.set("itemId", itemId);
+
+        const res = await apiClient.delete(`/cart/items?${queryParams.toString()}`, { data: payload });
         const serverCart = res?.data?.data;
         if (serverCart && Array.isArray(serverCart.items)) {
-          set({ items: serverCart.items });
-          saveItemsToStorage(currentUserId, serverCart.items);
+          // Never resurrect an item the user just explicitly deleted!
+          const cleanServerItems = serverCart.items.filter(filterItem);
+          set({ items: cleanServerItems });
+          saveItemsToStorage(currentUserId, cleanServerItems);
         }
       });
     }
@@ -298,6 +342,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       try {
         localStorage.removeItem(getCartStorageKey(currentUserId));
         localStorage.removeItem(getCartStorageKey(null));
+        localStorage.removeItem("s4r_cart_guest");
         localStorage.removeItem("guest-cart-storage");
         localStorage.removeItem("s4r-user-cart-v2");
       } catch (e) {}

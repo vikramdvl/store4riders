@@ -27,7 +27,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       let initialUserId: string | null = null;
       if (authData) {
         const parsed = JSON.parse(authData);
-        initialUserId = parsed?.state?.user?.id || parsed?.state?.user?.email || null;
+        // Only bind cloud cart if strictly authenticated customer!
+        const isAuth = Boolean(parsed?.state?.isAuthenticated);
+        const role = parsed?.state?.user?.role;
+        if (isAuth && (!role || role === "customer")) {
+          initialUserId = parsed?.state?.user?.id || parsed?.state?.user?.email || null;
+        }
       }
       useCartStore.getState().switchUserCart(initialUserId);
     } catch (e) {}

@@ -375,9 +375,18 @@ export class ProductService {
           }
 
           if (parentCat) {
-            categoryName = parentCat.name;
-            categorySlug = parentCat.slug;
-            subCategorySlug = `${parentCat.slug}/${subCat.slug}`;
+            if (LEAF_TO_PARENT_MAP[parentCat.slug]) {
+              const topSlug = LEAF_TO_PARENT_MAP[parentCat.slug];
+              const topCat: any = await CategoryModel.findOne({ slug: topSlug }).lean().exec();
+              categoryName = topCat ? topCat.name : topSlug.replace(/[-_]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+              categorySlug = topSlug;
+              subCategoryName = parentCat.name;
+              subCategorySlug = `${topSlug}/${parentCat.slug}`;
+            } else {
+              categoryName = parentCat.name;
+              categorySlug = parentCat.slug;
+              subCategorySlug = `${parentCat.slug}/${subCat.slug}`;
+            }
           } else if (LEAF_TO_PARENT_MAP[subCat.slug]) {
             const pSlug = LEAF_TO_PARENT_MAP[subCat.slug];
             categorySlug = pSlug;
@@ -412,13 +421,32 @@ export class ProductService {
           .filter((p) => p && !p.toLowerCase().includes("root") && !p.toLowerCase().includes("default"));
 
         if (parts.length >= 2) {
-          categoryName = parts[0];
-          categorySlug = slugify(parts[0]);
-          subCategoryName = parts[parts.length - 1];
-          subCategorySlug = `${categorySlug}/${slugify(parts[parts.length - 1])}`;
+          const firstSlug = slugify(parts[0]);
+          const lastSlug = slugify(parts[parts.length - 1]);
+          if (LEAF_TO_PARENT_MAP[firstSlug]) {
+            const topSlug = LEAF_TO_PARENT_MAP[firstSlug];
+            categorySlug = topSlug;
+            categoryName = topSlug.replace(/[-_]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+            subCategoryName = parts[0];
+            subCategorySlug = `${topSlug}/${firstSlug}`;
+          } else {
+            categoryName = parts[0];
+            categorySlug = firstSlug;
+            subCategoryName = parts[parts.length - 1];
+            subCategorySlug = `${categorySlug}/${lastSlug}`;
+          }
         } else if (parts.length === 1) {
-          categoryName = parts[0];
-          categorySlug = slugify(parts[0]);
+          const s = slugify(parts[0]);
+          if (LEAF_TO_PARENT_MAP[s]) {
+            const topSlug = LEAF_TO_PARENT_MAP[s];
+            categorySlug = topSlug;
+            categoryName = topSlug.replace(/[-_]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+            subCategoryName = parts[0];
+            subCategorySlug = `${topSlug}/${s}`;
+          } else {
+            categoryName = parts[0];
+            categorySlug = s;
+          }
         }
       }
 

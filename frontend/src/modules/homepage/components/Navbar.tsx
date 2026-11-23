@@ -117,7 +117,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, []);
 
   const totalItemCount = mounted ? items.reduce((sum, i) => sum + (i.quantity || 1), 0) : 0;
-  const isLight = theme === "light" || isScrolled;
+  const isLight = theme === "light" || (theme !== "dark-solid" && isScrolled);
   
   const { data: dbBrands } = useBrands();
   const { data: dbCategories } = useCategoryTree();
@@ -311,18 +311,22 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       <header
-        className={`w-full z-50 ${theme === "light"
-            ? "sticky top-0"
-            : `fixed left-0 right-0 transition-all duration-300 ${isScrolled ? "top-0" : hasTopBanner ? "top-[36px] sm:top-[40px]" : "top-0"}`
+        className={`w-full z-50 ${theme === "dark-solid"
+            ? "sticky top-0 bg-[#161616]"
+            : theme === "light"
+              ? "sticky top-0"
+              : `fixed left-0 right-0 transition-all duration-300 ${isScrolled ? "top-0" : hasTopBanner ? "top-[36px] sm:top-[40px]" : "top-0"}`
           }`}
       >
         {/* Glassmorphic backdrop */}
         <div
-          className={`absolute inset-0 transition-all duration-300 ease-in-out pointer-events-none ${theme === "light"
-              ? "bg-white/95 backdrop-blur-md border-b border-neutral-200/80 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"
-              : isScrolled
-                ? "opacity-100 bg-white/90 backdrop-blur-md border-b border-neutral-200/60 shadow-sm"
-                : "opacity-0 bg-white/0"
+          className={`absolute inset-0 transition-all duration-300 ease-in-out pointer-events-none ${theme === "dark-solid"
+              ? "bg-[#161616] border-b border-[#2a2a2a] shadow-sm"
+              : theme === "light"
+                ? "bg-white/95 backdrop-blur-md border-b border-neutral-200/80 shadow-[0_1px_8px_rgba(0,0,0,0.04)]"
+                : isScrolled
+                  ? "opacity-100 bg-white/90 backdrop-blur-md border-b border-neutral-200/60 shadow-sm"
+                  : "opacity-0 bg-white/0"
             }`}
         />
 

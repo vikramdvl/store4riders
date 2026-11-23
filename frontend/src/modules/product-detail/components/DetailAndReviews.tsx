@@ -340,15 +340,15 @@ export const DetailAndReviews: React.FC<{
     <div className="w-full">
 
       {/* ── Section Header Bar ── */}
-      <div id="product-detail-description" className="w-full bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950 py-2.5 sm:py-3.5 px-4 sm:px-8 rounded-xl shadow-xs scroll-mt-20">
+      <div id="product-detail-description" className="w-full bg-[#161616] py-3.5 px-4 sm:px-8 rounded-xl shadow-xs scroll-mt-20 border border-[#2a2a2a]">
         <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-8 lg:gap-12">
-          <h2 className="font-heading text-[11px] sm:text-sm md:text-base font-bold uppercase tracking-wider sm:tracking-[0.2em] text-white flex items-center justify-center lg:justify-start gap-2 sm:gap-3 whitespace-nowrap overflow-hidden">
-            <span className="w-4 sm:w-6 md:w-8 h-[2px] bg-[#ab1509] shrink-0" />
+          <h2 className="font-heading text-xs sm:text-sm font-extrabold uppercase tracking-wider sm:tracking-[0.2em] text-white flex items-center justify-center lg:justify-start gap-2 sm:gap-3 whitespace-nowrap overflow-hidden">
+            <span className="w-4 sm:w-6 md:w-8 h-[2px] bg-[#d9480f] shrink-0" />
             <span>Product Detail Description</span>
-            <span className="w-4 h-[2px] bg-[#ab1509] shrink-0 lg:hidden" />
+            <span className="w-4 h-[2px] bg-[#d9480f] shrink-0 lg:hidden" />
           </h2>
-          <h2 className="hidden lg:flex font-heading text-sm md:text-base font-bold uppercase tracking-[0.2em] text-white items-center gap-3 pl-6">
-            <span className="w-8 h-[2px] bg-[#ab1509]" />
+          <h2 className="hidden lg:flex font-heading text-xs sm:text-sm font-extrabold uppercase tracking-[0.2em] text-white items-center gap-3 pl-6">
+            <span className="w-8 h-[2px] bg-[#d9480f]" />
             Customer Reviews
           </h2>
         </div>
@@ -359,17 +359,17 @@ export const DetailAndReviews: React.FC<{
         <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-8 lg:gap-12 items-start">
 
           {/* ─── LEFT: Product Details Card ─── */}
-          <div id="product-description-card" className="bg-white border border-neutral-200/90 rounded-2xl p-3.5 sm:p-7 shadow-xs scroll-mt-20">
+          <div id="product-description-card" className="bg-white border border-[#e6e1da] rounded-xl p-4 sm:p-7 shadow-xs scroll-mt-20">
             {/* Inner Header - Hidden on mobile to prevent duplicate heading */}
             <div className="hidden md:flex items-center gap-3 pb-4 mb-6 border-b border-neutral-100">
-              <span className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-100/80 flex items-center justify-center text-[#ab1509]">
+              <span className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-100/80 flex items-center justify-center text-[#d9480f]">
                 <LayersIcon />
               </span>
               <div>
-                <h3 className="font-heading text-sm md:text-base font-bold text-neutral-900 uppercase tracking-wide">
+                <h3 className="font-heading text-sm md:text-base font-bold text-[#111111] uppercase tracking-wide">
                   Features & Specifications
                 </h3>
-                <p className="text-[11px] text-neutral-400 font-medium">
+                <p className="text-[11px] text-[#6b6560] font-medium">
                   Technical gear details & rider ergonomics
                 </p>
               </div>
@@ -377,16 +377,16 @@ export const DetailAndReviews: React.FC<{
 
             {/* Brand Banner with direct link to Brand Page */}
             {brand && (
-              <div className="mb-5 p-3 sm:p-3.5 rounded-xl bg-neutral-50/80 border border-neutral-200/80 flex flex-wrap items-center justify-between gap-3">
+              <div className="mb-5 p-3 sm:p-3.5 rounded-xl bg-[#f7f4ef] border border-[#e6e1da] flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-white border border-neutral-200/80 flex items-center justify-center text-neutral-800 font-black text-xs shrink-0 shadow-2xs">
+                  <div className="w-9 h-9 rounded-lg bg-white border border-[#e6e1da] flex items-center justify-center text-[#111111] font-black text-xs shrink-0 shadow-2xs">
                     {brand.slice(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <span className="text-[10px] sm:text-[11px] font-bold text-neutral-400 uppercase tracking-wider block">
+                    <span className="text-[10px] sm:text-[11px] font-bold text-[#6b6560] uppercase tracking-wider block">
                       Brand
                     </span>
-                    <span className="text-xs sm:text-sm font-extrabold text-neutral-900 uppercase">
+                    <span className="text-xs sm:text-sm font-extrabold text-[#111111] uppercase">
                       {brand}
                     </span>
                   </div>
@@ -395,10 +395,10 @@ export const DetailAndReviews: React.FC<{
                 {brandSlug && (
                   <Link
                     href={`/brands/${brandSlug}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-neutral-300 hover:border-brand hover:text-brand text-xs font-bold text-neutral-700 transition-all shadow-2xs group"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#cfcfcf] hover:border-[#0000ff] text-xs font-bold text-[#0000ff] transition-all shadow-2xs group"
                   >
                     <span>View all {brand} products</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-neutral-400 group-hover:text-brand group-hover:translate-x-0.5 transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-[#0000ff] group-hover:translate-x-0.5 transition-all">
                       <path fillRule="evenodd" d="M3 10a.75.75 0 0 1 .75-.75h10.638L10.23 5.29a.75.75 0 1 1 1.04-1.08l5.5 5.25a.75.75 0 0 1 0 1.08l-5.5 5.25a.75.75 0 1 1-1.04-1.08l4.158-3.96H3.75A.75.75 0 0 1 3 10Z" clipRule="evenodd" />
                     </svg>
                   </Link>
@@ -427,7 +427,7 @@ export const DetailAndReviews: React.FC<{
                       <button
                         type="button"
                         onClick={() => setIsMobileDescExpanded(true)}
-                        className="flex items-center gap-2 text-[13px] font-bold text-white uppercase tracking-wider py-2 px-5 bg-[#FF5429] hover:bg-[#E0441D] rounded-sm transition-all duration-100 active:scale-95 select-none shadow-sm cursor-pointer"
+                        className="flex items-center gap-2 text-xs font-extrabold text-[#d9480f] uppercase tracking-wider py-2.5 px-6 border border-[#d9480f] bg-white hover:bg-[#d9480f] hover:text-white rounded-md transition-all duration-100 active:scale-95 select-none shadow-2xs cursor-pointer"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
                         View More
@@ -449,7 +449,7 @@ export const DetailAndReviews: React.FC<{
                           });
                         }, 100);
                       }}
-                      className="flex items-center gap-2 text-[13px] font-bold text-white uppercase tracking-wider py-2 px-5 bg-[#FF5429] hover:bg-[#E0441D] rounded-sm transition-all duration-100 active:scale-95 select-none shadow-sm cursor-pointer"
+                      className="flex items-center gap-2 text-xs font-extrabold text-[#d9480f] uppercase tracking-wider py-2.5 px-6 border border-[#d9480f] bg-white hover:bg-[#d9480f] hover:text-white rounded-md transition-all duration-100 active:scale-95 select-none shadow-2xs cursor-pointer"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8"/></svg>
                       View Less
@@ -547,11 +547,11 @@ export const CustomerReviews: React.FC<{
   return (
     <div className="flex flex-col gap-5">
       {/* Rating Summary Card */}
-      <div className="bg-white border border-neutral-200 rounded-lg p-5">
+      <div className="bg-white border border-[#e6e1da] rounded-xl p-5 shadow-2xs">
         <div className="flex items-center gap-4">
           <div className="text-center">
-            <p className="text-4xl font-bold text-neutral-900">{reviews?.length > 0 ? averageRating : "–"}</p>
-            <div className="flex text-amber-400 mt-1 justify-center">
+            <p className="text-4xl font-extrabold text-[#111111]">{reviews?.length > 0 ? averageRating : "–"}</p>
+            <div className="flex text-[#f5a623] mt-1 justify-center">
               {[...Array(5)].map((_, i) => (
                 <svg key={i} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
                   fill={reviews?.length > 0 && i < Math.round(Number(averageRating)) ? "currentColor" : "none"}
@@ -559,7 +559,7 @@ export const CustomerReviews: React.FC<{
                 ><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
               ))}
             </div>
-            <p className="text-xs text-neutral-400 mt-1">{reviews?.length || 0} reviews</p>
+            <p className="text-xs text-[#6b6560] mt-1 font-medium">{reviews?.length || 0} reviews</p>
           </div>
           <div className="flex-1 space-y-1.5 pl-4 border-l border-neutral-100">
             {[5, 4, 3, 2, 1].map((star) => {
@@ -567,12 +567,12 @@ export const CustomerReviews: React.FC<{
               const percent = reviews?.length ? (count / reviews.length) * 100 : 0;
               return (
                 <div key={star} className="flex items-center gap-2">
-                  <span className="text-xs text-neutral-500 w-3">{star}</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" className="text-amber-400 shrink-0"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                  <span className="text-xs text-[#6b6560] w-3">{star}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" className="text-[#f5a623] shrink-0"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
                   <div className="flex-1 h-2 bg-neutral-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${percent}%` }} />
+                    <div className="h-full bg-[#f5a623] rounded-full transition-all" style={{ width: `${percent}%` }} />
                   </div>
-                  <span className="text-xs text-neutral-400 w-5 text-right">{count}</span>
+                  <span className="text-xs text-[#6b6560] w-5 text-right">{count}</span>
                 </div>
               );
             })}
@@ -651,7 +651,7 @@ export const CustomerReviews: React.FC<{
       <button 
         type="button"
         onClick={() => setIsModalOpen(true)}
-        className="w-full py-3.5 bg-gradient-to-r from-[#FF5429] to-[#FF7A00] hover:from-[#E0441D] hover:to-[#FF5429] text-white rounded-lg text-sm font-bold uppercase tracking-wider shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer flex items-center justify-center gap-2"
+        className="w-full py-3.5 border-2 border-[#d9480f] text-[#d9480f] bg-white hover:bg-[#d9480f] hover:text-white rounded-md text-xs sm:text-sm font-extrabold uppercase tracking-wider transition-all duration-150 cursor-pointer flex items-center justify-center gap-2 active:scale-95 shadow-2xs"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>

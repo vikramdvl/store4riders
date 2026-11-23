@@ -84,7 +84,27 @@ export const CORE_PRODUCT_PARENTS: Record<string, { name: string; slug: string; 
 export const CATEGORY_SLUG_ALIASES: Record<string, string[]> = {
   // Helmets
   "motorcycle-helmets": ["motorcycle-helmets", "helmets"],
-  "full-face-helmets": ["full-face-helmets", "full-face-helmet", "full-face"],
+  "full-face-helmets": [
+    "full-face-helmets",
+    "full-face-helmet",
+    "full-face",
+    "axor-agera-full-face-helmets",
+    "axor-agera-helmets",
+    "axor-agera-helmet",
+    "axor-agera",
+    "axor-street-helmets",
+    "axor-rage-helmets",
+    "axor-stealth-motorcycle-helmet",
+    "axor-apex-helmet-sport-touring-performance",
+    "axor-brutale-dual-spoiler-helmet",
+    "smk-twister-helmet",
+    "smk-stellar-helmet",
+    "smk-typhoon-helmet",
+    "smk-agnar-helmet-full-face-protection-with-race-ready-styling",
+    "smk-nova-helmets",
+    "ls2-ff800-storm-ii-helmets-touring-range",
+    "ls2-ff320-stream-ii-daily-rider-range",
+  ],
   "modular-helmets": ["modular-helmets", "modular-helmets-flip-up-helmets", "modular-flip-up", "modular-helmet"],
   "off-road-helmets": ["off-road-helmets", "off-road-helmets-motocross-helmet", "motocross-helmet", "off-road-helmet", "motocross-helmets"],
   "open-face-helmets": ["open-face-helmets", "half-face-helmets", "open-face", "open-face-helmet", "half-face-helmet"],
@@ -724,4 +744,199 @@ export function getUnmappedLegacyCategories(
     seenUnmapped.add(uniqueKey);
     return true;
   });
+}
+
+export interface BreadcrumbLink {
+  label: string;
+  href?: string;
+}
+
+/**
+ * Resolves clean, canonical, enterprise-grade breadcrumb links for a Product Detail Page.
+ *
+ * Guarantees:
+ * 1. Strict e-commerce hierarchy: HOME > [Main Category] > [Subcategory] > [Product Name]
+ * 2. Matches the authoritative storefront navigation (/motorcycle-helmets/full-face-helmets)
+ * 3. NO generic "PRODUCTS" link
+ * 4. NO Brand injected into category breadcrumbs (Brand is an attribute, not a category node)
+ * 5. Automatically filters out legacy non-menu categories (e.g. "Axor Agera Full Face Helmets")
+ * 6. Eliminates duplicate or redundant adjacent items
+ */
+export function resolveProductBreadcrumbs(product: {
+  name: string;
+  category?: string;
+  categorySlug?: string;
+  subCategory?: string;
+  subCategorySlug?: string;
+  categoryHierarchy?: Array<{ name: string; slug: string }>;
+  categorySlugs?: string[];
+  magentoCategories?: string;
+  brand?: string;
+}): BreadcrumbLink[] {
+  const items: BreadcrumbLink[] = [{ label: "HOME", href: "/" }];
+
+  // 1. Build a lookup index from authoritative DEFAULT_NAV_ITEMS
+  type NavPath = Array<{ label: string; href: string }>;
+  const navMap = new Map<string, NavPath>();
+
+  DEFAULT_NAV_ITEMS.forEach((topItem) => {
+    const topSlug = topItem.href.replace(/^\//, "").toLowerCase().trim();
+    const topLabel = topItem.label.toUpperCase();
+    const topHref = topItem.href.startsWith("/") ? topItem.href : `/${topItem.href}`;
+
+    const topPath: NavPath = [{ label: topLabel, href: topHref }];
+    navMap.set(topSlug, topPath);
+    navMap.set(topItem.id.toLowerCase().trim(), topPath);
+    navMap.set(topItem.label.toLowerCase().trim(), topPath);
+
+    if (topItem.megaMenuItems) {
+      topItem.megaMenuItems.forEach((group) => {
+        const groupHref = group.groupHref
+          ? (group.groupHref.startsWith("/") ? group.groupHref : `/${group.groupHref}`)
+          : undefined;
+        const groupSlug = groupHref ? groupHref.replace(/^\//, "").toLowerCase().trim() : undefined;
+        const groupLabel = group.group.trim().toUpperCase();
+
+        const groupPath: NavPath = groupHref && group.group.trim()
+          ? [
+              { label: topLabel, href: topHref },
+              { label: groupLabel, href: groupHref },
+            ]
+          : [{ label: topLabel, href: topHref }];
+
+        if (groupSlug) {
+          navMap.set(groupSlug, groupPath);
+          navMap.set(group.group.toLowerCase().trim(), groupPath);
+          const lastGroupPart = groupSlug.split("/").pop();
+          if (lastGroupPart) navMap.set(lastGroupPart, groupPath);
+        }
+
+        if (group.items) {
+          group.items.forEach((subItem) => {
+            const subHref = subItem.href.startsWith("/") ? subItem.href : `/${subItem.href}`;
+            const subSlug = subHref.replace(/^\//, "").toLowerCase().trim();
+            const subLabel = subItem.label.trim().toUpperCase();
+            const leafPath: NavPath = [...groupPath, { label: subLabel, href: subHref }];
+
+            navMap.set(subSlug, leafPath);
+            navMap.set(subItem.label.toLowerCase().trim(), leafPath);
+            const lastSubPart = subSlug.split("/").pop();
+            if (lastSubPart) navMap.set(lastSubPart, leafPath);
+          });
+        }
+      });
+    }
+  });
+
+  // 2. Collect candidate keys from product in priority order
+  const candidates: string[] = [];
+  const addCandidate = (val?: string) => {
+    if (!val || typeof val !== "string") return;
+    const clean = val.toLowerCase().trim();
+    if (clean && !candidates.includes(clean)) {
+      candidates.push(clean);
+    }
+  };
+
+  // Inspect subcategory and category first
+  addCandidate(product.subCategorySlug);
+  addCandidate(product.subCategory);
+  addCandidate(product.categorySlug);
+  addCandidate(product.category);
+
+  if (Array.isArray(product.categorySlugs)) {
+    product.categorySlugs.forEach(addCandidate);
+  }
+  if (Array.isArray(product.categoryHierarchy)) {
+    product.categoryHierarchy.forEach((c) => {
+      addCandidate(c.slug);
+      addCandidate(c.name);
+    });
+  }
+  if (product.magentoCategories) {
+    product.magentoCategories.split(",").forEach((catPath) => {
+      catPath.split("/").forEach(addCandidate);
+    });
+  }
+
+  // 3. Match candidate against navMap
+  let matchedPath: NavPath | null = null;
+  for (const raw of candidates) {
+    const slugForm = raw.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const leafSegment = slugForm.split("/").pop() || slugForm;
+
+    // Resolve alias if present (e.g. full-face -> full-face-helmets)
+    let canonical = leafSegment;
+    for (const [targetCanonical, aliases] of Object.entries(CATEGORY_SLUG_ALIASES)) {
+      if (aliases.some((a) => a.toLowerCase() === leafSegment || a.toLowerCase() === raw)) {
+        canonical = targetCanonical;
+        break;
+      }
+    }
+
+    if (navMap.has(canonical)) {
+      matchedPath = navMap.get(canonical)!;
+      break;
+    }
+    if (navMap.has(leafSegment)) {
+      matchedPath = navMap.get(leafSegment)!;
+      break;
+    }
+    if (navMap.has(raw)) {
+      matchedPath = navMap.get(raw)!;
+      break;
+    }
+    if (navMap.has(slugForm)) {
+      matchedPath = navMap.get(slugForm)!;
+      break;
+    }
+  }
+
+  if (matchedPath && matchedPath.length > 0) {
+    items.push(...matchedPath);
+  } else {
+    // Fallback for custom or unmapped categories
+    if (product.categoryHierarchy && product.categoryHierarchy.length > 0) {
+      product.categoryHierarchy.forEach((node) => {
+        const uName = (node.name || "").toUpperCase().trim();
+        if (uName && uName !== "PRODUCTS" && uName !== "HOME") {
+          items.push({
+            label: uName,
+            href: node.slug ? (node.slug.startsWith("/") ? node.slug : `/${node.slug}`) : undefined,
+          });
+        }
+      });
+    } else {
+      if (product.category) {
+        items.push({
+          label: product.category.toUpperCase().trim(),
+          href: product.categorySlug ? (product.categorySlug.startsWith("/") ? product.categorySlug : `/${product.categorySlug}`) : `/${product.category.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+        });
+      }
+      if (
+        product.subCategory &&
+        !isLegacyNonMenuCategory(product.subCategorySlug || product.subCategory) &&
+        product.subCategory.toLowerCase().trim() !== product.category?.toLowerCase().trim()
+      ) {
+        items.push({
+          label: product.subCategory.toUpperCase().trim(),
+          href: product.subCategorySlug ? (product.subCategorySlug.startsWith("/") ? product.subCategorySlug : `/${product.subCategorySlug}`) : `/${product.subCategory.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+        });
+      }
+    }
+  }
+
+  // 4. Deduplicate consecutive items with identical labels or hrefs
+  const deduped: BreadcrumbLink[] = [];
+  items.forEach((item) => {
+    const prev = deduped[deduped.length - 1];
+    if (!prev || (prev.label !== item.label && prev.href !== item.href)) {
+      deduped.push(item);
+    }
+  });
+
+  // 5. Append current product name (terminal item, no link)
+  deduped.push({ label: product.name });
+
+  return deduped;
 }

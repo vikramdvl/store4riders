@@ -25,8 +25,8 @@ export const UpSellProducts: React.FC<{ products: KitProduct[]; title?: string }
       {/* Header with Navigation Arrows */}
       <div className="flex items-center justify-between mb-6 px-1">
         <div className="flex items-center gap-2.5">
-          <span className="w-2 h-5 bg-brand rounded-full" />
-          <h2 className="text-base md:text-lg font-extrabold uppercase tracking-wider text-neutral-900">
+          <span className="w-1.5 h-5 bg-[#d9480f] rounded-xs" />
+          <h2 className="text-base md:text-lg font-extrabold uppercase tracking-wider text-[#111111]">
             {title}
           </h2>
         </div>
@@ -36,7 +36,7 @@ export const UpSellProducts: React.FC<{ products: KitProduct[]; title?: string }
           <div className="flex items-center gap-2">
             <button
               onClick={() => scroll("left")}
-              className="w-8 h-8 rounded-full border border-neutral-200 bg-white flex items-center justify-center text-neutral-600 hover:text-brand hover:border-brand transition-all shadow-2xs"
+              className="w-8 h-8 rounded-full border border-[#cfcfcf] bg-white flex items-center justify-center text-[#111111] hover:border-[#111111] transition-all shadow-2xs cursor-pointer"
               aria-label="Previous items"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
@@ -45,7 +45,7 @@ export const UpSellProducts: React.FC<{ products: KitProduct[]; title?: string }
             </button>
             <button
               onClick={() => scroll("right")}
-              className="w-8 h-8 rounded-full border border-neutral-200 bg-white flex items-center justify-center text-neutral-600 hover:text-brand hover:border-brand transition-all shadow-2xs"
+              className="w-8 h-8 rounded-full border border-[#cfcfcf] bg-white flex items-center justify-center text-[#111111] hover:border-[#111111] transition-all shadow-2xs cursor-pointer"
               aria-label="Next items"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
@@ -68,7 +68,7 @@ export const UpSellProducts: React.FC<{ products: KitProduct[]; title?: string }
             className="shrink-0 w-[190px] sm:w-[225px] md:w-[265px] block group cursor-pointer transform-gpu"
           >
             {/* Image Box */}
-            <div className="relative aspect-square w-full bg-[#f4f4f4] rounded-xl overflow-hidden mb-3 border border-neutral-200/70 group-hover:border-neutral-300 transition-colors">
+            <div className="relative aspect-square w-full bg-[#f1eee9] rounded-xl overflow-hidden mb-3 border border-[#e6e1da] group-hover:border-neutral-400 transition-colors">
               <Image
                 src={product.imageUrl}
                 alt={product.name}
@@ -84,10 +84,10 @@ export const UpSellProducts: React.FC<{ products: KitProduct[]; title?: string }
 
             {/* Product Meta */}
             <div className="px-1 mt-1">
-              <h3 className="text-xs md:text-sm font-bold text-neutral-900 font-sans line-clamp-2 leading-snug group-hover:text-brand transition-colors">
+              <h3 className="text-xs md:text-sm font-bold text-[#111111] font-sans line-clamp-2 leading-snug group-hover:underline transition-all">
                 {product.name}
               </h3>
-              <div className="text-xs md:text-sm font-extrabold text-brand font-sans mt-1.5">
+              <div className="text-xs md:text-sm font-extrabold text-[#111111] font-sans mt-1.5">
                 {product.priceFormatted}
               </div>
             </div>

@@ -17,6 +17,7 @@ export interface BreadcrumbProps {
   customLastTitle?: string;
   /** Whether to inject Schema.org JSON-LD structured data for Google Rich Snippets (default: true) */
   enableSchemaJsonLd?: boolean;
+  className?: string;
 }
 
 // User-friendly label formatting dictionary for common e-commerce paths
@@ -48,7 +49,8 @@ const KNOWN_LABELS: Record<string, string> = {
 export const Breadcrumb: React.FC<BreadcrumbProps> = ({ 
   items, 
   customLastTitle,
-  enableSchemaJsonLd = true 
+  enableSchemaJsonLd = true,
+  className,
 }) => {
   const pathname = usePathname();
 
@@ -123,7 +125,7 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({
       {/* 2. Semantic W3C Accessible Navigation */}
       <nav 
         aria-label="Breadcrumb" 
-        className="w-full bg-white border-b border-neutral-100"
+        className={`w-full ${className || "bg-white border-b border-neutral-100"}`}
       >
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-2.5 sm:py-3.5">
           <ol 

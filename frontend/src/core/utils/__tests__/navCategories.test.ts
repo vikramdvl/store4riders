@@ -4,6 +4,7 @@ import {
   getUnmappedLegacyCategories,
   isLegacyNonMenuCategory,
   CORE_PRODUCT_PARENTS,
+  resolveProductBreadcrumbs,
 } from "../navCategories";
 
 describe("navCategories Suite — Storefront Navbar & Admin Categories Tree", () => {
@@ -247,5 +248,83 @@ describe("navCategories Suite — Storefront Navbar & Admin Categories Tree", ()
     // 3. Check custom rename on jackets
     const jacketsNode = gearNode?.children?.find((c) => c.slug === "riding-jackets");
     expect(jacketsNode?.name).toBe("Custom Armor & Jackets");
+  });
+
+  describe("resolveProductBreadcrumbs Suite", () => {
+    it("resolves canonical Helmets hierarchy for Axor Agera Rush Helmet without brand or PRODUCTS clutter", () => {
+      const product = {
+        name: "Axor Agera Rush Full Face Helmet",
+        category: "Full Face Helmets",
+        categorySlug: "full-face-helmets",
+        subCategory: "Axor Agera Full Face Helmets",
+        subCategorySlug: "axor-agera-full-face-helmets",
+        brand: "Axor Helmets",
+      };
+
+      const breadcrumbs = resolveProductBreadcrumbs(product);
+
+      expect(breadcrumbs).toEqual([
+        { label: "HOME", href: "/" },
+        { label: "HELMETS", href: "/motorcycle-helmets" },
+        { label: "FULL FACE HELMETS", href: "/motorcycle-helmets/full-face-helmets" },
+        { label: "Axor Agera Rush Full Face Helmet" },
+      ]);
+    });
+
+    it("resolves 3-level hierarchy for Full Gauntlet Riding Gloves", () => {
+      const product = {
+        name: "Shima RS-2 Full Gauntlet Gloves",
+        category: "Riding Gloves",
+        categorySlug: "riding-gloves",
+        subCategory: "Full Gauntlet Gloves",
+        subCategorySlug: "full-gauntlet-gloves",
+        brand: "Shima",
+      };
+
+      const breadcrumbs = resolveProductBreadcrumbs(product);
+
+      expect(breadcrumbs).toEqual([
+        { label: "HOME", href: "/" },
+        { label: "RIDING GEAR", href: "/riding-gear" },
+        { label: "RIDING GLOVES", href: "/riding-gear/riding-gloves" },
+        { label: "FULL GAUNTLET GLOVES", href: "/riding-gear/riding-gloves/full-gauntlet-gloves" },
+        { label: "Shima RS-2 Full Gauntlet Gloves" },
+      ]);
+    });
+
+    it("resolves top-level category for Exhausts without redundant subcategories", () => {
+      const product = {
+        name: "Barrel Exhaust Canon 2.0",
+        category: "Exhausts",
+        categorySlug: "exhausts",
+      };
+
+      const breadcrumbs = resolveProductBreadcrumbs(product);
+
+      expect(breadcrumbs).toEqual([
+        { label: "HOME", href: "/" },
+        { label: "EXHAUSTS", href: "/exhausts" },
+        { label: "Barrel Exhaust Canon 2.0" },
+      ]);
+    });
+
+    it("filters out legacy non-menu subcategory when category matches canonical parent", () => {
+      const product = {
+        name: "Axor Apex Sport Helmet",
+        category: "Helmets",
+        categorySlug: "motorcycle-helmets",
+        subCategory: "Axor Apex Helmet Sport Touring Performance",
+        subCategorySlug: "axor-apex-helmet-sport-touring-performance",
+      };
+
+      const breadcrumbs = resolveProductBreadcrumbs(product);
+
+      expect(breadcrumbs).toEqual([
+        { label: "HOME", href: "/" },
+        { label: "HELMETS", href: "/motorcycle-helmets" },
+        { label: "FULL FACE HELMETS", href: "/motorcycle-helmets/full-face-helmets" },
+        { label: "Axor Apex Sport Helmet" },
+      ]);
+    });
   });
 });
