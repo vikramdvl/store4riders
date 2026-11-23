@@ -14,8 +14,12 @@ vi.mock("../../product/product.model");
 vi.mock("../../warehouse/warehouse.repository");
 vi.mock("../../../core/shipping/ShippingProviderFactory");
 vi.mock("../../../core/cache/redis", () => ({
+  redisClient: null,
+  isRedisConnected: false,
   getCache: vi.fn().mockResolvedValue(null),
   setCache: vi.fn().mockResolvedValue(true),
+  deleteCache: vi.fn().mockResolvedValue(true),
+  clearProductCaches: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe("ShipmentService - Deep Edge Case & Robustness Suite", () => {
@@ -343,3 +347,4 @@ describe("ShipmentService - Deep Edge Case & Robustness Suite", () => {
     });
   });
 });
+
