@@ -6,6 +6,7 @@ import { StarIcon } from "@heroicons/react/24/solid";
 import { ColorOption } from "../types/product-detail.types";
 import { cleanRichContent, handleRichTextClick } from "@/core/utils/cleanRichContent";
 import { SizeChartModal } from "./SizeChartModal";
+import { parseColorToBackground } from "./ProductDetailPageModule";
 
 interface ProductInfoProps {
   id: string;
@@ -371,21 +372,29 @@ export const ProductInfo: React.FC<ProductInfoProps> = ({
                 <div className="flex items-center flex-wrap gap-2 max-w-full sm:max-w-[240px]">
                   {colors.map((c) => {
                     const isSelected = (selectedColor || colors[0]?.name)?.trim().toLowerCase() === c.name.trim().toLowerCase();
+                    const isDisabled = disabledColors.some((d) => d.trim().toLowerCase() === c.name.trim().toLowerCase());
+                    const swatchBg = (c.background && c.background.trim()) ? c.background : parseColorToBackground(c.name);
                     return (
                       <button
                         key={c.name}
                         type="button"
                         onClick={() => onColorChange?.(c.name)}
-                        className={`w-[28px] h-[28px] sm:w-[34px] sm:h-[34px] shrink-0 rounded-full border-[3px] border-[#faf8f5] transition-all cursor-pointer ${
+                        className={`w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full border border-black/15 transition-all cursor-pointer relative ${
                           isSelected
-                            ? "shadow-[0_0_0_2px_#111111] scale-105"
-                            : "shadow-[0_0_0_1px_#cfcfcf] hover:shadow-[0_0_0_1px_#111111]"
-                        }`}
-                        style={{ backgroundColor: c.background || "#111111" }}
-                        title={c.name}
+                            ? "ring-2 ring-[#111111] ring-offset-2 ring-offset-white scale-105"
+                            : "hover:ring-1 hover:ring-neutral-400"
+                        } ${isDisabled ? "opacity-35" : ""}`}
+                        style={{ background: swatchBg || "#111111" }}
+                        title={isDisabled ? `${c.name} - Out of stock` : c.name}
                         aria-label={c.name}
                         aria-pressed={isSelected}
-                      />
+                      >
+                        {isDisabled && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-full h-0.5 bg-neutral-500 rotate-45 transform origin-center" />
+                          </div>
+                        )}
+                      </button>
                     );
                   })}
                 </div>
