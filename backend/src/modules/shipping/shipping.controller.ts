@@ -27,6 +27,7 @@ export class ShippingController {
       breadth: body.breadth !== undefined ? Number(body.breadth) : undefined,
       height: body.height !== undefined ? Number(body.height) : undefined,
       autoAssignAwb: Boolean(body.autoAssignAwb),
+      recipientPhone: body.recipientPhone || body.phone,
     });
     return ApiResponse.success(result.shipment, result.message, 200);
   }
@@ -48,6 +49,7 @@ export class ShippingController {
       length: body.length ? Number(body.length) : 15,
       breadth: body.breadth ? Number(body.breadth) : 15,
       height: body.height ? Number(body.height) : 10,
+      recipientPhone: body.recipientPhone || body.phone,
     });
     return ApiResponse.success(result.shipment, result.message, 201);
   }

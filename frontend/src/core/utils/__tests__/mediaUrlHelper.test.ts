@@ -212,6 +212,20 @@ describe("mediaUrlHelper - Enterprise Gallery & Color Swapping", () => {
       const output = resolveMagentoMediaUrls(input);
       expect(output).toBe('<p><img src="https://store4riders.s3.ap-south-2.amazonaws.com/wysiwyg/test-chart.jpg" /></p>');
     });
+
+    it("handles CSV quadruple quotes without creating empty src attribute", () => {
+      const input = '<img style=""""float: left;"""" src=""""{{media url=""""wysiwyg/Rynox product description photos/Rynox Optimus Tank Bag_2024_size_chart.jpg""""}}"""" alt=""""Size Chart"""" width=""""544"""" height=""""725"""">';
+      const output = resolveMagentoMediaUrls(input);
+      expect(output).not.toContain('src=""');
+      expect(output).toContain('src="https://store4riders.s3.ap-south-2.amazonaws.com/wysiwyg/Rynox%20product%20description%20photos/Rynox%20Optimus%20Tank%20Bag_2024_size_chart.jpg"');
+      expect(output).toContain('alt="Size Chart"');
+    });
+
+    it("corrects 2-Shells.jpg to 2-Shells.png for Magento icon assets", () => {
+      const input = '<img src="{{media url="wysiwyg/2-Shells.jpg"}}">';
+      const output = resolveMagentoMediaUrls(input);
+      expect(output).toContain("2-Shells.png");
+    });
   });
 
   describe("getProductThumbnailUrl & getProductCandidateImages", () => {

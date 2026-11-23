@@ -15,11 +15,14 @@ const userSchema = new Schema<IUser>(
   {
     email: { type: String, required: true, unique: true, index: true },
     firstName: { type: String, required: true },
-    lastName: { type: String, required: true },
-    phone: { type: String },
+    lastName: { type: String, default: "" },
+    phone: { type: String, default: "" },
     role: { type: String, enum: ["super_admin", "admin", "logistic", "customer_care", "product_manager", "order_manager", "marketing_manager", "customer_support", "customer"], default: "customer" },
     isActive: { type: Boolean, default: true },
-    addresses: [addressSchema],
+    addresses: {
+      type: [addressSchema],
+      default: [],
+    },
     // We add password directly to schema although it's not in IUser type,
     // and we mark it select: false so it doesn't leak.
     password: { type: String, required: true, select: false },

@@ -9,15 +9,17 @@ import { ProductModel } from "../../modules/product/product.model";
 import mongoose from "mongoose";
 import { CategoryModel } from "../../modules/category/category.model";
 import { BrandModel } from "../../modules/brand/brand.model";
-import { slugify } from "@store4riders/shared-utils";
-
+import { slugify, extractProductDimensions } from "@store4riders/shared-utils";
 
 // BullMQ Worker dedicated connection
 const connection = createWorkerRedisConnection("migrationWorker");
 
 const KNOWN_FIELDS = new Set([
   "name", "description", "short_description", "url_key", "sku", "price", "special_price",
-  "weight", "is_in_stock", "product_type", "categories", "base_image", "additional_images",
+  "weight", "weight_unit", "length", "breadth", "width", "height", "dimension_unit", "dimensions",
+  "package_length", "package_width", "package_breadth", "package_height", "package_dimensions",
+  "shipping_length", "shipping_width", "shipping_breadth", "shipping_height",
+  "l", "w", "h", "b", "is_in_stock", "product_type", "categories", "base_image", "additional_images",
   "configurable_variations", "related_skus", "upsell_skus", "crosssell_skus", "qty",
   "status", "product_online", "visibility", "tax_class_name", "brand",
   "meta_title", "meta_keyword", "meta_keywords", "meta_description", "size_chart", "sizechart", "gender",
@@ -203,6 +205,7 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
     const configurableVariations = row.configurable_variations || "";
     const allowBackorders = row.backorders && row.backorders !== "0" ? true : false;
     const isFreeShipping = row.free_shipping === "1" ? true : false;
+    const parsedDims = extractProductDimensions(row, attributes);
 
     return {
       name: row.name || row.sku,
@@ -215,6 +218,10 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
       specialPriceFromDate: row.special_from_date ? new Date(row.special_from_date) : undefined,
       specialPriceToDate: row.special_to_date ? new Date(row.special_to_date) : undefined,
       weight,
+      length: parsedDims.length,
+      breadth: parsedDims.breadth,
+      height: parsedDims.height,
+      dimensionUnit: parsedDims.dimensionUnit || "cm",
       stockStatus,
       qty,
       allowBackorders,
@@ -326,6 +333,9 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
           imageUrl: childData.images[0]?.url,
           // DEEP CODING: Exact Magento CSV mapping for Child variants
           weight: childData.weight,
+          length: childData.length,
+          breadth: childData.breadth,
+          height: childData.height,
           status: childData.status === "published" ? "enabled" : "disabled",
           visibility: childData.visibility || "Not Visible Individually",
           images: childData.images || []

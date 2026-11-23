@@ -2,10 +2,10 @@ import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 import { logger } from "../utils/logger";
 import { AppError } from "../errors/AppError";
 
-const REGION = process.env.SES_REGION || process.env.AWS_REGION || "ap-south-1";
-const FROM_EMAIL = process.env.SES_FROM_EMAIL || "noreply@store4riders.com";
-const ACCESS_KEY_ID = process.env.SES_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
-const SECRET_ACCESS_KEY = process.env.SES_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+const REGION = (process.env.SES_REGION || process.env.AWS_REGION || "ap-south-1").trim();
+const FROM_EMAIL = (process.env.SES_FROM_EMAIL || "noreply@store4riders.com").trim();
+const ACCESS_KEY_ID = (process.env.SES_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID)?.trim();
+const SECRET_ACCESS_KEY = (process.env.SES_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY)?.trim();
 
 let sesClient: SESClient | null = null;
 

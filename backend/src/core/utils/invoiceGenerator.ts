@@ -206,73 +206,98 @@ export class InvoiceGenerator {
         doc.fontSize(22).font("Helvetica-Bold").fillColor(textColor).text("TAX INVOICE", 40, 35, { align: "right" });
         doc.fontSize(8).font("Helvetica").fillColor(mutedTextColor).text("Original for Recipient", 40, 60, { align: "right" });
 
-        // SOLD BY / DISPATCH WAREHOUSE
-        doc.fontSize(8.5).font("Helvetica-Bold").fillColor(textColor).text("SOLD BY / DISPATCHED FROM:", 40, 75);
-        doc.font("Helvetica-Bold").fontSize(8).text(warehouseDisplayName, 40, 87);
-        doc.font("Helvetica").fontSize(7.5).fillColor(mutedTextColor).text(storeAddress, 40, 97, { width: 250 });
-        doc.text(`${storeCity}, ${storeState} - ${storePin}${storePhone ? ` | Phone: ${storePhone}` : ""}`, 40, 107);
-        doc.font("Helvetica-Bold").fillColor(textColor).text(`GSTIN: ${storeGstin}`, 40, 117);
+        // SOLD BY / DISPATCH WAREHOUSE (Dynamic vertical flow tracking doc.y to eliminate any text overlap)
+        let sellerY = 75;
+        doc.fontSize(8.5).font("Helvetica-Bold").fillColor(textColor).text("SOLD BY / DISPATCHED FROM:", 40, sellerY);
+        sellerY = doc.y + 2;
+
+        doc.font("Helvetica-Bold").fontSize(8).text(warehouseDisplayName, 40, sellerY, { width: 280 });
+        sellerY = doc.y + 2;
+
+        doc.font("Helvetica").fontSize(7.5).fillColor(mutedTextColor).text(storeAddress, 40, sellerY, { width: 280, lineGap: 1 });
+        sellerY = doc.y + 2;
+
+        const cityStatePinPhone = `${storeCity}, ${storeState} - ${storePin}${storePhone ? ` | Phone: ${storePhone}` : ""}`;
+        doc.text(cityStatePinPhone, 40, sellerY, { width: 280 });
+        sellerY = doc.y + 2;
+
+        const gstinText = `GSTIN: ${storeGstin}`;
+        doc.font("Helvetica-Bold").fillColor(textColor).text(gstinText, 40, sellerY, { width: 280 });
+        sellerY = doc.y + 8;
 
         // --- 2. TOP INFO BOX (Bill To | Invoice Details | Supply & Dispatch) ---
         const startX = 40;
-        let currentY = 132;
+        let currentY = Math.max(sellerY, 134);
         const fullWidth = 515;
         const col1Width = 205; // Bill To
         const col2Width = 150; // Invoice Details
         const col3Width = 160; // Place of Supply & Dispatch
-        const topBoxHeight = 74;
+
+        let topBoxHeight = 78;
+        if (order.businessName && order.customerGstin) {
+          topBoxHeight = 92;
+        } else if (order.businessName || order.customerGstin) {
+          topBoxHeight = 84;
+        }
 
         doc.rect(startX, currentY, fullWidth, topBoxHeight).strokeColor(borderColor).stroke();
         doc.moveTo(startX + col1Width, currentY).lineTo(startX + col1Width, currentY + topBoxHeight).stroke();
         doc.moveTo(startX + col1Width + col2Width, currentY).lineTo(startX + col1Width + col2Width, currentY + topBoxHeight).stroke();
 
         // Box 1: BILL TO / SHIP TO
-        doc.fontSize(8).font("Helvetica-Bold").fillColor(textColor).text("BILL TO / SHIP TO:", startX + 8, currentY + 6);
-        doc.font("Helvetica-Bold").fontSize(8).text(order.shippingAddress.fullName, startX + 8, currentY + 18);
+        let billToY = currentY + 6;
+        doc.fontSize(8).font("Helvetica-Bold").fillColor(textColor).text("BILL TO / SHIP TO:", startX + 8, billToY);
+        billToY += 12;
+
+        doc.font("Helvetica-Bold").fontSize(8).text(order.shippingAddress.fullName, startX + 8, billToY, { width: col1Width - 16, ellipsis: true });
+        billToY += 11;
         
-        let billToY = currentY + 29;
         if (order.businessName) {
-          doc.font("Helvetica-Bold").fontSize(7).fillColor(brandRed).text(`Co: ${order.businessName}`, startX + 8, billToY, { width: 190, ellipsis: true });
+          doc.font("Helvetica-Bold").fontSize(7).fillColor(brandRed).text(`Co: ${order.businessName}`, startX + 8, billToY, { width: col1Width - 16, ellipsis: true });
           billToY += 9;
         }
         if (order.customerGstin) {
-          doc.font("Helvetica-Bold").fontSize(7).fillColor(brandRed).text(`Buyer GSTIN: ${order.customerGstin}`, startX + 8, billToY);
+          doc.font("Helvetica-Bold").fontSize(7).fillColor(brandRed).text(`Buyer GSTIN: ${order.customerGstin}`, startX + 8, billToY, { width: col1Width - 16 });
           billToY += 9;
         }
-        doc.font("Helvetica").fontSize(7.5).fillColor(mutedTextColor).text(order.shippingAddress.addressLine1, startX + 8, billToY, { width: 190, height: 9, ellipsis: true });
+
+        const buyerAddressLine = order.shippingAddress.addressLine1 || order.shippingAddress.street || "";
+        doc.font("Helvetica").fontSize(7.5).fillColor(mutedTextColor).text(buyerAddressLine, startX + 8, billToY, { width: col1Width - 16, ellipsis: true });
         billToY += 9;
-        doc.text(`${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.pincode}`, startX + 8, billToY);
-        doc.text(`Phone: ${order.shippingAddress.phone}`, startX + 8, billToY + 9);
+        doc.text(`${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.pincode}`, startX + 8, billToY, { width: col1Width - 16, ellipsis: true });
+        billToY += 9;
+        doc.text(`Phone: ${order.shippingAddress.phone}`, startX + 8, billToY, { width: col1Width - 16 });
 
         // Box 2: INVOICE & ORDER DETAILS
         doc.font("Helvetica-Bold").fontSize(8).fillColor(textColor).text("INVOICE NO:", startX + col1Width + 8, currentY + 6);
         const invoiceNo = `INV-${new Date(order.createdAt).getFullYear()}-${order.orderNumber?.slice(-5) || "00001"}`;
         doc.font("Helvetica").fontSize(8).text(invoiceNo, startX + col1Width + 8, currentY + 17);
 
-        doc.font("Helvetica-Bold").text("ORDER ID:", startX + col1Width + 8, currentY + 30);
-        doc.font("Helvetica").text(`#${order.orderNumber || order.id}`, startX + col1Width + 8, currentY + 41);
+        doc.font("Helvetica-Bold").text("ORDER ID:", startX + col1Width + 8, currentY + 31);
+        doc.font("Helvetica").text(`#${order.orderNumber || order.id}`, startX + col1Width + 8, currentY + 42, { width: col2Width - 16, ellipsis: true });
 
-        doc.font("Helvetica-Bold").text("DATE:", startX + col1Width + 8, currentY + 53);
-        doc.font("Helvetica").text(new Date(order.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }), startX + col1Width + 38, currentY + 53);
+        doc.font("Helvetica-Bold").text("DATE:", startX + col1Width + 8, currentY + 56);
+        doc.font("Helvetica").text(new Date(order.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }), startX + col1Width + 38, currentY + 56);
 
         // Box 3: DISPATCH & GST PLACE OF SUPPLY
         doc.font("Helvetica-Bold").fontSize(8).fillColor(textColor).text("DISPATCH FROM:", startX + col1Width + col2Width + 8, currentY + 6);
-        doc.font("Helvetica").fontSize(7.5).fillColor(mutedTextColor).text(`${storeCity}, ${storeState}`, startX + col1Width + col2Width + 8, currentY + 17, { width: 145, ellipsis: true });
+        doc.font("Helvetica").fontSize(7.5).fillColor(mutedTextColor).text(`${storeCity}, ${storeState}`, startX + col1Width + col2Width + 8, currentY + 17, { width: col3Width - 16, ellipsis: true });
 
-        doc.font("Helvetica-Bold").fontSize(8).fillColor(textColor).text("PLACE OF SUPPLY:", startX + col1Width + col2Width + 8, currentY + 30);
-        doc.font("Helvetica").fontSize(7.5).fillColor(mutedTextColor).text(order.shippingAddress.state, startX + col1Width + col2Width + 8, currentY + 41);
+        doc.font("Helvetica-Bold").fontSize(8).fillColor(textColor).text("PLACE OF SUPPLY:", startX + col1Width + col2Width + 8, currentY + 31);
+        doc.font("Helvetica").fontSize(7.5).fillColor(mutedTextColor).text(order.shippingAddress.state, startX + col1Width + col2Width + 8, currentY + 42, { width: col3Width - 16, ellipsis: true });
 
-        doc.font("Helvetica-Bold").fontSize(8).fillColor(textColor).text("TAX REGIME:", startX + col1Width + col2Width + 8, currentY + 53);
+        doc.font("Helvetica-Bold").fontSize(8).fillColor(textColor).text("TAX REGIME:", startX + col1Width + col2Width + 8, currentY + 56);
         const regimeText = dynamicTaxRate === 0
           ? (isInterState ? "Inter-State (0% Exempt)" : "Intra-State (0% Exempt)")
           : (isInterState ? `Inter-State (IGST ${igstRateStr})` : `Intra-State (CGST ${halfRateStr} + SGST ${halfRateStr})`);
         doc.font("Helvetica-Bold").fontSize(7.5).fillColor(dynamicTaxRate === 0 ? textColor : (isInterState ? brandRed : "#15803d")).text(
           regimeText,
           startX + col1Width + col2Width + 8,
-          currentY + 63
+          currentY + 67,
+          { width: col3Width - 16 }
         );
 
-        currentY += 80;
+        currentY += topBoxHeight + 8;
 
         // --- 3. ITEMS TABLE HEADER ---
         const tableHeaderHeight = 20;
@@ -559,9 +584,17 @@ export class InvoiceGenerator {
         // Left Side: Terms & Conditions (DYNAMIC VERTICAL FLOW - NO OVERLAPPING)
         doc.fontSize(7.5).font("Helvetica-Bold").fillColor(textColor).text("TERMS & CONDITIONS (STORE4RIDERS EXCHANGE POLICY):", startX + 8, currentY + 6);
         
+        const rawReturnDays = (order as any).returnWindowDays !== undefined && (order as any).returnWindowDays !== null
+          ? (order as any).returnWindowDays
+          : settings.returnWindowDays;
+        const exchangeDays = typeof rawReturnDays === "number" && rawReturnDays >= 0 ? rawReturnDays : 7;
+        const exchangePolicyText = exchangeDays > 0
+          ? `1. ${exchangeDays}-Day Exchange Policy: Size and fit exchanges only within ${exchangeDays} days of delivery.`
+          : `1. Final Sale Policy: Size and fit exchanges are not applicable for this item.`;
+
         doc.fontSize(6.5).font("Helvetica").fillColor(mutedTextColor);
         const termsList = [
-          "1. 7-Day Exchange Policy: Size and fit exchanges only within 7 days of delivery.",
+          exchangePolicyText,
           "2. Strict No-Refund Policy: No monetary refunds. Size replacements provided for unused items.",
           "3. Gear must be unworn with original manufacturer tags, labels, and box packaging intact.",
           "4. Warranty claims are governed strictly by the respective brand/manufacturer policy.",

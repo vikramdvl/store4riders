@@ -41,7 +41,7 @@ export class OrderRepository {
     for (const order of orders) {
       if (order && order.items && Array.isArray(order.items)) {
         for (const item of order.items) {
-          if (!item.image) {
+          if (!item.image || !item.slug || !item.name) {
             if (item.productId && mongoose.Types.ObjectId.isValid(item.productId)) {
               missingProductIds.add(String(item.productId));
             } else if (item.sku) {
@@ -79,11 +79,11 @@ export class OrderRepository {
       for (const order of orders) {
         if (order && order.items && Array.isArray(order.items)) {
           for (const item of order.items) {
-            if (!item.image) {
+            if (!item.image || !item.slug || !item.name) {
               const p = (item.productId ? productMap.get(String(item.productId)) : null) || (item.sku ? skuMap.get(String(item.sku)) : null);
               if (p) {
                 const variantObj = item.variantId ? p.variants?.find((v: any) => v.id === item.variantId || v.sku === item.variantId) : null;
-                item.image = variantObj?.image || p.images?.[0]?.url || p.thumbnail || p.image || "";
+                if (!item.image) item.image = variantObj?.image || p.images?.[0]?.url || p.thumbnail || p.image || "";
                 if (!item.slug) item.slug = p.slug || "";
                 if (!item.name && p.name) item.name = p.name;
               }
@@ -103,7 +103,13 @@ export class OrderRepository {
   }
 
   static async findById(id: string, session?: ClientSession): Promise<IOrder | null> {
-    const order = await OrderModel.findById(id).session(session || null).lean().exec() as unknown as IOrder | null;
+    const isObjectId = mongoose.Types.ObjectId.isValid(id);
+    const order = await OrderModel.findOne({
+      $or: [
+        ...(isObjectId ? [{ _id: id }] : []),
+        { orderNumber: id }
+      ]
+    }).session(session || null).lean().exec() as unknown as IOrder | null;
     if (order) await OrderRepository.populateItemImages([order]);
     return order;
   }
@@ -132,6 +138,7 @@ export class OrderRepository {
             $or: [
               { guestEmail: emailRegex },
               { "shippingAddress.email": emailRegex },
+              { customerEmail: emailRegex },
             ],
           },
           {
@@ -139,6 +146,7 @@ export class OrderRepository {
               { userId: { $exists: false } },
               { userId: null },
               { userId: "" },
+              { userId: { $ne: userId } },
             ],
           },
         ],
@@ -147,6 +155,7 @@ export class OrderRepository {
         $set: {
           userId,
           guestEmail: cleanEmail.toLowerCase(),
+          customerEmail: cleanEmail.toLowerCase(),
         },
       }
     ).exec();

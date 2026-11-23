@@ -29,6 +29,7 @@ export class ShipmentService {
       breadth?: number;
       height?: number;
       autoAssignAwb?: boolean;
+      recipientPhone?: string;
     },
     warehouseIdLegacy?: string
   ): Promise<any> {
@@ -50,6 +51,17 @@ export class ShipmentService {
       throw new NotFoundError("Order");
     }
 
+    if (opts.recipientPhone) {
+      const cleanPhone = opts.recipientPhone.replace(/\D/g, "").slice(-10);
+      if (cleanPhone.length === 10) {
+        if (!order.shippingAddress) {
+          (order as any).shippingAddress = {};
+        }
+        order.shippingAddress.phone = cleanPhone;
+        await OrderModel.findByIdAndUpdate(orderId, { "shippingAddress.phone": cleanPhone });
+      }
+    }
+
     // Check if shipment already created for this order
     const existingShipment = await ShipmentModel.findOne({ orderId });
     if (existingShipment && existingShipment.provider === "shiprocket" && existingShipment.providerShipmentId) {
@@ -59,39 +71,63 @@ export class ShipmentService {
       };
     }
 
-    // Determine total package weight: user-provided weightKg > product DB weights > fallback
+    // Determine package weight & dimensions: user-provided > product DB weights/dimensions > sensible defaults
     let totalWeight = 0;
-    if (weightKg !== undefined && weightKg !== null && Number(weightKg) > 0) {
-      totalWeight = Number(weightKg);
-    } else {
+    let computedMaxL = 0;
+    let computedMaxB = 0;
+    let computedTotalH = 0;
+
     try {
       const productIds = order.items.map((i: any) => i.productId);
-      const products = await ProductModel.find({ _id: { $in: productIds } }).select("weight weightUnit").lean().exec();
-      const weightMap = new Map(products.map((p: any) => {
-        const rawW = Number(p.weight) || 0.5;
-        const u = String(p.weightUnit || "kg").toLowerCase();
+      const products = await ProductModel.find({ _id: { $in: productIds } })
+        .select("weight weightUnit length breadth height variants")
+        .lean()
+        .exec();
+
+      const productMap = new Map(products.map((p: any) => [String(p._id), p]));
+
+      for (const item of order.items) {
+        const p: any = productMap.get(String(item.productId));
+        const rawW = Number((item as any).weight || p?.weight || 0.5);
+        const u = String((item as any).weightUnit || p?.weightUnit || "kg").toLowerCase();
         let inKg = rawW;
         if (u === "g" || u === "ml") {
           inKg = rawW / 1000;
         } else if (u === "l") {
           inKg = rawW; // 1 Litre approx 1 Kg
         }
-        return [String(p._id), Math.max(0.05, inKg)];
-      }));
+        totalWeight += Math.max(0.05, inKg) * (item.quantity || 1);
 
-      for (const item of order.items) {
-        const itemWeight = weightMap.get(String(item.productId)) || 0.5;
-        totalWeight += itemWeight * item.quantity;
+        // Auto-detect dimensions from child variant or parent product
+        const variant = (p?.variants || []).find(
+          (v: any) => v.id === item.variantId || v.sku === item.sku
+        );
+        const l = Number(variant?.length || p?.length || (item as any).length || 0);
+        const b = Number(variant?.breadth || p?.breadth || (item as any).breadth || (item as any).width || 0);
+        const h = Number(variant?.height || p?.height || (item as any).height || 0);
+
+        if (l > 0) computedMaxL = Math.max(computedMaxL, l);
+        if (b > 0) computedMaxB = Math.max(computedMaxB, b);
+        if (h > 0) computedTotalH += h * (item.quantity || 1);
       }
     } catch {
       totalWeight = order.items.length * 0.5;
     }
+
+    if (weightKg !== undefined && weightKg !== null && Number(weightKg) > 0) {
+      totalWeight = Number(weightKg);
     }
     if (totalWeight <= 0) totalWeight = 0.5;
 
-    const finalLength = (customL !== undefined && customL !== null && Number(customL) > 0) ? Number(customL) : 15;
-    const finalBreadth = (customB !== undefined && customB !== null && Number(customB) > 0) ? Number(customB) : 15;
-    const finalHeight = (customH !== undefined && customH !== null && Number(customH) > 0) ? Number(customH) : 10;
+    const finalLength = (customL !== undefined && customL !== null && Number(customL) > 0)
+      ? Number(customL)
+      : (computedMaxL > 0 ? Math.round(computedMaxL) : 15);
+    const finalBreadth = (customB !== undefined && customB !== null && Number(customB) > 0)
+      ? Number(customB)
+      : (computedMaxB > 0 ? Math.round(computedMaxB) : 15);
+    const finalHeight = (customH !== undefined && customH !== null && Number(customH) > 0)
+      ? Number(customH)
+      : (computedTotalH > 0 ? Math.round(computedTotalH) : 10);
 
     // Resolve warehouse: explicitly passed > order.warehouseId > default warehouse
     let targetWarehouse: any = null;
@@ -219,12 +255,61 @@ export class ShipmentService {
     length?: number;
     breadth?: number;
     height?: number;
+    recipientPhone?: string;
   }): Promise<any> {
-    const { orderId, provider, warehouseId, weightKg, length = 15, breadth = 15, height = 10 } = params;
+    const { orderId, provider, warehouseId, weightKg, recipientPhone } = params;
 
     const order = await OrderModel.findById(orderId);
     if (!order) {
       throw new NotFoundError("Order");
+    }
+
+    if (recipientPhone) {
+      const cleanPhone = recipientPhone.replace(/\D/g, "").slice(-10);
+      if (cleanPhone.length === 10) {
+        if (!order.shippingAddress) {
+          (order as any).shippingAddress = {};
+        }
+        order.shippingAddress.phone = cleanPhone;
+        await OrderModel.findByIdAndUpdate(orderId, { "shippingAddress.phone": cleanPhone });
+      }
+    }
+
+    let finalLength = params.length;
+    let finalBreadth = params.breadth;
+    let finalHeight = params.height;
+
+    if (!finalLength || !finalBreadth || !finalHeight) {
+      try {
+        const productIds = order.items.map((i: any) => i.productId);
+        const products = await ProductModel.find({ _id: { $in: productIds } })
+          .select("length breadth height variants")
+          .lean()
+          .exec();
+        const productMap = new Map(products.map((p: any) => [String(p._id), p]));
+        let maxL = 0;
+        let maxB = 0;
+        let sumH = 0;
+
+        for (const item of order.items) {
+          const p: any = productMap.get(String(item.productId));
+          const variant = (p?.variants || []).find((v: any) => v.id === item.variantId || v.sku === item.sku);
+          const l = Number(variant?.length || p?.length || 0);
+          const b = Number(variant?.breadth || p?.breadth || 0);
+          const h = Number(variant?.height || p?.height || 0);
+          if (l > 0) maxL = Math.max(maxL, l);
+          if (b > 0) maxB = Math.max(maxB, b);
+          if (h > 0) sumH += h * (item.quantity || 1);
+        }
+
+        if (!finalLength) finalLength = maxL > 0 ? Math.round(maxL) : 15;
+        if (!finalBreadth) finalBreadth = maxB > 0 ? Math.round(maxB) : 15;
+        if (!finalHeight) finalHeight = sumH > 0 ? Math.round(sumH) : 10;
+      } catch {
+        if (!finalLength) finalLength = 15;
+        if (!finalBreadth) finalBreadth = 15;
+        if (!finalHeight) finalHeight = 10;
+      }
     }
 
     const warehouse = await WarehouseRepository.findById(warehouseId);
@@ -255,9 +340,9 @@ export class ShipmentService {
         quantity: i.quantity,
         unitPrice: i.unitPrice,
       })),
-      length,
-      breadth,
-      height,
+      length: finalLength,
+      breadth: finalBreadth,
+      height: finalHeight,
       weight: weightKg,
     };
 
@@ -829,6 +914,18 @@ export class ShipmentService {
 
       await shipment.save();
       logger.info(`[ShipmentService] Updated shipment status from ${provider} webhook to ${shipment.status}`);
+
+      try {
+        const { adminEventHub } = await import("../../core/events/adminEventHub");
+        adminEventHub.publish("SHIPMENT_UPDATED", {
+          shipmentId: String(shipment._id),
+          orderId: String(shipment.orderId),
+          orderNumber: order?.orderNumber,
+          awb: shipment.awb,
+          courierName: shipment.courierName,
+          status: shipment.status,
+        });
+      } catch {}
     }
 
     // Sync Order warehouse and invalidate cached invoice URL

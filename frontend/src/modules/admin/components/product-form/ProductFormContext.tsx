@@ -66,6 +66,14 @@ export interface ProductFormContextType {
   setWeight: (v: number | "") => void;
   weightUnit: "kg" | "g" | "ml" | "L";
   setWeightUnit: (v: "kg" | "g" | "ml" | "L") => void;
+  length: number | "";
+  setLength: (v: number | "") => void;
+  breadth: number | "";
+  setBreadth: (v: number | "") => void;
+  height: number | "";
+  setHeight: (v: number | "") => void;
+  dimensionUnit: "cm" | "in" | "mm";
+  setDimensionUnit: (v: "cm" | "in" | "mm") => void;
   isFeatured: boolean;
   setIsFeatured: (v: boolean) => void;
   showFeaturedBadge: boolean;

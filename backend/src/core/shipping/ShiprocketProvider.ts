@@ -72,33 +72,51 @@ export class ShiprocketProvider implements ShippingProvider {
       : await WarehouseRepository.findDefault();
 
     const fallbackWarehouse = (!warehouse?.shiprocketLocationId) ? await WarehouseRepository.findDefault() : warehouse;
-    if (!fallbackWarehouse?.shiprocketLocationId) {
-      throw new AppError("No warehouse configured with a valid Shiprocket Location Nickname. Please configure in Settings -> Warehouses.", 400);
+    const pickupLocation = fallbackWarehouse?.shiprocketLocationId?.trim();
+    if (!pickupLocation) {
+      throw new AppError("Selected warehouse has no Shiprocket Location Nickname. Please select a warehouse with a valid Shiprocket location or sync from Shiprocket.", 400);
     }
-    const pickupLocation = fallbackWarehouse.shiprocketLocationId;
 
-    const addrStreet = (input.shippingAddress as any)?.street;
-    const billingAddress = [
-      input.shippingAddress.addressLine1,
-      addrStreet,
-      input.shippingAddress.addressLine2
-    ].filter(Boolean).join(", ") || `${input.shippingAddress.city}, ${input.shippingAddress.state}`;
+    const cleanPhone = (input.shippingAddress.phone || "").replace(/\D/g, "").slice(-10);
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      throw new AppError("Customer phone number must contain a valid 10-digit mobile number for Shiprocket courier dispatch.", 400);
+    }
+    if (/^(\d)\1{9}$/.test(cleanPhone) || cleanPhone === "1234567890" || cleanPhone === "0123456789") {
+      throw new AppError(`Customer phone number '${cleanPhone}' is an invalid test number. Shiprocket rejects dummy numbers (like ${cleanPhone}). Please update the recipient phone to a valid 10-digit mobile number.`, 400);
+    }
+
+    const cleanPincode = (input.shippingAddress.pincode || "").replace(/\D/g, "").slice(0, 6);
+    if (!cleanPincode || cleanPincode.length !== 6) {
+      throw new AppError("Customer shipping pincode must be a 6-digit postal code.", 400);
+    }
+
+    const rawFullName = (input.shippingAddress.fullName || "Customer").trim();
+    const nameParts = rawFullName.split(/\s+/);
+    const firstName = nameParts[0] || "Customer";
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+
+    const streetLine = input.shippingAddress.addressLine1 || (input.shippingAddress as any)?.street || "";
+    const line2 = input.shippingAddress.addressLine2 || "";
+    let fullBillingAddress = [streetLine, line2].filter(Boolean).join(", ").trim();
+    if (fullBillingAddress.length < 10) {
+      fullBillingAddress = `${fullBillingAddress}, ${input.shippingAddress.city}, ${input.shippingAddress.state} - ${cleanPincode}`;
+    }
     
     try {
       const payload = {
         order_id: input.orderNumber,
         order_date: new Date().toISOString().split('T')[0],
         pickup_location: pickupLocation, // Shiprocket expects the nickname or pincode registered in their system
-        billing_customer_name: input.shippingAddress.fullName,
-        billing_last_name: "",
-        billing_address: billingAddress.length >= 10 ? billingAddress : `${billingAddress}, India`,
+        billing_customer_name: firstName,
+        billing_last_name: lastName,
+        billing_address: fullBillingAddress,
         billing_address_2: input.shippingAddress.addressLine2 || "",
         billing_city: input.shippingAddress.city,
-        billing_pincode: input.shippingAddress.pincode,
+        billing_pincode: cleanPincode,
         billing_state: input.shippingAddress.state,
-        billing_country: input.shippingAddress.country,
-        billing_email: input.email,
-        billing_phone: input.shippingAddress.phone,
+        billing_country: input.shippingAddress.country || "India",
+        billing_email: input.email || "customer@store4riders.com",
+        billing_phone: cleanPhone,
         shipping_is_billing: true,
         order_items: input.items.map(item => ({
           name: item.name,
@@ -109,10 +127,10 @@ export class ShiprocketProvider implements ShippingProvider {
         payment_method: input.paymentMethod === "cod" ? "COD" : "Prepaid",
         cod_amount: input.paymentMethod === "cod" ? input.totalAmount : 0,
         sub_total: input.totalAmount,
-        length: input.length,
-        breadth: input.breadth,
-        height: input.height,
-        weight: input.weight
+        length: Math.max(0.5, Number(input.length) || 10),
+        breadth: Math.max(0.5, Number(input.breadth) || 10),
+        height: Math.max(0.5, Number(input.height) || 10),
+        weight: Math.max(0.05, Number(input.weight) || 0.5)
       };
 
       const response = await shippingPost(`${this.baseUrl}/orders/create/adhoc`, payload, {
@@ -169,10 +187,21 @@ export class ShiprocketProvider implements ShippingProvider {
           : "Order created successfully in Shiprocket Dashboard. You can select courier and place order in Shiprocket."
       };
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || 
-        (error.response?.data?.errors ? JSON.stringify(error.response.data.errors) : null) || 
-        error.message || 
-        "Failed to create Shiprocket shipment";
+      const resData = error.response?.data;
+      let errorMsg = "Failed to create Shiprocket shipment";
+
+      if (typeof resData?.message === "string" && resData.message.trim()) {
+        errorMsg = resData.message.trim();
+      } else if (resData?.errors && typeof resData.errors === "object") {
+        const details = Object.entries(resData.errors)
+          .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`)
+          .join(" | ");
+        errorMsg = details || "Validation error from Shiprocket";
+      } else if (typeof resData?.error === "string" && resData.error.trim()) {
+        errorMsg = resData.error.trim();
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
       logger.error(`Shiprocket Create Shipment Error: ${errorMsg}`);
       throw new AppError(errorMsg, 400);
     }

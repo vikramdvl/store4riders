@@ -58,10 +58,12 @@ export class OrderController {
     const userId = OrderValidator.extractUserId(req);
     try {
       const { UserModel } = await import("../user/user.model");
-      const userDoc: any = await UserModel.findById(userId).select("email").lean().exec();
+      const userDoc: any = await UserModel.findById(userId).select("email phone addresses").lean().exec();
       if (userDoc?.email) {
         await OrderRepository.linkGuestOrders(userDoc.email, userId);
       }
+      const { AuthService } = await import("../auth/auth.service");
+      await AuthService.syncUserFromLinkedOrders(userId, userDoc);
     } catch {
       // Non-blocking sync fallback
     }

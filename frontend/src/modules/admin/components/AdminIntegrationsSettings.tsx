@@ -46,7 +46,22 @@ export function AdminIntegrationsSettings() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateMutation.mutate(formData);
+    // Send ONLY integration-related fields — prevents overwriting other tabs' data
+    const integrationPayload: Record<string, any> = {};
+    const integrationKeys = [
+      "shiprocketEmail", "shiprocketPassword", "shiprocketPickupLocation",
+      "delhiveryApiKey", "delhiveryClientName", "delhiveryPickupLocation",
+      "xpressbeesEmail", "xpressbeesPassword", "xpressbeesAccountId", "xpressbeesPickupLocation",
+      "payuMerchantKey", "payuSalt",
+      "ccavenueMerchantId", "ccavenueAccessCode", "ccavenueWorkingKey",
+      "paymentEnvironment",
+    ];
+    for (const key of integrationKeys) {
+      if (formData[key] !== undefined) {
+        integrationPayload[key] = formData[key];
+      }
+    }
+    updateMutation.mutate(integrationPayload);
   };
 
   if (isLoading) return <div className="p-8 text-center animate-pulse">Loading secure settings...</div>;

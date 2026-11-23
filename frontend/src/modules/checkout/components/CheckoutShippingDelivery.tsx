@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { formatPrice } from "@store4riders/shared-utils";
+import { formatPrice, validateIndianMobile } from "@store4riders/shared-utils";
 import { ChevronDownIcon, TruckIcon, UserIcon } from "@heroicons/react/24/outline";
 import { IUserAddress } from "@store4riders/shared-types";
 import { useShippingServiceability } from "@/core/hooks/useShippingServiceability";
@@ -30,6 +30,7 @@ interface CheckoutShippingDeliveryProps {
   setErrorMessage: (msg: string) => void;
   errorMessage: string;
   fieldErrors?: Record<string, string>;
+  setFieldErrors?: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setCurrentStep: (step: 1 | 2) => void;
   handleContinueToPayment: () => void;
   shippingCost: number;
@@ -54,6 +55,7 @@ export const CheckoutShippingDelivery = ({
   setErrorMessage,
   errorMessage,
   fieldErrors = {},
+  setFieldErrors,
   setCurrentStep,
   handleContinueToPayment,
   shippingCost,
@@ -162,6 +164,15 @@ export const CheckoutShippingDelivery = ({
                 placeholder="Enter your mobile number"
                 value={formData.phone || ""}
                 onChange={handleInputChange}
+                onBlur={() => {
+                  const isIndia = formData.countryCode === "IN" || !formData.countryCode;
+                  if (isIndia && formData.phone && setFieldErrors) {
+                    const check = validateIndianMobile(formData.phone);
+                    if (!check.isValid) {
+                      setFieldErrors(prev => ({ ...prev, phone: check.error || "Please enter a valid mobile number." }));
+                    }
+                  }
+                }}
                 className={`w-full border ${fieldErrors.phone ? 'border-red-400 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200/90 bg-slate-50/80 hover:bg-white focus:bg-white focus:border-banner focus:ring-4 focus:ring-banner/10'} rounded-r-xl px-4 py-3 text-base md:text-sm text-neutral-900 focus:outline-none transition-all duration-200 shadow-[inset_0_2px_4px_rgba(15,23,42,0.03)] border-l-0`}
               />
             </div>
@@ -181,6 +192,15 @@ export const CheckoutShippingDelivery = ({
               placeholder="Enter alternate number (optional)"
               value={formData.altPhone || ""}
               onChange={handleInputChange}
+              onBlur={() => {
+                const isIndia = formData.countryCode === "IN" || !formData.countryCode;
+                if (isIndia && formData.altPhone && setFieldErrors) {
+                  const check = validateIndianMobile(formData.altPhone);
+                  if (!check.isValid) {
+                    setFieldErrors(prev => ({ ...prev, altPhone: check.error || "Please enter a valid alternate mobile number." }));
+                  }
+                }
+              }}
               className={`w-full border ${fieldErrors.altPhone ? 'border-red-400 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200/90 bg-slate-50/80 hover:bg-white focus:bg-white focus:border-banner focus:ring-4 focus:ring-banner/10'} rounded-xl px-4 py-3 text-base md:text-sm text-neutral-900 focus:outline-none transition-all duration-200 shadow-[inset_0_2px_4px_rgba(15,23,42,0.03)]`}
             />
             {fieldErrors.altPhone && <span className="text-red-500 text-xs font-semibold animate-in fade-in zoom-in-95 duration-200">{fieldErrors.altPhone}</span>}

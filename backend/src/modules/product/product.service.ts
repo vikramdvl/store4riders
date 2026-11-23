@@ -2,7 +2,7 @@ import { ProductRepository } from "./product.repository";
 import { IProduct } from "@store4riders/shared-types";
 import { NotFoundError, ConflictError } from "../../core/errors/AppError";
 import { indexProduct, removeProductFromIndex } from "../../core/search/meilisearch";
-import { slugify } from "@store4riders/shared-utils";
+import { slugify, extractProductDimensions } from "@store4riders/shared-utils";
 import { getCache, setCache, deleteCache, clearProductCaches } from "../../core/cache/redis";
 import { buildSearchSlugs, resolveCanonicalCategorySlugs } from "./product.category-constants";
 import { supportsTransactions } from "../../core/database/transaction";
@@ -1649,11 +1649,23 @@ export class ProductService {
                 updateData.isFreeShipping = rawFreeShipping === "1" || String(rawFreeShipping).toLowerCase() === "true";
               }
 
-              // 4. Physical Specs & Logistics
+              // 4. Physical Specs & Logistics (Weight, Dimensions)
               const rawWeight = getCol(["weight", "Weight"]);
               if (rawWeight !== undefined && rawWeight !== "") {
                 updateData.weight = Number(rawWeight);
               }
+
+              const rawWeightUnit = getCol(["weight_unit", "weightUnit", "WeightUnit"]);
+              if (rawWeightUnit !== undefined && typeof rawWeightUnit === "string" && rawWeightUnit.trim()) {
+                updateData.weightUnit = rawWeightUnit.trim();
+              }
+
+              // Auto-catch dimensions from separate columns (length/breadth/height, l/w/h, etc.), combined string (30x20x10), or attributes
+              const parsedDims = extractProductDimensions(row, updateData.attributes);
+              if (parsedDims.length !== undefined) updateData.length = parsedDims.length;
+              if (parsedDims.breadth !== undefined) updateData.breadth = parsedDims.breadth;
+              if (parsedDims.height !== undefined) updateData.height = parsedDims.height;
+              if (parsedDims.dimensionUnit) updateData.dimensionUnit = parsedDims.dimensionUnit;
 
               const rawGender = getCol(["gender", "Gender"]);
               if (rawGender !== undefined && typeof rawGender === "string" && rawGender.trim()) {
@@ -1865,7 +1877,7 @@ export class ProductService {
     // Map to Magento CSV Headers with image labels and swatches
     const baseHeaders = [
       "sku", "name", "description", "short_description", "url_key", "price", "special_price",
-      "special_from_date", "special_to_date", "weight", "is_in_stock", "qty", "product_type",
+      "special_from_date", "special_to_date", "weight", "weight_unit", "length", "breadth", "height", "dimension_unit", "is_in_stock", "qty", "product_type",
       "categories", "brand", "tax_class_name", "status", "visibility",
       "base_image", "base_image_label",
       "additional_images", "additional_image_labels",
@@ -1947,6 +1959,11 @@ export class ProductService {
         p.specialPriceFromDate ? new Date(p.specialPriceFromDate).toISOString().split("T")[0] : "",
         p.specialPriceToDate ? new Date(p.specialPriceToDate).toISOString().split("T")[0] : "",
         p.weight || "",
+        (p as any).weightUnit || "kg",
+        (p as any).length || "",
+        (p as any).breadth || "",
+        (p as any).height || "",
+        (p as any).dimensionUnit || "cm",
         p.stockStatus,
         p.qty,
         p.productType,
@@ -2005,6 +2022,11 @@ export class ProductService {
             "", // special_from_date
             "", // special_to_date
             v.weight || p.weight || "",
+            (v as any).weightUnit || (p as any).weightUnit || "kg",
+            (v as any).length || (p as any).length || "",
+            (v as any).breadth || (p as any).breadth || "",
+            (v as any).height || (p as any).height || "",
+            (p as any).dimensionUnit || "cm",
             (v.stock > 0 || p.allowBackorders) ? "1" : "0",
             v.stock ?? 0,
             "simple", // child product type

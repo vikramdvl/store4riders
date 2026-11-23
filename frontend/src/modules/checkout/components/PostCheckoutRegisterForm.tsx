@@ -19,7 +19,28 @@ const ValidationItem = ({ isValid, text }: { isValid: boolean; text: string }) =
   </div>
 );
 
-export function PostCheckoutRegisterForm({ email, name }: { email: string; name: string }) {
+export interface PostCheckoutRegisterProps {
+  email: string;
+  name: string;
+  phone?: string;
+  countryCode?: string;
+  shippingAddress?: {
+    street: string;
+    city: string;
+    state: string;
+    pincode: string;
+    country: string;
+    isDefault?: boolean;
+  };
+}
+
+export function PostCheckoutRegisterForm({
+  email,
+  name,
+  phone,
+  countryCode,
+  shippingAddress,
+}: PostCheckoutRegisterProps) {
   const [password, setPassword] = useState("");
   const [isExistingAccount, setIsExistingAccount] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
@@ -88,20 +109,69 @@ export function PostCheckoutRegisterForm({ email, name }: { email: string; name:
 
     if (isExistingAccount) {
       // Login Flow
-      loginMutation.mutate({ email, password });
+      const trimmedName = (name || "").trim();
+      const nameParts = trimmedName ? trimmedName.split(/\s+/) : [];
+      const checkoutFirstName = nameParts[0] || "";
+      const checkoutLastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+
+      loginMutation.mutate({ email, password }, {
+        onSuccess: async () => {
+          if (checkoutFirstName) {
+            try {
+              await apiClient.put("/users/me", {
+                firstName: checkoutFirstName,
+                lastName: checkoutLastName,
+              });
+            } catch {}
+          }
+          if (shippingAddress && shippingAddress.street) {
+            try {
+              await apiClient.post("/users/me/addresses", {
+                ...shippingAddress,
+                isDefault: true,
+              });
+            } catch {}
+          }
+        }
+      });
     } else {
       // Register Flow
       if (!isPasswordValid) return;
 
-      const nameParts = name.trim().split(" ");
-      const firstName = nameParts[0] || "Guest";
-      const lastName = nameParts.slice(1).join(" ") || "User";
+      const trimmedName = (name || "").trim();
+      const nameParts = trimmedName ? trimmedName.split(/\s+/) : [];
+      let firstName = nameParts[0] || "";
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+
+      if (!firstName || firstName.length < 2) {
+        const emailPrefix = (email || "").split("@")[0] || "Customer";
+        firstName = emailPrefix.slice(0, 50);
+      }
+
+      let cleanPhone = (phone || "").trim();
+      if (cleanPhone) {
+        if (!cleanPhone.startsWith("+")) {
+          cleanPhone = `+91${cleanPhone}`;
+        }
+      }
 
       registerMutation.mutate({
         email,
         password,
         firstName,
-        lastName,
+        lastName: lastName || undefined,
+        phone: cleanPhone || undefined,
+      }, {
+        onSuccess: async () => {
+          if (shippingAddress && shippingAddress.street) {
+            try {
+              await apiClient.post("/users/me/addresses", {
+                ...shippingAddress,
+                isDefault: true,
+              });
+            } catch {}
+          }
+        }
       });
     }
   };

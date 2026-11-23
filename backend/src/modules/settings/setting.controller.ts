@@ -38,7 +38,7 @@ export class SettingController {
       instagramUrl: settings.instagramUrl,
       youtubeUrl: settings.youtubeUrl,
       twitterUrl: settings.twitterUrl,
-      returnWindowDays: settings.returnWindowDays || 7,
+      returnWindowDays: typeof settings.returnWindowDays === "number" ? settings.returnWindowDays : 7,
       snapmintMinOrderValue: settings.snapmintMinOrderValue,
       brandsMetaTitle: settings.brandsMetaTitle || "",
       brandsMetaDescription: settings.brandsMetaDescription || "",

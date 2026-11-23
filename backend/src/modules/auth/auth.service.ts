@@ -29,6 +29,7 @@ export class AuthService {
     try {
       const { OrderRepository } = await import("../order/order.repository");
       await OrderRepository.linkGuestOrders(user.email, userId);
+      await AuthService.syncUserFromLinkedOrders(userId, user);
     } catch (e) {
       console.error("Failed to link guest orders on register:", e);
     }
@@ -66,6 +67,7 @@ export class AuthService {
     try {
       const { OrderRepository } = await import("../order/order.repository");
       await OrderRepository.linkGuestOrders(user.email, userId);
+      await AuthService.syncUserFromLinkedOrders(userId, user);
     } catch (e) {
       console.error("Failed to link guest orders on login:", e);
     }
@@ -115,6 +117,83 @@ export class AuthService {
   static async logout(userId: string) {
     // Blacklist refresh tokens in Redis
     await setCache(`blacklist:${userId}`, "true", 7 * 24 * 60 * 60);
+  }
+
+  static async syncUserFromLinkedOrders(userId: string, user?: any) {
+    try {
+      const { OrderModel } = await import("../order/order.model");
+      const linkedOrders = await OrderModel.find({ userId }).sort({ createdAt: -1 }).lean().exec();
+      if (!linkedOrders || linkedOrders.length === 0) return;
+
+      const userDoc = user?._id ? user : await UserModel.findById(userId);
+      if (!userDoc) return;
+
+      let shouldUpdate = false;
+      const updates: any = {};
+
+      // 1. Sync / clean up legacy dummy name (e.g. "User" as lastName or "Guest" as firstName)
+      const latestWithFullName = linkedOrders.find((o: any) => o.shippingAddress?.fullName && String(o.shippingAddress.fullName).trim().length > 1);
+      if (latestWithFullName) {
+        const orderFullName = String(latestWithFullName.shippingAddress.fullName).trim();
+        const parts = orderFullName.split(/\s+/);
+        const orderFirstName = parts[0] || "";
+        const orderLastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
+
+        const isLegacyDummyLastName = userDoc.lastName === "User";
+        const isLegacyDummyFirstName = userDoc.firstName === "Guest";
+        
+        if (isLegacyDummyLastName || isLegacyDummyFirstName || (!userDoc.lastName && orderLastName)) {
+          const finalFirst = (isLegacyDummyFirstName || !userDoc.firstName) ? (orderFirstName || userDoc.firstName) : (orderFirstName || userDoc.firstName);
+          const finalLast = isLegacyDummyLastName ? orderLastName : (userDoc.lastName || orderLastName);
+          
+          if (finalFirst !== userDoc.firstName || finalLast !== userDoc.lastName) {
+            updates.firstName = finalFirst;
+            updates.lastName = finalLast;
+            userDoc.firstName = finalFirst;
+            userDoc.lastName = finalLast;
+            if (user) {
+              user.firstName = finalFirst;
+              user.lastName = finalLast;
+            }
+            shouldUpdate = true;
+          }
+        }
+      }
+
+      // 2. Sync phone if missing on user
+      const latestWithPhone = linkedOrders.find((o: any) => o.shippingAddress?.phone);
+      if ((!userDoc.phone || String(userDoc.phone).trim() === "") && latestWithPhone?.shippingAddress?.phone) {
+        updates.phone = latestWithPhone.shippingAddress.phone;
+        userDoc.phone = updates.phone;
+        if (user) user.phone = updates.phone;
+        shouldUpdate = true;
+      }
+
+      // 3. Sync delivery address if missing on user
+      const latestWithAddr = linkedOrders.find((o: any) => o.shippingAddress?.street);
+      if ((!userDoc.addresses || userDoc.addresses.length === 0) && latestWithAddr?.shippingAddress) {
+        const sa = latestWithAddr.shippingAddress;
+        const newAddress = {
+          id: crypto.randomUUID(),
+          street: sa.street || sa.addressLine1 || "",
+          city: sa.city || "",
+          state: sa.state || "",
+          pincode: sa.pincode || "",
+          country: sa.country || "India",
+          isDefault: true,
+        };
+        updates.addresses = [newAddress];
+        userDoc.addresses = [newAddress];
+        if (user) user.addresses = [newAddress];
+        shouldUpdate = true;
+      }
+
+      if (shouldUpdate) {
+        await UserModel.findByIdAndUpdate(userId, { $set: updates }).exec();
+      }
+    } catch (e) {
+      console.error("Failed to sync user from linked orders:", e);
+    }
   }
 
   static async forgotPassword(data: ForgotPasswordInput) {

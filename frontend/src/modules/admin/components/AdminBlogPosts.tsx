@@ -118,6 +118,9 @@ export function AdminBlogPosts() {
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
             <BookOpen className="text-brand" size={26} /> Blog & Articles
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold border border-slate-200">
+              {totalCount}
+            </span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             Create, edit, and publish expert motorcycle buying guides, gear care articles, and news.
@@ -125,17 +128,16 @@ export function AdminBlogPosts() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {totalCount === 0 && !isLoading && (
-            <Button
-              onClick={handleSyncGuides}
-              disabled={seedContent.isPending}
-              variant="outline"
-              className="border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-bold flex items-center gap-1.5"
-            >
-              <RotateCcw size={14} className={seedContent.isPending ? "animate-spin" : ""} />
-              {seedContent.isPending ? "Syncing..." : "Sync Guides (20)"}
-            </Button>
-          )}
+          <Button
+            onClick={handleSyncGuides}
+            disabled={seedContent.isPending}
+            variant="outline"
+            className="border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-bold flex items-center gap-1.5"
+            title="Sync / re-seed default guide articles"
+          >
+            <RotateCcw size={14} className={seedContent.isPending ? "animate-spin" : ""} />
+            {seedContent.isPending ? "Syncing..." : "Sync Default Guides"}
+          </Button>
 
           <Button
             variant="outline"

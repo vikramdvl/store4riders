@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { UserRepository } from "./user.repository";
 import { IUser, IUserAddress, UserRole } from "@store4riders/shared-types";
 import { NotFoundError, ForbiddenError, ConflictError, ValidationError } from "../../core/errors/AppError";
@@ -20,6 +21,20 @@ export class UserService {
   static async getProfile(userId: string): Promise<IUser> {
     const user = await UserRepository.findById(userId);
     if (!user) throw new NotFoundError("User");
+
+    const needsSync = !user.phone || !user.phone.trim()
+      || !user.addresses || user.addresses.length === 0
+      || user.lastName === "User" || user.firstName === "Guest";
+
+    if (user.email && needsSync) {
+      try {
+        const { OrderRepository } = await import("../order/order.repository");
+        await OrderRepository.linkGuestOrders(user.email, userId);
+        const { AuthService } = await import("../auth/auth.service");
+        await AuthService.syncUserFromLinkedOrders(userId, user);
+      } catch {}
+    }
+
     return user;
   }
 
@@ -47,42 +62,51 @@ export class UserService {
     await UserRepository.update(userId, { password: hashedPassword });
   }
 
+  static async getAddresses(userId: string): Promise<IUserAddress[]> {
+    const user = await this.getProfile(userId);
+    return Array.isArray(user.addresses) ? user.addresses : [];
+  }
+
   static async addAddress(userId: string, data: Omit<IUserAddress, 'id'>): Promise<IUser> {
     const user = await this.getProfile(userId);
-    const address: IUserAddress = { ...data, id: crypto.randomUUID() };
+    const addresses: IUserAddress[] = Array.isArray(user.addresses) ? [...user.addresses] : [];
+    const address: IUserAddress = { ...data, id: randomUUID() };
     
     if (address.isDefault) {
-      user.addresses.forEach(a => (a.isDefault = false));
-    } else if (user.addresses.length === 0) {
+      addresses.forEach(a => (a.isDefault = false));
+    } else if (addresses.length === 0) {
       address.isDefault = true;
     }
     
-    user.addresses.push(address);
-    return await this.updateProfile(userId, { addresses: user.addresses });
+    addresses.push(address);
+    return await this.updateProfile(userId, { addresses });
   }
 
   static async updateAddress(userId: string, addressId: string, data: Partial<IUserAddress>): Promise<IUser> {
     const user = await this.getProfile(userId);
-    const idx = user.addresses.findIndex(a => a.id === addressId || String((a as any)._id) === addressId);
+    const addresses: IUserAddress[] = Array.isArray(user.addresses) ? [...user.addresses] : [];
+    const idx = addresses.findIndex(a => a.id === addressId || String((a as any)._id) === addressId);
     if (idx === -1) throw new NotFoundError("Address");
     
     if (data.isDefault) {
-      user.addresses.forEach(a => (a.isDefault = false));
+      addresses.forEach(a => (a.isDefault = false));
     }
     
-    user.addresses[idx] = {
-      ...user.addresses[idx],
+    addresses[idx] = {
+      ...addresses[idx],
       ...data,
-      id: user.addresses[idx].id || addressId,
+      id: addresses[idx].id || addressId,
     };
     
-    return await this.updateProfile(userId, { addresses: user.addresses });
+    return await this.updateProfile(userId, { addresses });
   }
 
   static async removeAddress(userId: string, addressId: string): Promise<IUser> {
     const user = await this.getProfile(userId);
-    user.addresses = user.addresses.filter(a => a.id !== addressId && String((a as any)._id) !== addressId);
-    return await this.updateProfile(userId, { addresses: user.addresses });
+    const addresses: IUserAddress[] = (Array.isArray(user.addresses) ? user.addresses : []).filter(
+      a => a.id !== addressId && String((a as any)._id) !== addressId
+    );
+    return await this.updateProfile(userId, { addresses });
   }
 
   static async getUsers(page: number, limit: number, role?: string, search?: string) {

@@ -270,6 +270,15 @@ export class ProductRepository {
         if (data.weight !== undefined && data.weight !== "") {
           v.weight = Number(data.weight);
         }
+        if (data.length !== undefined && data.length !== "") {
+          v.length = Number(data.length);
+        }
+        if (data.breadth !== undefined && data.breadth !== "") {
+          v.breadth = Number(data.breadth);
+        }
+        if (data.height !== undefined && data.height !== "") {
+          v.height = Number(data.height);
+        }
         if (data.hsnCode !== undefined && data.hsnCode !== "") {
           v.hsnCode = String(data.hsnCode).trim();
         }

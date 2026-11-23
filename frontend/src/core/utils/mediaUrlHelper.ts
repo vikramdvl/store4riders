@@ -772,14 +772,15 @@ export function resolveMagentoMediaUrls(html: string): string {
       .replace(/&amp;/g, "&");
   }
 
-  // 2. Normalize doubled quotes from CSV exports ("" -> ")
-  clean = clean.replace(/""/g, '"');
+  // 2. Normalize repeated quotes from CSV exports ("""" or "" -> ")
+  // Strips quadruple and doubled quotes so attributes don't become src=""
+  clean = clean.replace(/""+/g, '"');
 
   // 3. Fix broken /catalog/product/ URLs in S3 image paths for description/wysiwyg images.
   // In the imported catalog, CMS/wysiwyg images were mistakenly prefixed with /catalog/product/.
   // S3 stores all CMS description images under /wysiwyg/ (e.g. wysiwyg/smk-twister-specification.JPG).
   clean = clean.replace(
-    /https?:\/\/store4riders\.s3\.ap-south-2\.amazonaws\.com\/catalog\/product\/([^"'\s>]+)/gi,
+    /https?:\/\/(?:store4riders\.s3[^\/]*\.amazonaws\.com|store4riders-media\.s3[^\/]*\.amazonaws\.com|d2zuvpvc0pfkya\.cloudfront\.net)\/catalog\/product\/([^"'>]+)/gi,
     (_match, filePath) => {
       let cleanPath = filePath
         .replace(/&quot;/g, "")
@@ -794,7 +795,7 @@ export function resolveMagentoMediaUrls(html: string): string {
     }
   );
 
-  // 4. Resolve Magento {{media url="..."}} tokens
+  // 4. Resolve Magento {{media url="..."}} tokens (with spaces, quotes, and directives)
   clean = clean.replace(
     /\{\{media\s+url=(?:&quot;|""|"|'|\\")?(.*?)(?:&quot;|""|"|'|\\")?\}\}/gi,
     (_match, rawPath) => {
@@ -814,6 +815,11 @@ export function resolveMagentoMediaUrls(html: string): string {
         cleanPath = `wysiwyg/${cleanPath}`;
       }
 
+      // Handle known Magento extension mismatch (e.g. 2-Shells.jpg -> 2-Shells.png)
+      if (cleanPath.toLowerCase().endsWith("2-shells.jpg")) {
+        cleanPath = cleanPath.replace(/\.jpg$/i, ".png");
+      }
+
       const encoded = cleanPath
         .split("/")
         .map((seg: string) => encodeURIComponent(decodeURIComponent(seg)))
@@ -824,9 +830,10 @@ export function resolveMagentoMediaUrls(html: string): string {
 
   // 5. Resolve legacy mmpl.store4riders.com or store4riders.com media domains in img src
   clean = clean.replace(
-    /src=(["']?)https?:\/\/(?:www\.)?(?:mmpl\.)?store4riders\.com\/(?:pub\/)?media\/(?:wysiwyg\/)?([^"'\s>]+)\1/gi,
-    (_match, _quote, filePath) => {
-      const cleanPath = filePath.replace(/&quot;/g, "").trim();
+    /src=(?:(["'])(?:https?:\/\/(?:www\.)?(?:mmpl\.)?store4riders\.com\/(?:pub\/)?media\/(?:wysiwyg\/)?([^"'>]+))\1|https?:\/\/(?:www\.)?(?:mmpl\.)?store4riders\.com\/(?:pub\/)?media\/(?:wysiwyg\/)?([^\s>]+))/gi,
+    (_match, _q, quotedPath, unquotedPath) => {
+      const raw = quotedPath || unquotedPath || "";
+      const cleanPath = raw.replace(/&quot;/g, "").trim();
       const encoded = cleanPath
         .split("/")
         .map((seg: string) => encodeURIComponent(decodeURIComponent(seg)))
@@ -837,9 +844,10 @@ export function resolveMagentoMediaUrls(html: string): string {
 
   // 6. Resolve raw relative media paths: src="/media/...", src="/pub/media/...", src="media/..."
   clean = clean.replace(
-    /src=(["']?)\/?(?:pub\/)?media\/(?:wysiwyg\/)?([^"'\s>]+)\1/gi,
-    (_match, _quote, filePath) => {
-      const cleanPath = filePath.replace(/&quot;/g, "").trim();
+    /src=(?:(["'])\/?(?:pub\/)?media\/(?:wysiwyg\/)?([^"'>]+)\1|\/?(?:pub\/)?media\/(?:wysiwyg\/)?([^\s>]+))/gi,
+    (_match, _q, quotedPath, unquotedPath) => {
+      const raw = quotedPath || unquotedPath || "";
+      const cleanPath = raw.replace(/&quot;/g, "").trim();
       const encoded = cleanPath
         .split("/")
         .map((seg: string) => encodeURIComponent(decodeURIComponent(seg)))
@@ -850,9 +858,10 @@ export function resolveMagentoMediaUrls(html: string): string {
 
   // 7. Resolve raw wysiwyg paths: src="/wysiwyg/..." or src="wysiwyg/..."
   clean = clean.replace(
-    /src=(["']?)\/?wysiwyg\/([^"'\s>]+)\1/gi,
-    (_match, _quote, filePath) => {
-      const cleanPath = filePath.replace(/&quot;/g, "").trim();
+    /src=(?:(["'])\/?wysiwyg\/([^"'>]+)\1|\/?wysiwyg\/([^\s>]+))/gi,
+    (_match, _q, quotedPath, unquotedPath) => {
+      const raw = quotedPath || unquotedPath || "";
+      const cleanPath = raw.replace(/&quot;/g, "").trim();
       const encoded = cleanPath
         .split("/")
         .map((seg: string) => encodeURIComponent(decodeURIComponent(seg)))
@@ -861,22 +870,25 @@ export function resolveMagentoMediaUrls(html: string): string {
     }
   );
 
-  // 8. Ensure any spaces inside existing S3 image URLs are URL-encoded
+  // 8. Ensure any spaces inside existing S3 or CloudFront image URLs are URL-encoded
   clean = clean.replace(
-    /src=(["'])(https?:\/\/store4riders\.s3\.ap-south-2\.amazonaws\.com\/[^"'\s>]+(?:\s+[^"'\s>]+)*)\1/gi,
-    (_match, _quote, fullUrl) => {
+    /src=(["'])(https?:\/\/(?:store4riders\.s3[^\/]*\.amazonaws\.com|store4riders-media\.s3[^\/]*\.amazonaws\.com|d2zuvpvc0pfkya\.cloudfront\.net)\/[^"'>]+)\1/gi,
+    (_match, quote, fullUrl) => {
       try {
         const urlObj = new URL(fullUrl);
         const encodedPath = urlObj.pathname
           .split("/")
           .map((seg: string) => encodeURIComponent(decodeURIComponent(seg)))
           .join("/");
-        return `src="${urlObj.origin}${encodedPath}${urlObj.search}"`;
+        return `src=${quote}${urlObj.origin}${encodedPath}${urlObj.search}${quote}`;
       } catch {
-        return `src="${encodeURI(fullUrl)}"`;
+        return `src=${quote}${encodeURI(fullUrl)}${quote}`;
       }
     }
   );
+
+  // 9. Clean up any remaining malformed quotes around src attributes (e.g. src=""https:..."")
+  clean = clean.replace(/src=["']{2,}([^"'>]+)["']{2,}/gi, 'src="$1"');
 
   return clean;
 }

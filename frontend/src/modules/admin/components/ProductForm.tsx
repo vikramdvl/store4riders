@@ -108,6 +108,10 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
   const [customTaxRateInput, setCustomTaxRateInput] = useState<number | "">("");
   const [weight, setWeight] = useState<number | "">("");
   const [weightUnit, setWeightUnit] = useState<"kg" | "g" | "ml" | "L">("kg");
+  const [length, setLength] = useState<number | "">("");
+  const [breadth, setBreadth] = useState<number | "">("");
+  const [height, setHeight] = useState<number | "">("");
+  const [dimensionUnit, setDimensionUnit] = useState<"cm" | "in" | "mm">("cm");
   const [isFeatured, setIsFeatured] = useState(false);
   const [showFeaturedBadge, setShowFeaturedBadge] = useState(false);
   const [isFreeShipping, setIsFreeShipping] = useState(false);
@@ -340,6 +344,11 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
       }
       setHsnCode(existingProduct.hsnCode || "6506");
       setWeight(existingProduct.weight ?? "");
+      setWeightUnit(((existingProduct as any).weightUnit as "kg" | "g" | "ml" | "L") || "kg");
+      setLength((existingProduct as any).length ?? "");
+      setBreadth((existingProduct as any).breadth ?? "");
+      setHeight((existingProduct as any).height ?? "");
+      setDimensionUnit(((existingProduct as any).dimensionUnit as "cm" | "in" | "mm") || "cm");
       setIsFeatured(Boolean(existingProduct.isFeatured));
       setShowFeaturedBadge(
         Boolean(
@@ -1061,6 +1070,10 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
       hsnCode: hsnCode.trim() || undefined,
       weight: weight !== "" ? Number(weight) : undefined,
       weightUnit: weightUnit || "kg",
+      length: length !== "" ? Number(length) : undefined,
+      breadth: breadth !== "" ? Number(breadth) : undefined,
+      height: height !== "" ? Number(height) : undefined,
+      dimensionUnit: dimensionUnit || "cm",
       isFeatured,
       showFeaturedBadge: Boolean(isFeatured && showFeaturedBadge),
       isFreeShipping: (shippingFee !== "" && Number(shippingFee) > 0) ? false : isFreeShipping,
@@ -1116,6 +1129,9 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
           imageUrl: vUrl,
           altText: vAlt,
           weight: v.weight !== "" && v.weight !== undefined ? Number(v.weight) : undefined,
+          length: v.length !== "" && v.length !== undefined ? Number(v.length) : undefined,
+          breadth: v.breadth !== "" && v.breadth !== undefined ? Number(v.breadth) : undefined,
+          height: v.height !== "" && v.height !== undefined ? Number(v.height) : undefined,
           status: v.status || "enabled",
           visibility: v.visibility || "Catalog, Search",
           images: vImages,
@@ -1225,6 +1241,14 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
     setWeight,
     weightUnit,
     setWeightUnit,
+    length,
+    setLength,
+    breadth,
+    setBreadth,
+    height,
+    setHeight,
+    dimensionUnit,
+    setDimensionUnit,
     isFeatured,
     setIsFeatured,
     showFeaturedBadge,

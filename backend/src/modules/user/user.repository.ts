@@ -3,23 +3,28 @@
  * @description Direct database access layer for Users.
  * Keeps Mongoose specifics completely hidden from the Service layer.
  */
+import mongoose from "mongoose";
 import { UserModel } from "./user.model";
 import { IUser } from "@store4riders/shared-types";
 
 export class UserRepository {
   static async findById(id: string): Promise<IUser | null> {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
     return UserModel.findById(id).lean().exec() as unknown as IUser | null;
   }
 
   static async findByIdWithPassword(id: string): Promise<any | null> {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
     return UserModel.findById(id).select("+password").lean().exec();
   }
 
   static async findByEmail(email: string): Promise<IUser | null> {
+    if (!email) return null;
     return UserModel.findOne({ email }).lean().exec() as unknown as IUser | null;
   }
 
   static async findByEmailWithPassword(email: string): Promise<any | null> {
+    if (!email) return null;
     return UserModel.findOne({ email }).select("+password").lean().exec();
   }
 
@@ -29,6 +34,7 @@ export class UserRepository {
   }
 
   static async update(id: string, data: Partial<IUser> & { password?: string }): Promise<IUser | null> {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
     return UserModel.findByIdAndUpdate(id, { $set: data }, { new: true, strict: false }).lean().exec() as unknown as IUser | null;
   }
 

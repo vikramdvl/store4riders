@@ -19,6 +19,7 @@ import { useWarehouses } from "@/core/hooks/useWarehouses";
 import { useGenerateInvoice } from "@/core/hooks/useOrderActions";
 import { useOrderShipments } from "@/core/hooks/useShipments";
 import { usePushToShiprocket } from "@/core/hooks/useAdminShipments";
+import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
 import { toast } from "sonner";
 import { 
   ArrowLeftIcon, 
@@ -102,6 +103,7 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
   const isAdminOrSuperAdmin = userRole === "admin" || userRole === "super_admin";
 
   const { data: order, isLoading } = useAdminOrderById(orderId);
+  const { data: publicSettings } = usePublicSettings();
   const { data: warehouses } = useWarehouses();
   const { data: orderShipments } = useOrderShipments(orderId);
   const latestShipment = orderShipments && orderShipments.length > 0 ? orderShipments[0] : null;
@@ -258,8 +260,12 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
       } else {
         msg += `• Payment: Paid in Full Online (Prepaid)\n`;
       }
+      const activeReturnDays = publicSettings?.returnWindowDays ?? 7;
+      const policyStr = activeReturnDays > 0
+        ? `*Exchange Policy:* Store4Riders offers a ${activeReturnDays}-day size & gear exchange only. No monetary returns/refunds.\n\n`
+        : `*Exchange Policy:* All items are final sale. Size and fit exchanges are not applicable.\n\n`;
       msg += `\n📄 *Download Tax Invoice PDF:*\n${invoiceUrl}\n\n`;
-      msg += `*Exchange Policy:* Store4Riders offers a 7-day size & gear exchange only. No monetary returns/refunds.\n\n`;
+      msg += policyStr;
       msg += `Need help? Contact support@store4riders.com`;
     }
 

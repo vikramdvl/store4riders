@@ -76,6 +76,7 @@ export interface PushToShiprocketPayload {
   breadth?: number;
   height?: number;
   autoAssignAwb?: boolean;
+  recipientPhone?: string;
 }
 
 export function usePushToShiprocket() {
@@ -106,6 +107,7 @@ export function useCreateDirectShipment() {
       length?: number;
       breadth?: number;
       height?: number;
+      recipientPhone?: string;
     }) => {
       const response = await apiClient.post(`/shipments/admin/direct`, data);
       return response.data.data as IShipment;

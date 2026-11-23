@@ -11,6 +11,21 @@ export const errorHandler = (error: unknown): NextResponse => {
     return ApiResponse.error(error.message, error.statusCode);
   }
 
+  // Mongoose CastError (e.g. invalid ObjectId)
+  if (error instanceof Error && error.name === "CastError") {
+    return ApiResponse.error("Invalid ID format", 400);
+  }
+
+  // Mongoose Schema ValidationError
+  if (error instanceof Error && error.name === "ValidationError") {
+    return ApiResponse.error(error.message, 400);
+  }
+
+  // JWT errors
+  if (error instanceof Error && (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError")) {
+    return ApiResponse.error("Invalid or expired authentication token", 401);
+  }
+
   // Zod validation errors, if thrown manually or via interceptor
   if (error instanceof Error && error.name === "ZodError") {
     try {

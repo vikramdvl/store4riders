@@ -67,8 +67,19 @@ export function AdminPaymentSettings() {
     if (!settings || saving) return;
     try {
       setSaving(true);
-      const { _id, __v, createdAt, updatedAt, id, ...payload } = settings as any;
-      payload.snapmintMinOrderValue = typeof settings.snapmintMinOrderValue === "number" ? Math.max(0, settings.snapmintMinOrderValue) : (Number(settings.snapmintMinOrderValue) || 0);
+      // Send ONLY payment-related fields — prevents overwriting other tabs' data
+      const payload = {
+        enabledGateways: settings.enabledGateways,
+        codPartialPaymentEnabled: settings.codPartialPaymentEnabled,
+        codPartialPaymentType: settings.codPartialPaymentType,
+        codPartialPaymentValue: settings.codPartialPaymentValue,
+        snapmintMinOrderValue: typeof settings.snapmintMinOrderValue === "number" ? Math.max(0, settings.snapmintMinOrderValue) : (Number(settings.snapmintMinOrderValue) || 0),
+        upiMerchantVpa: settings.upiMerchantVpa,
+        upiMerchantName: settings.upiMerchantName,
+        upiMcc: settings.upiMcc,
+        googlePayMerchantId: settings.googlePayMerchantId,
+        googlePayEnvironment: settings.googlePayEnvironment,
+      };
       await apiClient.put("/admin/settings", payload);
       await queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
       await queryClient.refetchQueries({ queryKey: ["publicSettings"] });

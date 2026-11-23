@@ -2,26 +2,51 @@
  * @class SettingRepository
  * @description Direct database access layer for Store Settings.
  * Ensures only a single global settings document exists.
+ *
+ * FIX (Nov 2026): Replaced multiple sequential .save() calls with a single
+ * consolidated save in getSettings(), and switched updateSettings() from
+ * the fragile fetch→mutate→save() pattern to an atomic findOneAndUpdate().
+ * This eliminates Mongoose VersionError ("No matching document found for id …
+ * version 0") which occurred when two admin tabs saved concurrently or when
+ * the migration logic inside getSettings() incremented __v before the
+ * caller's own save.
  */
 import { SettingModel, ISetting } from "./setting.model";
+import { getCache, setCache, deleteCache } from "../../core/cache/redis";
+
+const SETTINGS_CACHE_KEY = "store_settings";
 
 export class SettingRepository {
   static async getSettings(): Promise<ISetting> {
+    try {
+      const cached = await getCache(SETTINGS_CACHE_KEY);
+      if (cached && typeof cached === "object" && (cached._id || cached.taxRate !== undefined)) {
+        return cached as ISetting;
+      }
+    } catch {}
+
     let settings = await SettingModel.findOne();
     if (!settings) {
       settings = await SettingModel.create({
         enabledGateways: ["payu", "ccavenue", "snapmint", "cod"]
       });
-    } else if (!settings.enabledGateways) {
+      return settings;
+    }
+
+    // ── Collect ALL migration changes, then save ONCE at the end ──
+    let needsSave = false;
+
+    if (!settings.enabledGateways) {
       settings.enabledGateways = ["payu", "ccavenue", "snapmint", "cod"];
-      await settings.save();
+      needsSave = true;
     } else if (settings.enabledGateways.some((g: string) => g === "upi" || g === "gpay")) {
       settings.enabledGateways = settings.enabledGateways.filter((g: string) => g !== "upi" && g !== "gpay");
-      await settings.save();
+      needsSave = true;
     }
+
     if (settings.codPartialPaymentEnabled === undefined) {
       settings.codPartialPaymentEnabled = false;
-      await settings.save();
+      needsSave = true;
     }
     
     // Add default presets to older database records
@@ -31,7 +56,7 @@ export class SettingRepository {
         { name: "Medium Box (Jackets/Boots)", length: 30, breadth: 30, height: 15 },
         { name: "Large Box (Helmets)", length: 40, breadth: 30, height: 30 }
       ] as any;
-      await settings.save();
+      needsSave = true;
     }
     
     // Ensure footerConfig has dedicated columns for Policies & Legal and About Us
@@ -84,17 +109,65 @@ export class SettingRepository {
 
       if (footerChanged) {
         settings.markModified("footerConfig");
-        await settings.save();
+        needsSave = true;
       }
     }
+
+    // ── Single save for ALL migrations ──
+    if (needsSave) {
+      await settings.save();
+    }
+
+    try {
+      const plain = (settings as any).toObject ? (settings as any).toObject() : settings;
+      await setCache(SETTINGS_CACHE_KEY, plain, 3600);
+    } catch {}
 
     return settings;
   }
 
+  /**
+   * Atomic settings update using findOneAndUpdate.
+   * This avoids Mongoose VersionError entirely — no fetch→mutate→save race.
+   */
   static async updateSettings(data: Partial<ISetting>): Promise<ISetting> {
-    const settings = await this.getSettings();
+    // Ensure a settings document exists (runs migrations if needed)
+    await this.getSettings();
+
+    // Strip internal Mongoose / API fields that must never be written back
     const { _id, __v, createdAt, updatedAt, id, ...cleanData } = data as any;
-    Object.assign(settings, cleanData);
-    return await settings.save();
+
+    // Build a flat $set payload — only include fields that were actually sent
+    const setPayload: Record<string, any> = {};
+    for (const [key, value] of Object.entries(cleanData)) {
+      if (value !== undefined) {
+        setPayload[key] = value;
+      }
+    }
+
+    if (Object.keys(setPayload).length === 0) {
+      return this.getSettings();
+    }
+
+    const updated = await SettingModel.findOneAndUpdate(
+      {},
+      { $set: setPayload },
+      { new: true, runValidators: true }
+    )
+      .lean()
+      .exec();
+
+    if (!updated) {
+      // Should never happen since getSettings() ensures creation, but just in case
+      return this.getSettings();
+    }
+
+    // Invalidate and refresh cache immediately on update
+    try {
+      await deleteCache(SETTINGS_CACHE_KEY);
+      await setCache(SETTINGS_CACHE_KEY, updated, 3600);
+    } catch {}
+
+    return updated as unknown as ISetting;
   }
 }

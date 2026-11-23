@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
@@ -14,7 +14,10 @@ import {
   ClipboardDocumentIcon,
   PrinterIcon,
   BuildingStorefrontIcon,
-  ScaleIcon
+  ScaleIcon,
+  ChevronDownIcon,
+  MagnifyingGlassIcon,
+  CheckIcon
 } from "@heroicons/react/24/outline";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -78,11 +81,50 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [packageWeight, setPackageWeight] = useState<string>("1.0");
   const [dimensions, setDimensions] = useState({ length: 15, breadth: 15, height: 10 });
+  const [isAutoDimensions, setIsAutoDimensions] = useState<boolean>(false);
   const [autoAssignAwb, setAutoAssignAwb] = useState<boolean>(false);
   const [createdShipment, setCreatedShipment] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelModal, setShowLabelModal] = useState<boolean>(false);
   const [showTrackingModal, setShowTrackingModal] = useState<boolean>(false);
+  const [isWarehouseDropdownOpen, setIsWarehouseDropdownOpen] = useState<boolean>(false);
+  const [warehouseSearchQuery, setWarehouseSearchQuery] = useState<string>("");
+  const [recipientPhone, setRecipientPhone] = useState<string>("");
+  const warehouseDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Sync recipient phone from order once loaded
+  useEffect(() => {
+    if (order?.shippingAddress?.phone && !recipientPhone) {
+      const cleaned = (order.shippingAddress.phone || "").replace(/\D/g, "").slice(-10);
+      setRecipientPhone(cleaned);
+    }
+  }, [order?.shippingAddress?.phone]);
+
+  // Close warehouse dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (warehouseDropdownRef.current && !warehouseDropdownRef.current.contains(event.target as Node)) {
+        setIsWarehouseDropdownOpen(false);
+      }
+    }
+    if (isWarehouseDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isWarehouseDropdownOpen]);
+
+  // Close warehouse dropdown on Escape key
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && isWarehouseDropdownOpen) {
+        setIsWarehouseDropdownOpen(false);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isWarehouseDropdownOpen]);
 
   // Auto-select warehouse when loaded
   useEffect(() => {
@@ -99,10 +141,15 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
     }
   }, [warehouses, order?.warehouseId, selectedWarehouseId]);
 
-  // Pre-calculate weight from order items (handles kg, g, ml, L automatically)
+  // Pre-calculate weight & package dimensions from order items (handles kg, g, ml, L and L x B x H automatically)
   useEffect(() => {
     if (order?.items && order.items.length > 0) {
       let total = 0;
+      let maxL = 0;
+      let maxB = 0;
+      let totalH = 0;
+      let hasProductDimensions = false;
+
       for (const item of order.items) {
         const rawW = Number((item as any).weight || (item as any).product?.weight || 0.5);
         const u = String((item as any).weightUnit || (item as any).product?.weightUnit || "kg").toLowerCase();
@@ -113,9 +160,34 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
           inKg = rawW; // 1 Litre approx 1 Kg
         }
         total += (inKg > 0 ? inKg : 0.5) * (item.quantity || 1);
+
+        // Auto-detect dimensions from item's variant or parent product
+        const prod = (item as any).product || {};
+        const variant = (prod.variants || []).find(
+          (v: any) => v.id === item.variantId || v.sku === item.sku
+        );
+        const l = Number(variant?.length || prod.length || (item as any).length || 0);
+        const b = Number(variant?.breadth || prod.breadth || (item as any).breadth || (item as any).width || 0);
+        const h = Number(variant?.height || prod.height || (item as any).height || 0);
+
+        if (l > 0 || b > 0 || h > 0) {
+          hasProductDimensions = true;
+          if (l > 0) maxL = Math.max(maxL, l);
+          if (b > 0) maxB = Math.max(maxB, b);
+          if (h > 0) totalH += h * (item.quantity || 1);
+        }
       }
       const estWeight = Math.max(0.1, Number(total.toFixed(2)));
       setPackageWeight(String(estWeight));
+
+      if (hasProductDimensions) {
+        setIsAutoDimensions(true);
+        setDimensions({
+          length: Math.max(1, Math.round(maxL || 15)),
+          breadth: Math.max(1, Math.round(maxB || 15)),
+          height: Math.max(1, Math.round(totalH || 10)),
+        });
+      }
     }
   }, [order?.items]);
 
@@ -138,6 +210,20 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
       return;
     }
 
+    const cleanPhone = (recipientPhone || order?.shippingAddress?.phone || "").replace(/\D/g, "").slice(-10);
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      const msg = "Customer mobile number is required by Shiprocket. Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.";
+      setErrorMessage(msg);
+      toast.error(msg);
+      return;
+    }
+    if (/^(\d)\1{9}$/.test(cleanPhone) || cleanPhone === "1234567890" || cleanPhone === "0123456789") {
+      const msg = `Mobile number '${cleanPhone}' is a dummy/repeating number. Shiprocket strictly rejects dummy numbers. Please enter the customer's real mobile number above.`;
+      setErrorMessage(msg);
+      toast.error(msg);
+      return;
+    }
+
     pushToShiprocketMutation.mutate(
       {
         orderId,
@@ -147,6 +233,7 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
         breadth: numBreadth,
         height: numHeight,
         autoAssignAwb,
+        recipientPhone: cleanPhone,
       },
       {
         onSuccess: (data: any) => {
@@ -165,9 +252,10 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
           );
         },
         onError: (err: any) => {
-          setErrorMessage(
-            err.response?.data?.message || err.message || "Failed to dispatch via Shiprocket"
-          );
+          const res = err.response?.data;
+          const msg = res?.error || res?.message || (typeof res === "string" ? res : null) || err.message || "Failed to dispatch via Shiprocket";
+          setErrorMessage(msg);
+          toast.error(msg);
         },
       }
     );
@@ -190,6 +278,7 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
       return;
     }
 
+    const cleanPhone = (recipientPhone || order?.shippingAddress?.phone || "").replace(/\D/g, "").slice(-10);
     directShipmentMutation.mutate(
       {
         orderId,
@@ -199,6 +288,7 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
         length: numLength,
         breadth: numBreadth,
         height: numHeight,
+        recipientPhone: cleanPhone || undefined,
       },
       {
         onSuccess: (data: any) => {
@@ -217,9 +307,10 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
           );
         },
         onError: (err: any) => {
-          setErrorMessage(
-            err.response?.data?.message || err.message || `Failed to dispatch via ${selectedCourier.name}`
-          );
+          const res = err.response?.data;
+          const msg = res?.error || res?.message || err.message || `Failed to dispatch via ${selectedCourier.name}`;
+          setErrorMessage(msg);
+          toast.error(msg);
         },
       }
     );
@@ -403,7 +494,7 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
                       )}
                     </div>
                     <span className="font-bold text-slate-900 block mt-0.5">
-                      {order.shippingAddress?.fullName} ({order.shippingAddress?.phone})
+                      {order.shippingAddress?.fullName}
                     </span>
                     {(order.shippingAddress?.addressLine1 || order.shippingAddress?.street) && (
                       <span className="text-slate-700 block mt-0.5 font-medium leading-relaxed">
@@ -414,6 +505,42 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
                       <MapPinIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                       {order.shippingAddress?.city}, {order.shippingAddress?.state} ({order.shippingAddress?.pincode})
                     </span>
+
+                    {/* Recipient Phone with inline editor so test/dummy numbers can be fixed */}
+                    <div className="mt-2.5 pt-2 border-t border-slate-200/80">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] uppercase text-slate-500 font-bold block">
+                          Recipient Mobile (Shiprocket / Courier SMS)
+                        </label>
+                        {recipientPhone && (/^(\d)\1{9}$/.test(recipientPhone) || recipientPhone === "1234567890") && (
+                          <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            Dummy Number
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2.5 py-1.5 bg-slate-200 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-700">
+                          +91
+                        </span>
+                        <input
+                          type="tel"
+                          maxLength={10}
+                          value={recipientPhone}
+                          onChange={(e) => setRecipientPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                          placeholder="10-digit mobile number"
+                          className={`flex-1 px-3 py-1.5 bg-white border rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 ${
+                            recipientPhone && (/^(\d)\1{9}$/.test(recipientPhone) || !/^[6-9]\d{9}$/.test(recipientPhone))
+                              ? "border-amber-400 focus:border-amber-500 focus:ring-amber-500 bg-amber-50/30"
+                              : "border-slate-300 focus:border-brand focus:ring-brand"
+                          }`}
+                        />
+                      </div>
+                      {recipientPhone && !/^[6-9]\d{9}$/.test(recipientPhone) && (
+                        <p className="text-[10px] text-amber-700 font-semibold mt-1">
+                          ⚠️ Shiprocket requires a valid 10-digit Indian number starting with 6, 7, 8, or 9.
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <span className="text-[10px] uppercase text-slate-400 font-bold block">Payment &amp; Amount</span>
@@ -591,21 +718,169 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
                       </button>
                     </div>
                   ) : (
-                    <select
-                      value={selectedWarehouseId}
-                      onChange={(e) => setSelectedWarehouseId(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 bg-white focus:outline-none focus:border-brand shadow-xs"
-                    >
-                      {warehouses.filter((w) => w.isActive !== false).map((w: any) => {
-                        const wId = String(w._id || w.id);
-                        const srNick = w.shiprocketLocationId ? ` • Shiprocket: "${w.shiprocketLocationId}"` : "";
-                        return (
-                          <option key={wId} value={wId}>
-                            {w.name} — {w.city}, {w.state} ({w.pincode}){w.isDefault ? " [Default]" : ""}{srNick}
-                          </option>
-                        );
-                      })}
-                    </select>
+                    <div ref={warehouseDropdownRef} className="relative w-full">
+                      {/* Trigger Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsWarehouseDropdownOpen(!isWarehouseDropdownOpen);
+                          if (!isWarehouseDropdownOpen) setWarehouseSearchQuery("");
+                        }}
+                        className={`w-full px-3 py-2 border rounded-xl text-left bg-white shadow-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                          isWarehouseDropdownOpen
+                            ? "border-brand ring-2 ring-brand/10"
+                            : "border-slate-300 hover:border-slate-400"
+                        }`}
+                      >
+                        {(() => {
+                          const activeWh = warehouses.find((w: any) => String(w._id || w.id) === selectedWarehouseId);
+                          if (!activeWh) {
+                            return <span className="text-xs text-slate-500 font-medium">Select a pickup warehouse...</span>;
+                          }
+                          return (
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-xs text-slate-900 truncate">
+                                  {activeWh.name}
+                                </span>
+                                {activeWh.isDefault && (
+                                  <span className="text-[9px] bg-amber-100 text-amber-800 font-extrabold px-1.5 py-0.5 rounded-full uppercase">
+                                    Default
+                                  </span>
+                                )}
+                                {activeWh.shiprocketLocationId && (
+                                  <span className="font-mono text-[9px] bg-orange-100 text-orange-800 font-bold px-1.5 py-0.5 rounded truncate max-w-[140px]">
+                                    SR: {activeWh.shiprocketLocationId}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[11px] text-slate-500 truncate mt-0.5">
+                                {activeWh.city}, {activeWh.state} ({activeWh.pincode})
+                              </span>
+                            </div>
+                          );
+                        })()}
+                        <ChevronDownIcon
+                          className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${
+                            isWarehouseDropdownOpen ? "rotate-180 text-brand" : ""
+                          }`}
+                        />
+                      </button>
+
+                      {/* Dropdown Menu */}
+                      {isWarehouseDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-72">
+                          {/* Search Input */}
+                          <div className="p-2 border-b border-slate-100 bg-slate-50/80 sticky top-0 z-10">
+                            <div className="relative">
+                              <MagnifyingGlassIcon className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              <input
+                                type="text"
+                                autoFocus
+                                value={warehouseSearchQuery}
+                                onChange={(e) => setWarehouseSearchQuery(e.target.value)}
+                                placeholder="Search by name, city, state, or PIN..."
+                                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                              />
+                              {warehouseSearchQuery && (
+                                <button
+                                  type="button"
+                                  onClick={() => setWarehouseSearchQuery("")}
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-0.5 cursor-pointer"
+                                >
+                                  <XMarkIcon className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Options List */}
+                          <div className="overflow-y-auto divide-y divide-slate-100 p-1 overscroll-contain">
+                            {(() => {
+                              const activeWarehouses = (warehouses || []).filter((w: any) => w.isActive !== false);
+                              const q = warehouseSearchQuery.toLowerCase().trim();
+                              const filtered = activeWarehouses.filter((w: any) => {
+                                if (!q) return true;
+                                const nameMatch = (w.name || "").toLowerCase().includes(q);
+                                const cityMatch = (w.city || "").toLowerCase().includes(q);
+                                const stateMatch = (w.state || "").toLowerCase().includes(q);
+                                const pinMatch = String(w.pincode || "").includes(q);
+                                const srMatch = (w.shiprocketLocationId || "").toLowerCase().includes(q);
+                                return nameMatch || cityMatch || stateMatch || pinMatch || srMatch;
+                              });
+
+                              if (filtered.length === 0) {
+                                return (
+                                  <div className="p-4 text-center text-xs text-slate-500 space-y-1">
+                                    <p>No warehouses matching &ldquo;<span className="font-semibold text-slate-700">{warehouseSearchQuery}</span>&rdquo;</p>
+                                    <button
+                                      type="button"
+                                      onClick={() => setWarehouseSearchQuery("")}
+                                      className="text-brand hover:underline font-bold text-[11px] cursor-pointer"
+                                    >
+                                      Clear search filter
+                                    </button>
+                                  </div>
+                                );
+                              }
+
+                              return filtered.map((w: any) => {
+                                const wId = String(w._id || w.id);
+                                const isSelected = wId === selectedWarehouseId;
+                                return (
+                                  <button
+                                    key={wId}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedWarehouseId(wId);
+                                      setIsWarehouseDropdownOpen(false);
+                                      setWarehouseSearchQuery("");
+                                    }}
+                                    className={`w-full px-3 py-2 text-left flex items-start justify-between gap-2 rounded-lg transition-colors cursor-pointer ${
+                                      isSelected
+                                        ? "bg-orange-50 border-l-4 border-l-brand"
+                                        : "hover:bg-slate-50 active:bg-slate-100"
+                                    }`}
+                                  >
+                                    <div className="flex flex-col min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className={`text-xs font-bold truncate ${isSelected ? "text-orange-950" : "text-slate-900"}`}>
+                                          {w.name}
+                                        </span>
+                                        {w.isDefault && (
+                                          <span className="text-[9px] bg-amber-100 text-amber-800 font-extrabold px-1.5 py-0.2 rounded-full uppercase">
+                                            Default
+                                          </span>
+                                        )}
+                                        {w.shiprocketLocationId && (
+                                          <span className="font-mono text-[9px] bg-slate-100 text-slate-700 font-bold px-1.5 py-0.2 rounded truncate max-w-[130px]">
+                                            SR: {w.shiprocketLocationId}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-[11px] text-slate-500 truncate mt-0.5">
+                                        {w.city}, {w.state} ({w.pincode})
+                                      </span>
+                                    </div>
+                                    {isSelected && (
+                                      <CheckIcon className="w-4 h-4 text-brand shrink-0 mt-0.5" />
+                                    )}
+                                  </button>
+                                );
+                              });
+                            })()}
+                          </div>
+
+                          {/* Footer Info */}
+                          <div className="px-3 py-1.5 bg-slate-50 text-[10px] text-slate-400 font-medium border-t border-slate-100 flex items-center justify-between">
+                            <span>
+                              {warehouses.filter((w: any) => w.isActive !== false).length} total pickup locations
+                            </span>
+                            <span>Click to select</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                   {(() => {
                     const selectedWh = warehouses.find((w: any) => String(w._id || w.id) === selectedWarehouseId);
@@ -640,7 +915,17 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
                 </div>
 
                 {/* Dead Weight and Package Dimensions */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[11px] font-bold text-slate-700">Package Weight &amp; Box Dimensions</span>
+                  {isAutoDimensions ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                      <span>✓ Pre-filled from Product Catalog</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 font-medium">Standard packaging defaults</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <div className="space-y-1">
                     <label className="text-[11px] font-bold text-slate-700 block">
                       Weight (kg) <span className="text-red-500">*</span>

@@ -25,7 +25,7 @@ if (typeof window !== "undefined") {
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { useCartStore } from "@/stores/useCartStore";
-import { formatPrice } from "@store4riders/shared-utils";
+import { formatPrice, validateIndianMobile } from "@store4riders/shared-utils";
 import TopBanner from "@/modules/homepage/components/TopBanner";
 import Navbar from "@/modules/homepage/components/Navbar";
 import Footer from "@/modules/homepage/components/Footer";
@@ -508,10 +508,15 @@ export const CheckoutPageModule = () => {
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    let nextValue = value;
+    if (name === "phone" || name === "altPhone") {
+      nextValue = value.replace(/\D/g, "");
+    }
+    setFormData(prev => ({ ...prev, [name]: nextValue }));
     if (errorMessage) setErrorMessage("");
-    if (fieldErrors[e.target.name]) {
-      setFieldErrors(prev => ({ ...prev, [e.target.name]: "" }));
+    if (fieldErrors[name]) {
+      setFieldErrors(prev => ({ ...prev, [name]: "" }));
     }
   };
 
@@ -535,10 +540,18 @@ export const CheckoutPageModule = () => {
       if (!/^\d+$/.test(phoneClean)) {
         errors.phone = "Phone number must contain only digits.";
       } else {
-        const currentCountryInfo = COUNTRIES.find(c => c.code === formData.countryCode);
-        const validLengths = currentCountryInfo?.phoneLength || [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-        if (!validLengths.includes(phoneClean.length)) {
-          errors.phone = `Phone numbers for ${currentCountryInfo?.name || "this country"} must be ${validLengths.length === 1 ? 'exactly ' + validLengths[0] : validLengths.join(' or ')} digits.`;
+        const isIndia = formData.countryCode === "IN" || !formData.countryCode;
+        if (isIndia) {
+          const check = validateIndianMobile(phoneClean);
+          if (!check.isValid) {
+            errors.phone = check.error || "Please enter a valid 10-digit Indian mobile number.";
+          }
+        } else {
+          const currentCountryInfo = COUNTRIES.find(c => c.code === formData.countryCode);
+          const validLengths = currentCountryInfo?.phoneLength || [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+          if (!validLengths.includes(phoneClean.length)) {
+            errors.phone = `Phone numbers for ${currentCountryInfo?.name || "this country"} must be ${validLengths.length === 1 ? 'exactly ' + validLengths[0] : validLengths.join(' or ')} digits.`;
+          }
         }
       }
     }
@@ -548,10 +561,18 @@ export const CheckoutPageModule = () => {
       if (!/^\d+$/.test(altPhoneClean)) {
         errors.altPhone = "Alternate phone number must contain only digits.";
       } else {
-        const currentCountryInfo = COUNTRIES.find(c => c.code === formData.countryCode);
-        const validLengths = currentCountryInfo?.phoneLength || [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-        if (!validLengths.includes(altPhoneClean.length)) {
-          errors.altPhone = `Alternate phone number for ${currentCountryInfo?.name || "this country"} has an invalid length.`;
+        const isIndia = formData.countryCode === "IN" || !formData.countryCode;
+        if (isIndia) {
+          const check = validateIndianMobile(altPhoneClean);
+          if (!check.isValid) {
+            errors.altPhone = check.error || "Please enter a valid alternate Indian mobile number.";
+          }
+        } else {
+          const currentCountryInfo = COUNTRIES.find(c => c.code === formData.countryCode);
+          const validLengths = currentCountryInfo?.phoneLength || [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+          if (!validLengths.includes(altPhoneClean.length)) {
+            errors.altPhone = `Alternate phone number for ${currentCountryInfo?.name || "this country"} has an invalid length.`;
+          }
         }
       }
     }
@@ -981,7 +1002,20 @@ export const CheckoutPageModule = () => {
             </div>
             
             {showRegisterForm && formData.email && (
-              <PostCheckoutRegisterForm email={formData.email} name={formData.name || ""} />
+              <PostCheckoutRegisterForm
+                email={formData.email}
+                name={formData.name || ""}
+                phone={formData.phone}
+                countryCode={formData.countryCode}
+                shippingAddress={formData.address ? {
+                  street: formData.address,
+                  city: formData.city,
+                  state: formData.state,
+                  pincode: formData.pinCode,
+                  country: formData.country || "India",
+                  isDefault: true,
+                } : undefined}
+              />
             )}
             
             <Link
@@ -1020,6 +1054,7 @@ export const CheckoutPageModule = () => {
                     setErrorMessage={setErrorMessage}
                     errorMessage={errorMessage}
                     fieldErrors={fieldErrors}
+                    setFieldErrors={setFieldErrors}
                     setCurrentStep={setCurrentStep as (step: 1 | 2) => void}
                     handleContinueToPayment={handleContinueToPayment}
                     shippingCost={shippingCost}

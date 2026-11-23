@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/core/api/client";
 import { toast } from "sonner";
 import Button from "@/components/ui/Button";
@@ -33,6 +34,7 @@ interface IGstSettingsData {
 }
 
 export function AdminGstSettings() {
+  const queryClient = useQueryClient();
   const [settings, setSettings] = useState<IGstSettingsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -68,8 +70,20 @@ export function AdminGstSettings() {
 
     setSaving(true);
     try {
-      const { _id, __v, createdAt, updatedAt, id, ...payload } = settings as any;
+      // Send ONLY GST/tax-related fields — prevents overwriting other tabs' data
+      const payload = {
+        gstin: settings.gstin,
+        legalBusinessName: settings.legalBusinessName,
+        pan: settings.pan,
+        taxRate: settings.taxRate,
+        gstPricingMode: settings.gstPricingMode,
+        allowB2bGstin: settings.allowB2bGstin,
+      };
       await apiClient.put("/admin/settings", payload);
+      await queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings"] });
+      await queryClient.invalidateQueries({ queryKey: ["product"] });
       toast.success("GST and Tax settings saved successfully");
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || "Failed to save GST settings";

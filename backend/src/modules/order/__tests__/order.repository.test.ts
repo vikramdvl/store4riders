@@ -53,12 +53,14 @@ describe("OrderRepository - linkGuestOrders", () => {
     expect(emailCondition.$or[0].guestEmail.source).toBe("^Rider\\.John@Example\\.COM$");
     expect(emailCondition.$or[0].guestEmail.flags).toContain("i");
     expect(emailCondition.$or[1]["shippingAddress.email"].source).toBe("^Rider\\.John@Example\\.COM$");
+    expect(emailCondition.$or[2].customerEmail.source).toBe("^Rider\\.John@Example\\.COM$");
 
     const userIdCondition = calledFilter.$and[1];
     expect(userIdCondition.$or).toEqual([
       { userId: { $exists: false } },
       { userId: null },
       { userId: "" },
+      { userId: { $ne: "user_abc_789" } },
     ]);
 
     // Update assertions
@@ -66,6 +68,7 @@ describe("OrderRepository - linkGuestOrders", () => {
       $set: {
         userId: "user_abc_789",
         guestEmail: "rider.john@example.com",
+        customerEmail: "rider.john@example.com",
       },
     });
   });

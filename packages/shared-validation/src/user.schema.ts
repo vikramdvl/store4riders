@@ -3,12 +3,17 @@ import { isValidPhoneNumber } from "libphonenumber-js";
 
 const phoneValidation = z.string().optional().refine((val) => {
   if (!val) return true;
+  const clean = val.replace(/\D/g, "").slice(-10);
+  if (clean.length === 10) {
+    if (/^(\d)\1{9}$/.test(clean) || clean === "1234567890" || clean === "0123456789") return false;
+    if (!/^[6-9]/.test(clean)) return false;
+  }
   try {
     return isValidPhoneNumber(val);
   } catch (e) {
     return false;
   }
-}, "Invalid phone number length or format for this country");
+}, "Please enter a valid mobile number (dummy or repeating numbers like 7777777777 are not accepted)");
 
 const USER_ROLES = [
   "super_admin",
@@ -56,7 +61,7 @@ export const registerSchema = z.object({
   email: z.string().email().max(255, "Email is too long"),
   password: z.string().min(8, "Password must be at least 8 characters long").max(100, "Password is too long"),
   firstName: z.string().min(2, "First name must be at least 2 characters").max(50, "First name is too long").regex(nameRegex, nameMessage),
-  lastName: z.string().max(50, "Last name is too long").regex(nameRegex, nameMessage).optional().or(z.literal('')),
+  lastName: z.literal('').or(z.string().max(50, "Last name is too long").regex(nameRegex, nameMessage)).optional(),
   phone: phoneValidation,
 });
 
@@ -67,7 +72,7 @@ export const loginSchema = z.object({
 
 export const updateProfileSchema = z.object({
   firstName: z.string().min(2).max(50).regex(nameRegex, nameMessage).optional(),
-  lastName: z.string().max(50).regex(nameRegex, nameMessage).optional().or(z.literal('')),
+  lastName: z.literal('').or(z.string().max(50, "Last name is too long").regex(nameRegex, nameMessage)).optional(),
   phone: phoneValidation,
 });
 

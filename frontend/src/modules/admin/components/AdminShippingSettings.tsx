@@ -61,7 +61,18 @@ export function AdminShippingSettings() {
 
     try {
       setSaving(true);
-      const { _id, __v, createdAt, updatedAt, id, ...payload } = settings as any;
+      // Send ONLY shipping-related fields — prevents overwriting other tabs' data
+      const payload = {
+        freeShippingThreshold: settings.freeShippingThreshold,
+        shippingCost: settings.shippingCost,
+        storeOriginPincode: settings.storeOriginPincode,
+        storeOriginCity: settings.storeOriginCity,
+        storeOriginState: settings.storeOriginState,
+        storeOriginAddress: settings.storeOriginAddress,
+        storeOriginPhone: settings.storeOriginPhone,
+        returnWindowDays: settings.returnWindowDays,
+        packagePresets: settings.packagePresets?.map(({ _id, ...rest }: any) => rest),
+      };
       await apiClient.put("/admin/settings", payload);
       await queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
       await queryClient.invalidateQueries({ queryKey: ["product"] });

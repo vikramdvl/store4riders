@@ -19,6 +19,7 @@ export async function userRouter(req: NextRequest, routePath: string[]): Promise
   }
 
   if (pathLen === 2 && routePath[0] === "me" && routePath[1] === "addresses") {
+    if (method === "GET") return await UserController.getAddresses(req);
     if (method === "POST") return await UserController.addAddress(req);
   }
 

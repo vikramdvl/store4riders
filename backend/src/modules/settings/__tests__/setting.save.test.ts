@@ -150,6 +150,16 @@ describe("Mongoose SettingRepository save test", () => {
     });
 
     vi.spyOn(SettingRepository, "getSettings").mockResolvedValue(doc as any);
+    vi.spyOn(SettingModel, "findOneAndUpdate").mockReturnValue({
+      lean: vi.fn().mockReturnValue({
+        exec: vi.fn().mockResolvedValue({
+          ...doc.toObject(),
+          taxRate: 12,
+          storeOriginAddress: "Test Address",
+          enabledGateways: ["payu", "ccavenue", "cod"],
+        }),
+      }),
+    } as any);
 
     // Call updateSettings
     const result = await SettingRepository.updateSettings({

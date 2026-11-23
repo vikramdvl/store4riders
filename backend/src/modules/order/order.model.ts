@@ -41,13 +41,15 @@ const orderAddressSchema = new Schema<IOrderAddress>({
   state: { type: String, required: true },
   pincode: { type: String, required: true },
   country: { type: String, required: true },
+  email: { type: String },
 });
 
 const orderSchema = new Schema<IOrder>(
   {
     orderNumber: { type: String, required: true, unique: true },
     userId: { type: String, index: true },
-    guestEmail: { type: String },
+    guestEmail: { type: String, index: true },
+    customerEmail: { type: String, index: true },
     failureReason: { type: String },
     status: { type: String, required: true, default: "pending_payment" },
     items: [orderItemSchema],
@@ -79,6 +81,7 @@ orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ paymentMethod: 1 });
 orderSchema.index({ "shippingAddress.phone": 1 });
 orderSchema.index({ "shippingAddress.fullName": 1 });
+orderSchema.index({ "shippingAddress.email": 1 });
 
 export const OrderModel = mongoose.models.Order || mongoose.model<IOrder>("Order", orderSchema);
 

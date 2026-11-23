@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { IGuidePost } from "@store4riders/shared-types";
-import { Clock, Calendar, ArrowRight } from "lucide-react";
+import { Clock, Calendar, ArrowRight, BookOpen } from "lucide-react";
 
 interface GuideCardProps {
   post: IGuidePost;
@@ -12,8 +12,9 @@ interface GuideCardProps {
 }
 
 export const GuideCard: React.FC<GuideCardProps> = ({ post, priority = false }) => {
-  const formattedDate = post.publishedDate
-    ? new Date(post.publishedDate).toLocaleDateString("en-IN", {
+  const rawDate = post.publishedDate || (post as any).publishedAt;
+  const formattedDate = rawDate
+    ? new Date(rawDate).toLocaleDateString("en-IN", {
         month: "short",
         day: "numeric",
         year: "numeric",
@@ -81,7 +82,7 @@ export const GuideCard: React.FC<GuideCardProps> = ({ post, priority = false }) 
 
         {/* Description Excerpt */}
         <p className="text-xs sm:text-sm text-neutral-600 line-clamp-2 leading-relaxed mb-4 flex-1">
-          {post.description}
+          {post.description || (post as any).excerpt}
         </p>
 
         {/* Footer: Author & Read More */}

@@ -30,6 +30,9 @@ export interface ProductVariant {
   imageUrl?: string;
   altText?: string;
   weight?: number | "";
+  length?: number | "";
+  breadth?: number | "";
+  height?: number | "";
   status?: "enabled" | "disabled";
   visibility?: string;
   images?: Array<{ id: string; url: string; altText?: string }>;

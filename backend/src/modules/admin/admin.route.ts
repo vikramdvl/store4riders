@@ -117,7 +117,7 @@ export async function adminRouter(req: NextRequest, routePath: string[]): Promis
 
   if (pathLen === 1 && routePath[0] === "settings") {
     const userId = extractUserFromAuth(req);
-    await checkPermission(userId, PermissionAction.MANAGE_USERS, UserService.getRole); 
+    await checkPermission(userId, PermissionAction.MANAGE_SETTINGS, UserService.getRole); 
     
     const { SettingController } = await import("../settings/setting.controller");
 

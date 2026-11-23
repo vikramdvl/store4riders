@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/core/api/client";
 import { toast } from "sonner";
 import Button from "@/components/ui/Button";
@@ -39,6 +40,7 @@ interface IContactSettingsData {
 }
 
 export function AdminContactSettings() {
+  const queryClient = useQueryClient();
   const [settings, setSettings] = useState<IContactSettingsData>({
     supportPhone: "",
     whatsappNumber: "+91 - 7263007788",
@@ -87,8 +89,27 @@ export function AdminContactSettings() {
     e.preventDefault();
     setSaving(true);
     try {
-      const { _id, __v, createdAt, updatedAt, id, ...payload } = settings as any;
+      // Send ONLY contact & social fields — prevents overwriting other tabs' data
+      const payload = {
+        supportPhone: settings.supportPhone,
+        whatsappNumber: settings.whatsappNumber,
+        whatsappChatEnabled: settings.whatsappChatEnabled,
+        whatsappDefaultMessage: settings.whatsappDefaultMessage,
+        supportEmail: settings.supportEmail,
+        storeOriginAddress: settings.storeOriginAddress,
+        storeOriginCity: settings.storeOriginCity,
+        storeOriginState: settings.storeOriginState,
+        storeOriginPincode: settings.storeOriginPincode,
+        facebookUrl: settings.facebookUrl,
+        instagramUrl: settings.instagramUrl,
+        youtubeUrl: settings.youtubeUrl,
+        twitterUrl: settings.twitterUrl,
+        returnWindowDays: settings.returnWindowDays,
+      };
       await apiClient.put("/admin/settings", payload);
+      await queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings"] });
       toast.success("Store contact & SEO settings saved successfully!");
     } catch (err: any) {
       toast.error(err.response?.data?.message || err.message || "Failed to update settings");

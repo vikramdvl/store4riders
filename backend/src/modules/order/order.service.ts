@@ -55,6 +55,16 @@ export class OrderService {
     }
 
     let user: any = null;
+    if (userId) {
+      try {
+        user = await UserRepository.findById(userId);
+      } catch {}
+    }
+
+    const cleanGuestEmail = (guestEmail || input.email || (shippingAddress as any)?.email || "")?.toLowerCase()?.trim() || undefined;
+    const cleanUserEmail = user?.email ? String(user.email).toLowerCase().trim() : undefined;
+    const resolvedCustomerEmail = cleanGuestEmail || cleanUserEmail || undefined;
+
     let shippingAddressSnapshot: any;
 
     if (shippingAddress) {
@@ -68,9 +78,10 @@ export class OrderService {
         state: shippingAddress.state,
         pincode: shippingAddress.pincode,
         country: shippingAddress.country,
+        ...(resolvedCustomerEmail ? { email: resolvedCustomerEmail } : {}),
       };
     } else if (userId) {
-      user = await UserRepository.findById(userId);
+      if (!user) user = await UserRepository.findById(userId);
       if (!user) throw new AppError("User not found", 404);
 
       const userAddress = user.addresses?.find((a: any) => a.id === shippingAddressId || String(a._id) === shippingAddressId);
@@ -86,9 +97,57 @@ export class OrderService {
         state: userAddress.state,
         pincode: userAddress.pincode,
         country: userAddress.country,
+        ...(resolvedCustomerEmail ? { email: resolvedCustomerEmail } : {}),
       };
     } else {
       throw new AppError("Shipping address is required", 400);
+    }
+
+    // Sync or enrich user profile when customer places an order with full name / phone / address
+    if (userId && user) {
+      try {
+        const effectiveFullName = (shippingAddressSnapshot?.fullName || input.fullName || "").trim();
+        const effectivePhone = (shippingAddressSnapshot?.phone || input.phone || "").trim();
+        const userUpdates: any = {};
+
+        if (effectiveFullName) {
+          const parts = effectiveFullName.split(/\s+/);
+          const first = parts[0] || "";
+          const last = parts.length > 1 ? parts.slice(1).join(" ") : "";
+          if (first && (user.lastName === "User" || user.firstName === "Guest" || !user.lastName)) {
+            if (first && user.firstName !== first) userUpdates.firstName = first;
+            if (last && user.lastName !== last) userUpdates.lastName = last;
+            else if (user.lastName === "User" && !last) userUpdates.lastName = "";
+          }
+        }
+
+        if (effectivePhone && (!user.phone || !user.phone.trim() || user.phone === "0000000000")) {
+          userUpdates.phone = effectivePhone;
+        }
+
+        // Auto-save delivery address if user has no saved addresses
+        if ((!user.addresses || user.addresses.length === 0) && (shippingAddressSnapshot?.addressLine1 || shippingAddressSnapshot?.street)) {
+          userUpdates.addresses = [{
+            id: crypto.randomUUID(),
+            street: shippingAddressSnapshot.addressLine1 || shippingAddressSnapshot.street || "",
+            city: shippingAddressSnapshot.city || "",
+            state: shippingAddressSnapshot.state || "",
+            pincode: shippingAddressSnapshot.pincode || "",
+            country: shippingAddressSnapshot.country || "India",
+            isDefault: true,
+          }];
+        }
+
+        if (Object.keys(userUpdates).length > 0) {
+          await UserRepository.update(userId, userUpdates);
+          if (userUpdates.firstName) user.firstName = userUpdates.firstName;
+          if (userUpdates.lastName !== undefined) user.lastName = userUpdates.lastName;
+          if (userUpdates.phone) user.phone = userUpdates.phone;
+          if (userUpdates.addresses) user.addresses = userUpdates.addresses;
+        }
+      } catch (err) {
+        logger.warn(`Failed to auto-sync user profile during order creation: ${err}`);
+      }
     }
 
     let cartItems = input.items || [];
@@ -314,14 +373,17 @@ export class OrderService {
     const orderNumber = await this.generateOrderNumber();
 
     const resultData = await withTransactionSafe(async (session) => {
-      const effectiveGuestEmail = !userId
-        ? (guestEmail || shippingAddressSnapshot?.email || input.email || "")?.toLowerCase()?.trim() || undefined
-        : undefined;
+      // If guestEmail was explicitly provided and does not match the active session user,
+      // save it as a guest order so it can be claimed/linked by the guest upon register/login
+      const isMismatchedUser = Boolean(userId && user && cleanGuestEmail && user.email?.toLowerCase().trim() !== cleanGuestEmail);
+      const effectiveUserId = isMismatchedUser ? undefined : userId;
+      const effectiveGuestEmail = cleanGuestEmail || (!effectiveUserId ? cleanUserEmail : undefined);
 
       const orderData: Partial<IOrder> = {
         orderNumber,
-        ...(userId ? { userId } : {}),
+        ...(effectiveUserId ? { userId: effectiveUserId } : {}),
         ...(effectiveGuestEmail ? { guestEmail: effectiveGuestEmail } : {}),
+        ...(resolvedCustomerEmail ? { customerEmail: resolvedCustomerEmail } : {}),
         status: "pending_payment", // Even for pure COD without partial, we might keep it pending until manual confirm, or auto confirm. We will leave it pending_payment
         pricing,
         items: orderItems,

@@ -40,6 +40,7 @@ export interface IOrderAddress {
   state: string;
   pincode: string;
   country: string;
+  email?: string;
 }
 
 export interface IOrderNote {

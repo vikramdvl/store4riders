@@ -31,6 +31,12 @@ export class UserController {
     return ApiResponse.success(null, "Password changed successfully");
   }
 
+  static async getAddresses(req: NextRequest) {
+    const userId = UserValidator.extractUserId(req);
+    const addresses = await UserService.getAddresses(userId);
+    return ApiResponse.success(addresses, "Addresses fetched successfully");
+  }
+
   static async addAddress(req: NextRequest) {
     const { userId, data } = await UserValidator.validateAddAddress(req);
     const user = await UserService.addAddress(userId, data);
