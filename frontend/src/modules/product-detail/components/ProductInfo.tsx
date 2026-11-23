@@ -250,33 +250,86 @@ export const ProductInfo: React.FC<ProductInfoProps> = ({
           </button>
         </div>
 
-        {/* Trust Badges - Modern Pills with Soft Surface */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 my-3 sm:my-3.5 overflow-x-auto no-scrollbar py-0.5 flex-nowrap sm:flex-wrap">
-          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-[#f1eee9] text-[#111111] text-xs font-semibold shrink-0">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#111111] shrink-0">
-              <path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6l7-3z" />
-              <path d="M9 12l2 2 4-4" />
-            </svg>
-            <span>100% Genuine</span>
+        {/* Trust Badges - Tactile Clay Cards (MOBILE ONLY) */}
+        <div
+          className={`grid md:hidden ${
+            isFreeShipping ? "grid-cols-3 gap-2 sm:gap-3.5" : "grid-cols-2 gap-2 sm:gap-3.5"
+          } w-full my-2.5`}
+        >
+          {/* 1. COD & EMI available */}
+          <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-gradient-to-b from-orange-50/80 to-amber-50/30 border border-orange-100/60 shadow-xs text-center group">
+            <div className="w-8 h-8 rounded-full bg-orange-100/80 flex items-center justify-center shadow-2xs mb-1.5 shrink-0 group-hover:scale-105 transition-transform">
+              <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-orange-500 shrink-0">
+                <path d="M4.5 3.75a3 3 0 0 0-3 3v.75h21v-.75a3 3 0 0 0-3-3h-15Z" />
+                <path fillRule="evenodd" d="M22.5 9.75h-21v7.5a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5Zm-18 3.75a.75.75 0 0 1 .75-.75h6a.75.75 0 0 1 0 1.5h-6a.75.75 0 0 1-.75-.75Zm.75 2.25a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <span className="text-[9.5px] sm:text-[10.5px] font-bold text-neutral-800 leading-tight">
+              COD & EMI available
+            </span>
           </div>
 
-          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-[#f1eee9] text-[#111111] text-xs font-semibold shrink-0">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#111111] shrink-0">
-              <rect x="3" y="6" width="18" height="12" rx="2" />
-              <path d="M3 10h18" />
-            </svg>
-            <span>COD and EMI available</span>
+          {/* 2. 100% genuine products */}
+          <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-gradient-to-b from-blue-50/80 to-indigo-50/30 border border-blue-100/60 shadow-xs text-center group">
+            <div className="w-8 h-8 rounded-full bg-blue-100/80 flex items-center justify-center shadow-2xs mb-1.5 shrink-0 group-hover:scale-105 transition-transform">
+              <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-blue-600 shrink-0">
+                <path d="m23 12-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
+              </svg>
+            </div>
+            <span className="text-[9.5px] sm:text-[10.5px] font-bold text-neutral-800 leading-tight">
+              100% Genuine
+            </span>
           </div>
 
-          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full bg-[#f1eee9] text-[#111111] text-xs font-semibold shrink-0">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#111111] shrink-0">
-              <path d="M3 7h11v9H3z" />
-              <path d="M14 10h4l3 3v3h-7" />
-              <circle cx="7" cy="17" r="1.5" />
-              <circle cx="17" cy="17" r="1.5" />
+          {/* 3. Free shipping */}
+          {isFreeShipping && (
+            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-gradient-to-b from-emerald-50/80 to-teal-50/30 border border-emerald-100/60 shadow-xs text-center group">
+              <div className="w-8 h-8 rounded-full bg-emerald-100/80 flex items-center justify-center shadow-2xs mb-1.5 shrink-0 group-hover:scale-105 transition-transform">
+                <svg viewBox="0 0 256 256" fill="currentColor" className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-emerald-600 shrink-0">
+                  <path d="M244.8,111.37l-25-35.75A15.91,15.91,0,0,0,206.67,69.5H176V56a16,16,0,0,0-16-16H24A16,16,0,0,0,8,56V184a16,16,0,0,0,16,16H42.79a32,32,0,1,0,58.42,0h53.58a32,32,0,1,0,58.42,0H232a16,16,0,0,0,16-16V117.8A16,16,0,0,0,244.8,111.37ZM72,216a16,16,0,1,1,16-16A16,16,0,0,1,72,216Zm112,0a16,16,0,1,1,16-16A16,16,0,0,1,184,216Zm48-32H213.21a32,32,0,1,0-58.42,0H176V85.5h30.67l25.33,36.19Z" />
+                </svg>
+              </div>
+              <span className="text-[9.5px] sm:text-[10.5px] font-bold text-neutral-800 leading-tight">
+                Free Shipping
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Trust Badges - Clean Horizontal List (DESKTOP ONLY) */}
+        <div className="hidden md:flex flex-wrap items-center gap-4 w-full my-2.5">
+          {/* 1. 100% genuine products */}
+          <div className="flex items-center gap-1.5">
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-blue-600 shrink-0">
+              <path d="m23 12-2.44-2.78.34-3.68-3.61-.82-1.89-3.18L12 3 8.6 1.54 6.71 4.72l-3.61.81.34 3.68L1 12l2.44 2.78-.34 3.69 3.61.82 1.89 3.18L12 21l3.4 1.46 1.89-3.18 3.61-.82-.34-3.68L23 12zm-13 5-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" />
             </svg>
-            <span>Free shipping</span>
+            <span className="text-xs font-bold text-[#374151]">
+              100% Genuine
+            </span>
           </div>
+
+          {/* 2. COD & EMI available */}
+          <div className="flex items-center gap-1.5">
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-orange-500 shrink-0">
+              <path d="M4.5 3.75a3 3 0 0 0-3 3v.75h21v-.75a3 3 0 0 0-3-3h-15Z" />
+              <path fillRule="evenodd" d="M22.5 9.75h-21v7.5a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-7.5Zm-18 3.75a.75.75 0 0 1 .75-.75h6a.75.75 0 0 1 0 1.5h-6a.75.75 0 0 1-.75-.75Zm.75 2.25a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z" clipRule="evenodd" />
+            </svg>
+            <span className="text-xs font-bold text-[#374151]">
+              COD & EMI Available
+            </span>
+          </div>
+
+          {/* 3. Free shipping */}
+          {isFreeShipping && (
+            <div className="flex items-center gap-1.5">
+              <svg viewBox="0 0 256 256" fill="currentColor" className="w-4 h-4 text-emerald-600 shrink-0">
+                <path d="M244.8,111.37l-25-35.75A15.91,15.91,0,0,0,206.67,69.5H176V56a16,16,0,0,0-16-16H24A16,16,0,0,0,8,56V184a16,16,0,0,0,16,16H42.79a32,32,0,1,0,58.42,0h53.58a32,32,0,1,0,58.42,0H232a16,16,0,0,0,16-16V117.8A16,16,0,0,0,244.8,111.37ZM72,216a16,16,0,1,1,16-16A16,16,0,0,1,72,216Zm112,0a16,16,0,1,1,16-16A16,16,0,0,1,184,216Zm48-32H213.21a32,32,0,1,0-58.42,0H176V85.5h30.67l25.33,36.19Z" />
+              </svg>
+              <span className="text-xs font-bold text-[#374151]">
+                Free shipping
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Short Description & Detailed Description Link */}
