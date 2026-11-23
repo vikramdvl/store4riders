@@ -37,13 +37,16 @@ export const CompleteKitSlider: React.FC<{ products: KitProduct[] }> = ({ produc
   };
 
   return (
-    <div className="w-full relative rounded-xl border border-[#e6e1da] bg-white p-3.5 sm:p-4 shadow-2xs overflow-hidden group/kit">
+    <div className="w-full relative rounded-xl border border-neutral-200/80 bg-gradient-to-br from-neutral-50/90 via-white/85 to-orange-50/20 backdrop-blur-xl p-3 sm:p-3.5 shadow-2xs overflow-hidden group/kit">
+      {/* Subtle decorative ambient glow */}
+      <div className="absolute -top-10 -right-10 w-24 h-24 bg-orange-400/10 rounded-full blur-xl pointer-events-none" />
+
       {/* Header with badge */}
-      <div className="flex items-center justify-between mb-3 relative z-10">
+      <div className="flex items-center justify-between mb-2.5 relative z-10">
         <div className="flex items-center gap-2">
-          <span className="w-1.5 h-4.5 bg-[#d9480f] rounded-xs shrink-0" />
+          <span className="w-1.5 h-4 bg-brand rounded-full shrink-0" />
           <div>
-            <h3 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-[#111111] leading-tight">
+            <h3 className="text-[11px] sm:text-xs font-extrabold uppercase tracking-wider text-neutral-900 leading-tight">
               Complete Your Kit
             </h3>
           </div>
@@ -54,7 +57,7 @@ export const CompleteKitSlider: React.FC<{ products: KitProduct[] }> = ({ produc
           <div className="flex items-center gap-1">
             <button
               onClick={() => handleScroll("left")}
-              className="w-6 h-6 rounded-full bg-white border border-[#cfcfcf] shadow-2xs flex items-center justify-center text-[#111111] hover:border-[#111111] transition-all cursor-pointer"
+              className="w-6 h-6 rounded-full bg-white/90 border border-neutral-200/80 shadow-2xs flex items-center justify-center text-neutral-600 hover:text-brand hover:border-brand/40 transition-all cursor-pointer"
               aria-label="Previous"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -63,7 +66,7 @@ export const CompleteKitSlider: React.FC<{ products: KitProduct[] }> = ({ produc
             </button>
             <button
               onClick={() => handleScroll("right")}
-              className="w-6 h-6 rounded-full bg-white border border-[#cfcfcf] shadow-2xs flex items-center justify-center text-[#111111] hover:border-[#111111] transition-all cursor-pointer"
+              className="w-6 h-6 rounded-full bg-white/90 border border-neutral-200/80 shadow-2xs flex items-center justify-center text-neutral-600 hover:text-brand hover:border-brand/40 transition-all cursor-pointer"
               aria-label="Next"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -74,65 +77,39 @@ export const CompleteKitSlider: React.FC<{ products: KitProduct[] }> = ({ produc
         )}
       </div>
       
-      {/* Products Row / Grid */}
-      {products.length <= 4 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 relative z-10">
-          {products.map((product) => (
-            <Link 
-              key={product.id} 
-              href={product.productUrl}
-              className="block group cursor-pointer transform-gpu"
-            >
-              {/* Image Container */}
-              <div className="relative aspect-square w-full bg-[#f1eee9] rounded-lg overflow-hidden mb-2 border border-[#e6e1da] group-hover:border-neutral-400 transition-colors pointer-events-none">
-                <KitImage src={product.imageUrl} alt={product.name} />
-              </div>
+      {/* Products Slider Row */}
+      <div 
+        ref={scrollContainerRef}
+        className="flex gap-2.5 overflow-x-auto scrollbar-none py-1 relative z-10"
+      >
+        {products.map((product) => (
+          <Link 
+            key={product.id} 
+            href={product.productUrl}
+            className="shrink-0 w-[115px] sm:w-[125px] block group cursor-pointer transform-gpu"
+          >
+            {/* Image Container */}
+            <div className="relative aspect-square w-full bg-[#f4f4f4] rounded-lg overflow-hidden mb-2 border border-neutral-200/80 group-hover:border-neutral-300 transition-colors pointer-events-none">
+              <KitImage src={product.imageUrl} alt={product.name} />
+            </div>
 
-              {/* Typography Details */}
-              <div className="px-0.5">
-                <h4 className="text-[11px] sm:text-xs font-semibold text-[#111111] font-sans line-clamp-2 leading-tight group-hover:underline transition-all">
-                  {product.name}
-                </h4>
-                <div className="mt-1 pt-0.5">
-                  <span className="text-xs sm:text-[13px] font-extrabold text-[#111111] font-sans">
-                    {product.priceFormatted}
-                  </span>
-                </div>
+            {/* Typography Details */}
+            <div className="px-0.5">
+              <h4 className="text-[11px] font-bold text-neutral-900 font-sans line-clamp-2 leading-tight group-hover:text-brand transition-colors">
+                {product.name}
+              </h4>
+              <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-neutral-100">
+                <span className="text-[11px] font-extrabold text-brand font-sans">
+                  {product.priceFormatted}
+                </span>
+                <span className="w-4 h-4 rounded-full bg-neutral-100 text-neutral-400 flex items-center justify-center text-[10px] font-bold group-hover:bg-brand group-hover:text-white transition-colors">
+                  +
+                </span>
               </div>
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <div 
-          ref={scrollContainerRef}
-          className="flex gap-3 overflow-x-auto scrollbar-none py-1 relative z-10"
-        >
-          {products.map((product) => (
-            <Link 
-              key={product.id} 
-              href={product.productUrl}
-              className="shrink-0 w-[115px] sm:w-[130px] block group cursor-pointer transform-gpu"
-            >
-              {/* Image Container */}
-              <div className="relative aspect-square w-full bg-[#f1eee9] rounded-lg overflow-hidden mb-2 border border-[#e6e1da] group-hover:border-neutral-400 transition-colors pointer-events-none">
-                <KitImage src={product.imageUrl} alt={product.name} />
-              </div>
-
-              {/* Typography Details */}
-              <div className="px-0.5">
-                <h4 className="text-[11px] sm:text-xs font-semibold text-[#111111] font-sans line-clamp-2 leading-tight group-hover:underline transition-all">
-                  {product.name}
-                </h4>
-                <div className="mt-1 pt-0.5">
-                  <span className="text-xs sm:text-[13px] font-extrabold text-[#111111] font-sans">
-                    {product.priceFormatted}
-                  </span>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+            </div>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 };

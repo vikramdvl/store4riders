@@ -430,23 +430,20 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
               isFreeShipping={isFreeShipping}
               onColorChange={setSelectedColor}
               onSizeChange={setSelectedSize}
-              onAddToCart={handleAddToCart}
-              stockStatus={product.stockStatus}
-              allowBackorders={product.allowBackorders}
             />
             
             {/* Complete Kit - Displays right under short description in its own box when available */}
             {product.kitProducts && product.kitProducts.length > 0 && (
-              <div className="mt-4 md:mt-6">
+              <div className="mt-3 md:mt-4">
                 <CompleteKitSlider products={product.kitProducts} />
               </div>
             )}
+            
+            {/* Store Reviews (Desktop only, hidden on mobile as requested) */}
+            <div className="mt-3 hidden md:block">
+              <StoreReviews reviews={product.storeReviews} />
+            </div>
           </div>
-        </div>
-
-        {/* Google Store Reviews - Full Width across both columns (Desktop/Tablet only, hidden on mobile) */}
-        <div className="mt-5 md:mt-8 w-full hidden md:block">
-          <StoreReviews reviews={product.storeReviews} />
         </div>
 
         {/* 3. Bottom Detail Areas */}
