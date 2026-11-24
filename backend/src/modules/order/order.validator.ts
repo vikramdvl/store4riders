@@ -111,18 +111,25 @@ export class OrderValidator {
   static async validateRequestReturn(req: NextRequest) {
     const { z } = require("zod");
     const schema = z.object({
-      reason: z.string().min(1, "Reason is required"),
-      images: z.array(z.string()).optional()
+      reason: z
+        .string()
+        .trim()
+        .min(5, "Reason must be at least 5 characters")
+        .max(1000, "Reason cannot exceed 1000 characters"),
+      images: z.array(z.string().url("Invalid image URL")).max(5).optional()
     });
     const body = await req.json();
-    return schema.parse(body);
+    const parsed = schema.parse(body);
+    // Sanitize reason to prevent XSS / script injection attacks
+    parsed.reason = parsed.reason.replace(/<[^>]*>?/gm, "").replace(/[<>{}$`\\]/g, "").trim();
+    return parsed;
   }
 
   static async validateAdminHandleReturn(req: NextRequest) {
     const { z } = require("zod");
     const schema = z.object({
       action: z.enum(["approve", "reject"]),
-      adminNote: z.string().optional()
+      adminNote: z.string().max(1000).optional()
     });
     const body = await req.json();
     return schema.parse(body);

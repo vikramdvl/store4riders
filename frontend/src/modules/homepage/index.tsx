@@ -238,7 +238,7 @@ export const HomepageModule: React.FC<{
           name: p.name,
           priceFormatted: `₹ ${Math.round(displayPrice)?.toLocaleString('en-IN') || '0'}`,
           imageUrl,
-          rating: 4.8,
+          rating: p.avgRating ? Number(Number(p.avgRating).toFixed(1)) : 4.8,
           productUrl
         };
       })
@@ -310,7 +310,7 @@ export const HomepageModule: React.FC<{
           name: p.name,
           priceFormatted: `₹ ${Math.round(displayPrice)?.toLocaleString('en-IN') || '0'}`,
           imageUrl,
-          rating: 4.8,
+          rating: p.avgRating ? Number(Number(p.avgRating).toFixed(1)) : 4.8,
           productUrl,
         };
       })

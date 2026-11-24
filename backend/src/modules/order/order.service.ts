@@ -1346,17 +1346,18 @@ export class OrderService {
     }
     
     if (order.status !== "delivered") {
-      throw new AppError("Only delivered orders can be returned", 400);
+      throw new AppError("Only delivered orders can be exchanged or returned", 400);
     }
 
+    const dbId = (order as any)._id?.toString() || order.id || orderId;
     const note = {
-      text: `Return requested: ${reason}`,
+      text: `Exchange requested: ${reason}`,
       author: userId,
       timestamp: new Date()
     };
     
-    await OrderRepository.addNote(orderId, note);
-    return await OrderRepository.updateStatus(orderId, "return_requested");
+    await OrderRepository.addNote(dbId, note);
+    return await OrderRepository.updateStatus(dbId, "return_requested");
   }
 
   static async adminHandleReturn(orderId: string, action: string, adminNote?: string) {
@@ -1370,15 +1371,16 @@ export class OrderService {
     }
 
     const status = action === "approve" ? "return_approved" : "delivered";
+    const dbId = (order as any)._id?.toString() || order.id || orderId;
     
-    const noteText = action === "approve" ? "Return approved." : "Return rejected.";
-    await OrderRepository.addNote(orderId, {
+    const noteText = action === "approve" ? "Exchange approved." : "Exchange rejected.";
+    await OrderRepository.addNote(dbId, {
       text: adminNote ? `${noteText} Reason: ${adminNote}` : noteText,
       author: "Admin",
       timestamp: new Date()
     });
 
-    return await OrderRepository.updateStatus(orderId, status);
+    return await OrderRepository.updateStatus(dbId, status);
   }
 
   static async getInvoiceUrl(orderId: string, userId: string) {

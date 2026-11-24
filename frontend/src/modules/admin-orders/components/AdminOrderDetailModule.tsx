@@ -20,6 +20,7 @@ import { useGenerateInvoice } from "@/core/hooks/useOrderActions";
 import { useOrderShipments } from "@/core/hooks/useShipments";
 import { usePushToShiprocket } from "@/core/hooks/useAdminShipments";
 import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
+import { parseExchangeNote } from "./ExchangeRequestsModule";
 import { toast } from "sonner";
 import { 
   ArrowLeftIcon, 
@@ -857,49 +858,95 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
             </div>
           </div>
 
-          {/* Exchange Management (Only visible if requested) */}
-          {order.status === "return_requested" && (
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 animate-in fade-in">
-              <h2 className="text-sm font-black uppercase text-orange-900 mb-2">Exchange Request Pending</h2>
-              <p className="text-xs text-orange-700 mb-4">
-                Customer has requested an exchange for size or product.
-                {isCustomerCare ? " Exchange inspection & approval is handled by Logistics." : " Review and take action."}
-              </p>
-              
-              {!isCustomerCare ? (
-                <>
-                  <input 
-                    type="text" 
-                    value={returnNote}
-                    onChange={e => setReturnNote(e.target.value)}
-                    placeholder="Reason / Note to customer for exchange..."
-                    className="w-full px-3 py-2 border border-orange-200 rounded text-sm mb-4 focus:outline-none focus:border-orange-400 bg-white"
-                  />
+          {/* Exchange Management (Visible for any exchange status) */}
+          {["return_requested", "return_approved", "return_picked", "returned"].includes(order.status) && (() => {
+            const exchangeNote = order.notes?.slice().reverse().find((n: any) => 
+              typeof n.text === "string" && (n.text.toLowerCase().includes("return") || n.text.toLowerCase().includes("exchange"))
+            );
+            const parsed = parseExchangeNote(exchangeNote?.text);
+            const isPendingAction = order.status === "return_requested";
 
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleReturnAction("approve")}
-                      disabled={handleReturnMutation.isPending}
-                      className="flex-1 py-2 bg-green-600 text-white font-bold text-xs uppercase rounded hover:bg-green-700 disabled:opacity-50"
-                    >
-                      Approve Exchange
-                    </button>
-                    <button 
-                      onClick={() => handleReturnAction("reject")}
-                      disabled={handleReturnMutation.isPending}
-                      className="flex-1 py-2 bg-red-600 text-white font-bold text-xs uppercase rounded hover:bg-red-700 disabled:opacity-50"
-                    >
-                      Reject Exchange
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="text-xs font-semibold text-orange-800 bg-orange-100/60 p-2.5 rounded border border-orange-200">
-                  ⓘ Logistics team handles pickup and approval of exchanges.
+            return (
+              <div className="bg-orange-50/90 border border-orange-200 rounded-lg p-5 space-y-3 animate-in fade-in">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h2 className="text-sm font-black uppercase text-orange-950 flex items-center gap-1.5">
+                    <span>🔄</span>
+                    <span>Customer Exchange Request</span>
+                  </h2>
+                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase border ${
+                    order.status === "return_requested" ? "bg-amber-100 text-amber-800 border-amber-300" :
+                    order.status === "return_approved" ? "bg-purple-100 text-purple-800 border-purple-300" :
+                    order.status === "return_picked" ? "bg-blue-100 text-blue-800 border-blue-300" :
+                    "bg-emerald-100 text-emerald-800 border-emerald-300"
+                  }`}>
+                    {getStatusLabel(order.status)}
+                  </span>
                 </div>
-              )}
-            </div>
-          )}
+
+                {/* Parsed Reason & Replacement Box */}
+                <div className="bg-white rounded-lg p-3 border border-orange-200/80 space-y-2 text-xs">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-neutral-400 block mb-0.5">Reason Category:</span>
+                    <span className="font-bold text-neutral-900 bg-neutral-100 px-2 py-0.5 rounded text-xs">
+                      {parsed.reasonType}
+                    </span>
+                  </div>
+
+                  {parsed.replacementRequirement && (
+                    <div className="bg-amber-50/80 p-2 rounded border border-amber-200">
+                      <span className="text-[10px] uppercase font-bold text-amber-900 block mb-0.5">Desired Replacement:</span>
+                      <span className="font-bold text-neutral-900 break-all text-xs">{parsed.replacementRequirement}</span>
+                    </div>
+                  )}
+
+                  {parsed.customerNote && (
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-neutral-400 block mb-0.5">Customer Note:</span>
+                      <p className="text-neutral-800 break-all bg-neutral-50 p-2 rounded border border-neutral-100 text-xs">
+                        "{parsed.customerNote}"
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Admin Actions if pending review */}
+                {isPendingAction && !isCustomerCare && (
+                  <div className="space-y-2 pt-2 border-t border-orange-200">
+                    <input 
+                      type="text" 
+                      value={returnNote}
+                      onChange={e => setReturnNote(e.target.value)}
+                      placeholder="Optional admin note / response to customer..."
+                      className="w-full px-3 py-2 border border-orange-200 rounded text-xs focus:outline-none focus:border-orange-400 bg-white"
+                    />
+
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => handleReturnAction("approve")}
+                        disabled={handleReturnMutation.isPending}
+                        className="flex-1 py-2 bg-emerald-600 text-white font-bold text-xs uppercase rounded hover:bg-emerald-700 transition-colors disabled:opacity-50 shadow-2xs cursor-pointer"
+                      >
+                        Approve Exchange
+                      </button>
+                      <button 
+                        onClick={() => handleReturnAction("reject")}
+                        disabled={handleReturnMutation.isPending}
+                        className="flex-1 py-2 bg-red-600 text-white font-bold text-xs uppercase rounded hover:bg-red-700 transition-colors disabled:opacity-50 shadow-2xs cursor-pointer"
+                      >
+                        Reject Exchange
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isCustomerCare && (
+                  <div className="text-xs font-semibold text-orange-800 bg-orange-100/60 p-2.5 rounded border border-orange-200">
+                    ⓘ Logistics team handles pickup and approval of exchanges.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Customer Info */}
           <div className="bg-white border border-neutral-200 rounded-lg p-6">

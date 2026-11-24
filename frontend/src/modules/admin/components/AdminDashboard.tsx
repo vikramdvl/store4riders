@@ -288,7 +288,7 @@ export function AdminDashboard() {
                 <Package className="w-3.5 h-3.5 text-amber-400" />
                 <span>Orders to Pack</span>
                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${orderTab === "to_pack" ? "bg-amber-400 text-slate-950 font-black" : "bg-slate-200 text-slate-700"}`}>
-                  {(recentOrders || []).filter((o: any) => ["confirmed", "processing", "pending_payment", "paid"].includes(String(o.status || "").toLowerCase())).length}
+                  {(recentOrders || []).filter((o: any) => ["confirmed", "processing", "paid"].includes(String(o.status || "").toLowerCase())).length}
                 </span>
               </button>
 
@@ -345,7 +345,7 @@ export function AdminDashboard() {
                 </tr>
               ) : (
                 (recentOrders || [])
-                .filter((order: any) => orderTab === "all" || ["confirmed", "processing", "pending_payment", "paid"].includes(String(order.status || "").toLowerCase()))
+                .filter((order: any) => orderTab === "all" || ["confirmed", "processing", "paid"].includes(String(order.status || "").toLowerCase()))
                 .map((order: any) => {
                   const isCod = String(order.paymentMethod || "").toLowerCase() === "cod";
                   const orderNum = order.orderNumber || order.id || order._id;
@@ -408,7 +408,7 @@ export function AdminDashboard() {
 
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {["confirmed", "processing", "pending_payment", "paid"].includes(String(order.status || "").toLowerCase()) && (
+                          {["confirmed", "processing", "paid"].includes(String(order.status || "").toLowerCase()) && (
                             <button
                               type="button"
                               onClick={() => setFulfillOrderId(String(order._id || order.id))}

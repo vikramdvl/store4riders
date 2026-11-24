@@ -16,7 +16,7 @@ export class AdminService {
     }
 
     const [totalOrders, customers, products, lowStockCount, pendingFulfillments, activeShipments, revenueResult] = await Promise.all([
-      OrderModel.countDocuments(),
+      OrderModel.countDocuments({ status: { $nin: ["failed", "pending_payment"] } }),
       isLogisticRole ? Promise.resolve(0) : UserModel.countDocuments({ role: "customer" }),
       ProductModel.countDocuments(),
       ProductModel.countDocuments({ stockStatus: 0 }),
@@ -25,7 +25,7 @@ export class AdminService {
       isLogisticRole 
         ? Promise.resolve([])
         : OrderModel.aggregate([
-            { $match: { status: { $ne: "cancelled" } } },
+            { $match: { status: { $nin: ["cancelled", "failed", "pending_payment", "refunded"] } } },
             { $group: { _id: null, totalRevenue: { $sum: "$pricing.total" } } }
           ])
     ]);
@@ -505,7 +505,7 @@ export class AdminService {
       {
         $match: {
           createdAt: { $gte: thirtyDaysAgo },
-          status: { $ne: "cancelled" }
+          status: { $nin: ["cancelled", "failed", "pending_payment", "refunded"] }
         }
       },
       {

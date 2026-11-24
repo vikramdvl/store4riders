@@ -81,6 +81,8 @@ export interface IBackendProduct {
   allowBackorders?: boolean;
   videoUrl?: string;
   attributes?: Record<string, string>;
+  avgRating?: number;
+  reviewCount?: number;
 }
 
 export interface UseProductsParams {

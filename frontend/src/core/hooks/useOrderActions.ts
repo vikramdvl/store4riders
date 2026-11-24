@@ -12,10 +12,10 @@ export function useRequestReturn() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["order", variables.orderId] });
-      toast.success("Return request submitted successfully");
+      toast.success("Exchange request submitted successfully");
     },
     onError: (error: any) => {
-      toast.error(error?.response?.data?.error || "Failed to submit return request");
+      toast.error(error?.response?.data?.error || "Failed to submit exchange request");
     }
   });
 }

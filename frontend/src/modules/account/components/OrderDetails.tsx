@@ -18,8 +18,11 @@ import {
   MapPin,
   RefreshCw,
   Phone,
-  FileText
+  FileText,
+  ShieldCheck,
+  AlertCircle
 } from "lucide-react";
+import { ExchangeOrderModal } from "./ExchangeOrderModal";
 
 export function OrderDetails({ orderId }: { orderId: string }) {
   const { data, isLoading, error } = useQuery({
@@ -34,6 +37,7 @@ export function OrderDetails({ orderId }: { orderId: string }) {
   const [isGeneratingInvoice, setIsGeneratingInvoice] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [isExchangeModalOpen, setIsExchangeModalOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -78,6 +82,10 @@ export function OrderDetails({ orderId }: { orderId: string }) {
       case "shipped":
         return 2;
       case "delivered":
+      case "return_requested":
+      case "return_approved":
+      case "return_picked":
+      case "returned":
         return 3;
       default:
         return 0;
@@ -88,6 +96,16 @@ export function OrderDetails({ orderId }: { orderId: string }) {
   const isCancelled = order.status?.toLowerCase() === "cancelled";
   const isFailed = order.status?.toLowerCase() === "failed";
   const isPendingPayment = order.status?.toLowerCase() === "pending_payment";
+  const isDelivered = order.status?.toLowerCase() === "delivered";
+  const isExchangeRequested = order.status?.toLowerCase() === "return_requested";
+  const isExchangeApproved = order.status?.toLowerCase() === "return_approved";
+  const isExchangePicked = order.status?.toLowerCase() === "return_picked";
+  const isExchangeCompleted = order.status?.toLowerCase() === "returned";
+  const isUnderExchange = isExchangeRequested || isExchangeApproved || isExchangePicked || isExchangeCompleted;
+
+  const exchangeNote = order.notes?.slice().reverse().find((n: any) => 
+    typeof n.text === "string" && (n.text.toLowerCase().includes("exchange") || n.text.toLowerCase().includes("return"))
+  );
 
   const handleDownloadInvoice = async () => {
     try {
@@ -166,18 +184,41 @@ export function OrderDetails({ orderId }: { orderId: string }) {
           </p>
         </div>
 
-        {/* Invoice Button (Only if confirmed/delivered) */}
-        {!isCancelled && !isFailed && !isPendingPayment && (
-          <button 
-            type="button"
-            onClick={handleDownloadInvoice}
-            disabled={isGeneratingInvoice}
-            className="w-full sm:w-auto border border-neutral-300 hover:border-neutral-900 text-neutral-800 bg-white hover:bg-neutral-50 text-xs font-bold tracking-wider uppercase px-4 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
-          >
-            <Receipt className="w-4 h-4 text-neutral-600" />
-            <span>{isGeneratingInvoice ? "Preparing PDF..." : "Download Tax Invoice"}</span>
-          </button>
-        )}
+        {/* Action Buttons Group (Invoice + Exchange) */}
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+          {/* Request Exchange Button (Delivered orders) */}
+          {isDelivered && (
+            <button
+              type="button"
+              onClick={() => setIsExchangeModalOpen(true)}
+              className="w-full sm:w-auto bg-neutral-900 hover:bg-black text-white text-xs font-bold tracking-wider uppercase px-4 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-2xs shrink-0 cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+              <span>Request Exchange</span>
+            </button>
+          )}
+
+          {/* Active Exchange Badge */}
+          {isUnderExchange && (
+            <div className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold uppercase tracking-wider shadow-2xs shrink-0">
+              <RefreshCw className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+              <span>Exchange In Progress</span>
+            </div>
+          )}
+
+          {/* Invoice Button (Only if confirmed/delivered) */}
+          {!isCancelled && !isFailed && !isPendingPayment && (
+            <button 
+              type="button"
+              onClick={handleDownloadInvoice}
+              disabled={isGeneratingInvoice}
+              className="w-full sm:w-auto border border-neutral-300 hover:border-neutral-900 text-neutral-800 bg-white hover:bg-neutral-50 text-xs font-bold tracking-wider uppercase px-4 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
+            >
+              <Receipt className="w-4 h-4 text-neutral-600" />
+              <span>{isGeneratingInvoice ? "Preparing PDF..." : "Download Tax Invoice"}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 3. Status Stepper OR Payment Issue Alert */}
@@ -307,6 +348,120 @@ export function OrderDetails({ orderId }: { orderId: string }) {
             </div>
 
           </div>
+        </div>
+      )}
+
+      {/* 3.1 Exchange Status Banner & Progress (If active exchange) */}
+      {isUnderExchange && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50/70 border border-amber-300 rounded-xl p-4 sm:p-5 mb-6 shadow-xs flex flex-col gap-4">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800 font-bold shrink-0">
+                <RefreshCw className="w-5 h-5" />
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-sm sm:text-base text-amber-950 uppercase tracking-tight">
+                    {isExchangeRequested && "Exchange Request Submitted — Under Review"}
+                    {isExchangeApproved && "Exchange Approved — Pickup Scheduled"}
+                    {isExchangePicked && "Gear Picked Up — In Transit to Warehouse"}
+                    {isExchangeCompleted && "Exchange Completed"}
+                  </h3>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
+                    isExchangeCompleted 
+                      ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                      : isExchangeApproved
+                      ? "bg-purple-100 text-purple-800 border-purple-300"
+                      : isExchangePicked
+                      ? "bg-blue-100 text-blue-800 border-blue-300"
+                      : "bg-amber-100 text-amber-800 border-amber-300"
+                  }`}>
+                    {isExchangeCompleted ? "Completed" : isExchangeApproved ? "Approved" : isExchangePicked ? "Picked Up" : "In Review"}
+                  </span>
+                </div>
+                <p className="text-xs text-amber-900 font-medium mt-1 leading-relaxed">
+                  {isExchangeRequested && "Our customer care team has received your exchange request and is verifying replacement size availability. A reverse pickup will be scheduled upon approval."}
+                  {isExchangeApproved && "Your exchange request is approved! Our reverse pickup courier will visit your delivery address to collect the item. Please keep all original tags, box, and packing intact."}
+                  {isExchangePicked && "The package has been picked up by our courier and is returning to our facility for quality check. Your replacement size will be dispatched upon receipt."}
+                  {isExchangeCompleted && "Your gear exchange has been successfully processed and completed. Thank you for shopping with Store4Riders!"}
+                </p>
+              </div>
+            </div>
+
+            {/* WhatsApp Exchange Help Link */}
+            <a
+              href={`https://wa.me/918789494263?text=${encodeURIComponent(`Hi Store4Riders, I have a query regarding my Exchange Request for Order #${order.orderNumber}.`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-2xs shrink-0"
+            >
+              <span>💬 WhatsApp Exchange Support</span>
+            </a>
+          </div>
+
+          {/* Exchange Request Notes from Order */}
+          {exchangeNote && (
+            <div className="bg-white/80 border border-amber-200 rounded-lg p-3 text-xs text-neutral-800 flex flex-col gap-1">
+              <span className="font-bold text-neutral-900 text-[11px] uppercase tracking-wider text-amber-950">
+                Submitted Request Details:
+              </span>
+              <p className="text-neutral-700 font-mono text-xs bg-amber-50/50 p-2 rounded border border-amber-100">
+                {exchangeNote.text}
+              </p>
+            </div>
+          )}
+
+          {/* Exchange Stepper */}
+          <div className="pt-2 border-t border-amber-200/80">
+            <div className="grid grid-cols-4 gap-2 text-center">
+              {[
+                { label: "Request Placed", active: true },
+                { label: "Exchange Approved", active: isExchangeApproved || isExchangePicked || isExchangeCompleted },
+                { label: "Courier Picked", active: isExchangePicked || isExchangeCompleted },
+                { label: "Replacement Done", active: isExchangeCompleted },
+              ].map((step, idx) => (
+                <div key={idx} className="flex flex-col items-center gap-1">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                    step.active ? "bg-amber-600 text-white shadow-xs" : "bg-neutral-200 text-neutral-500"
+                  }`}>
+                    {idx + 1}
+                  </div>
+                  <span className={`text-[10px] font-bold uppercase tracking-tight ${
+                    step.active ? "text-amber-950" : "text-neutral-400"
+                  }`}>
+                    {step.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3.2 Delivered Order Exchange Option Card */}
+      {isDelivered && !isUnderExchange && (
+        <div className="bg-gradient-to-r from-neutral-900 to-neutral-800 text-white rounded-xl p-4 sm:p-5 mb-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-white/10 text-amber-400 flex items-center justify-center shrink-0">
+              <RefreshCw className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm sm:text-base text-white tracking-tight uppercase">
+                Need a Size Replacement or Gear Exchange?
+              </h3>
+              <p className="text-xs text-neutral-300 mt-0.5 leading-relaxed max-w-xl">
+                Wrong size? Store4Riders facilitates size replacements for unwashed, unused gear with original manufacturer tags intact within 48 hours of delivery.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsExchangeModalOpen(true)}
+            className="w-full sm:w-auto bg-brand hover:bg-red-800 text-white font-bold text-xs uppercase tracking-wider px-5 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-xs shrink-0 cursor-pointer"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Request Exchange</span>
+          </button>
         </div>
       )}
 
@@ -495,6 +650,13 @@ export function OrderDetails({ orderId }: { orderId: string }) {
         </div>
 
       </div>
+
+      {/* Exchange Request Modal */}
+      <ExchangeOrderModal
+        order={order}
+        isOpen={isExchangeModalOpen}
+        onClose={() => setIsExchangeModalOpen(false)}
+      />
 
     </div>
   );

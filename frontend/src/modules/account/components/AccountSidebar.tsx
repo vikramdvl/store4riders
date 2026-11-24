@@ -4,7 +4,7 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { User, Package, Heart, LogOut, MapPin, Settings } from "lucide-react";
+import { User, Package, Heart, LogOut, MapPin, Settings, RefreshCw } from "lucide-react";
 import { useLogout } from "@/core/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -12,6 +12,7 @@ const links = [
   { name: "Profile Details", path: "/account", icon: User },
   { name: "Addresses", path: "/account/addresses", icon: MapPin },
   { name: "Order History", path: "/account/orders", icon: Package },
+  { name: "Exchanges & Returns", path: "/account/orders?tab=exchanges", icon: RefreshCw },
   { name: "Wishlist", path: "/account/wishlist", icon: Heart },
 ];
 
@@ -63,7 +64,14 @@ export function AccountSidebar() {
         <div className="p-2.5 sm:p-3 -mt-3 sm:-mt-4 bg-white rounded-t-2xl relative z-10">
           <nav className="flex lg:flex-col overflow-x-auto no-scrollbar gap-1 sm:gap-1.5 pb-1 lg:pb-0">
             {links.map(link => {
-              const isActive = pathname === link.path;
+              const isExchangeLink = link.path.includes("tab=exchanges");
+              const isExchangeTab = mounted && typeof window !== "undefined" && window.location.search.includes("tab=exchanges");
+              const isActive = isExchangeLink 
+                ? (pathname.startsWith("/account/orders") && isExchangeTab)
+                : link.path === "/account/orders"
+                ? (pathname.startsWith("/account/orders") && !isExchangeTab)
+                : pathname === link.path;
+
               return (
                 <Link 
                   key={link.name} 

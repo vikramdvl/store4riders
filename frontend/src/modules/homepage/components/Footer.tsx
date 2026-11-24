@@ -77,7 +77,7 @@ export const Footer: React.FC = () => {
   const showSocialLinks = footer?.showSocialLinks !== false;
 
   const phone = footer?.contactPhone?.trim() || settings?.whatsappNumber || settings?.supportPhone || "+91 - 7263007788";
-  const emailAddress = footer?.contactEmail?.trim() || settings?.supportEmail || "contact@store4riders.com";
+  const emailAddress = footer?.contactEmail?.trim() || settings?.supportEmail || "support@store4riders.com";
   const address = footer?.contactAddress?.trim() || "";
 
   const instagramUrl = settings?.instagramUrl || "https://www.instagram.com/store4riders/";
@@ -197,7 +197,7 @@ export const Footer: React.FC = () => {
                     <span className="font-medium text-white group-hover:text-banner transition-colors shrink-0">
                       Contact Us:
                     </span>
-                    <span className="group-hover:underline">
+                    <span className="group-hover:underline" suppressHydrationWarning>
                       {phone}
                     </span>
                   </a>
@@ -213,19 +213,19 @@ export const Footer: React.FC = () => {
                     <span className="font-medium text-white group-hover:text-banner transition-colors shrink-0">
                       Email:
                     </span>
-                    <span className="group-hover:underline">
+                    <span className="group-hover:underline" suppressHydrationWarning>
                       {emailAddress}
                     </span>
                   </a>
                 )}
                 {address && (
-                  <div className="flex items-start gap-2 text-neutral-300">
+                  <div className="flex items-start gap-2 text-neutral-300" suppressHydrationWarning>
                     <MapPin className="w-3.5 h-3.5 text-banner shrink-0 mt-0.5" />
                     <div className="flex flex-col">
                       <span className="font-medium text-white">
                         Address:
                       </span>
-                      <span className="leading-relaxed">
+                      <span className="leading-relaxed" suppressHydrationWarning>
                         {address}
                       </span>
                     </div>
@@ -485,7 +485,7 @@ export const Footer: React.FC = () => {
             </div>
           </div>
 
-          <p className="text-center text-xs text-neutral-400">{copyrightText}</p>
+          <p className="text-center text-xs text-neutral-400" suppressHydrationWarning>{copyrightText}</p>
         </div>
       </div>
     </footer>

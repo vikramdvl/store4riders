@@ -207,7 +207,7 @@ export const ProductsPageModule = ({ initialCategoryNode }: { initialCategoryNod
           : undefined;
         return getProductThumbnailUrl(p, explicitColor);
       })(),
-      rating: 4.9,
+      rating: p.avgRating ? Number(Number(p.avgRating).toFixed(1)) : 4.9,
       isFeatured: Boolean(p.isFeatured),
       showFeaturedBadge: Boolean(p.isFeatured && ((p as any).showFeaturedBadge || p.attributes?.show_featured_badge === "true" || p.attributes?.showFeaturedBadge === "true")),
       productUrl: (() => {

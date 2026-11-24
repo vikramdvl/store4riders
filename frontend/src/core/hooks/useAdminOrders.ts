@@ -98,10 +98,10 @@ export function useAdminHandleReturn() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
       queryClient.invalidateQueries({ queryKey: ["admin-order", variables.orderId] });
-      toast.success(`Return ${variables.action}d successfully`);
+      toast.success(`Exchange ${variables.action}d successfully`);
     },
     onError: (error: any) => {
-      toast.error(error?.response?.data?.error || `Failed to process return`);
+      toast.error(error?.response?.data?.error || `Failed to process exchange`);
     }
   });
 }

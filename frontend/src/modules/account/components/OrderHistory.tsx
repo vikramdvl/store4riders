@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { formatPrice } from "@store4riders/shared-utils";
@@ -18,11 +18,22 @@ import {
   ShoppingBag,
   ExternalLink
 } from "lucide-react";
+import { ExchangeOrderModal } from "./ExchangeOrderModal";
 
-type FilterTab = "all" | "active" | "delivered" | "cancelled_failed";
+type FilterTab = "all" | "active" | "delivered" | "exchanges" | "cancelled_failed";
 
 export function OrderHistory() {
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
+  const [selectedExchangeOrder, setSelectedExchangeOrder] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "exchanges") {
+        setActiveTab("exchanges");
+      }
+    }
+  }, []);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["orders"],
@@ -70,6 +81,38 @@ export function OrderHistory() {
           dot: "bg-emerald-500",
           category: "delivered"
         };
+      case "return_requested":
+        return { 
+          text: "Exchange Requested", 
+          color: "bg-amber-50 text-amber-800 border-amber-200",
+          icon: <RefreshCw className="w-3 h-3 text-amber-600 shrink-0" />,
+          dot: "bg-amber-500",
+          category: "exchanges"
+        };
+      case "return_approved":
+        return { 
+          text: "Exchange Approved", 
+          color: "bg-purple-50 text-purple-800 border-purple-200",
+          icon: <CheckCircle2 className="w-3 h-3 text-purple-600 shrink-0" />,
+          dot: "bg-purple-500",
+          category: "exchanges"
+        };
+      case "return_picked":
+        return { 
+          text: "Exchange Picked Up", 
+          color: "bg-blue-50 text-blue-800 border-blue-200",
+          icon: <Truck className="w-3 h-3 text-blue-600 shrink-0" />,
+          dot: "bg-blue-500",
+          category: "exchanges"
+        };
+      case "returned":
+        return { 
+          text: "Exchange Completed", 
+          color: "bg-emerald-50 text-emerald-800 border-emerald-200",
+          icon: <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />,
+          dot: "bg-emerald-500",
+          category: "exchanges"
+        };
       case "failed":
         return { 
           text: "Payment Failed", 
@@ -114,6 +157,9 @@ export function OrderHistory() {
     if (activeTab === "delivered") {
       return orders.filter(o => (o.status || "").toLowerCase() === "delivered");
     }
+    if (activeTab === "exchanges") {
+      return orders.filter(o => ["return_requested", "return_approved", "return_picked", "returned"].includes((o.status || "").toLowerCase()));
+    }
     if (activeTab === "cancelled_failed") {
       return orders.filter(o => ["cancelled", "failed", "refunded"].includes((o.status || "").toLowerCase()));
     }
@@ -126,6 +172,7 @@ export function OrderHistory() {
       all: orders.length,
       active: orders.filter(o => ["pending_payment", "confirmed", "processing", "packed", "shipped"].includes((o.status || "").toLowerCase())).length,
       delivered: orders.filter(o => (o.status || "").toLowerCase() === "delivered").length,
+      exchanges: orders.filter(o => ["return_requested", "return_approved", "return_picked", "returned"].includes((o.status || "").toLowerCase())).length,
       cancelled_failed: orders.filter(o => ["cancelled", "failed", "refunded"].includes((o.status || "").toLowerCase())).length,
     };
   }, [orders]);
@@ -189,6 +236,7 @@ export function OrderHistory() {
             { id: "all", label: "All Orders", count: tabCounts.all },
             { id: "active", label: "In Transit / Active", count: tabCounts.active },
             { id: "delivered", label: "Delivered", count: tabCounts.delivered },
+            { id: "exchanges", label: "Exchanges", count: tabCounts.exchanges },
             { id: "cancelled_failed", label: "Cancelled / Failed", count: tabCounts.cancelled_failed },
           ].map(tab => {
             const isActive = activeTab === tab.id;
@@ -264,7 +312,9 @@ export function OrderHistory() {
               year: "numeric"
             });
             const isOrderPendingOrFailed = ["pending_payment", "failed"].includes((order.status || "").toLowerCase());
-            const isShippedOrProcessing = ["shipped", "processing", "packed", "delivered"].includes((order.status || "").toLowerCase());
+            const isDelivered = (order.status || "").toLowerCase() === "delivered";
+            const isUnderExchange = ["return_requested", "return_approved", "return_picked", "returned"].includes((order.status || "").toLowerCase());
+            const isShippedOrProcessing = ["shipped", "processing", "packed"].includes((order.status || "").toLowerCase());
 
             return (
               <div 
@@ -363,7 +413,7 @@ export function OrderHistory() {
                   </div>
 
                   {/* Actions Group (44px min tap targets on mobile) */}
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
                     
                     {/* If failed/pending, show primary Check Status / Retry button */}
                     {isOrderPendingOrFailed ? (
@@ -376,8 +426,38 @@ export function OrderHistory() {
                           <span>Resolve Payment</span>
                         </button>
                       </Link>
-                    ) : isShippedOrProcessing && (
+                    ) : isUnderExchange ? (
                       <Link href={`/account/orders/${orderIdStr}`} className="flex-1 sm:flex-initial">
+                        <button 
+                          type="button"
+                          className="w-full sm:w-auto bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs px-3.5 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Exchange Status</span>
+                        </button>
+                      </Link>
+                    ) : isDelivered ? (
+                      <>
+                        <button 
+                          type="button"
+                          onClick={() => setSelectedExchangeOrder(order)}
+                          className="flex-1 sm:flex-initial bg-white hover:bg-neutral-50 text-neutral-800 border border-neutral-300 hover:border-neutral-900 font-bold text-xs px-3.5 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Request Exchange</span>
+                        </button>
+                        <Link href={`/account/orders/${orderIdStr}/tracking`} className="flex-1 sm:flex-initial hidden sm:block">
+                          <button 
+                            type="button"
+                            className="w-full sm:w-auto border border-neutral-300 hover:border-neutral-900 bg-white text-neutral-800 font-bold text-xs px-3 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
+                          >
+                            <Truck className="w-3.5 h-3.5 text-neutral-600" />
+                            <span>Tracking</span>
+                          </button>
+                        </Link>
+                      </>
+                    ) : isShippedOrProcessing && (
+                      <Link href={`/account/orders/${orderIdStr}/tracking`} className="flex-1 sm:flex-initial">
                         <button 
                           type="button"
                           className="w-full sm:w-auto border border-neutral-300 hover:border-neutral-900 bg-white text-neutral-800 font-bold text-xs px-3.5 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
@@ -408,6 +488,13 @@ export function OrderHistory() {
           })}
         </div>
       )}
+
+      {/* Exchange Request Modal */}
+      <ExchangeOrderModal
+        order={selectedExchangeOrder}
+        isOpen={!!selectedExchangeOrder}
+        onClose={() => setSelectedExchangeOrder(null)}
+      />
 
     </div>
   );

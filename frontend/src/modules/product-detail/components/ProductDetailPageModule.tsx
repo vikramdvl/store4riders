@@ -797,7 +797,7 @@ const mapProductToPDP = (
 
   const avgRating = reviews && reviews.length > 0 
     ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length 
-    : 0;
+    : (Number(product.avgRating) || 0);
 
 
 
@@ -849,7 +849,7 @@ const mapProductToPDP = (
     originalPrice: hasDiscount ? base : undefined,
     variantsByColor: (product as any).variantsByColor || {},
     rating: avgRating,
-    reviewCount: reviews ? reviews.length : 0,
+    reviewCount: reviews && reviews.length > 0 ? reviews.length : (Number(product.reviewCount) || 0),
     originalPriceFormatted,
     discountBadge,
     priceFormatted,
