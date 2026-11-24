@@ -11,6 +11,7 @@ interface UIState {
   currentProductName: string | null;
   toggleSidebar: () => void;
   toggleMobileMenu: () => void;
+  setIsMobileMenuOpen: (isOpen: boolean) => void;
   toggleSearchModal: () => void;
   setIsBottomModalOpen: (isOpen: boolean) => void;
   setIsPDP: (isPDP: boolean) => void;
@@ -30,6 +31,7 @@ export const useUIStore = create<UIState>((set) => ({
   currentProductName: null,
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   toggleMobileMenu: () => set((state) => ({ isMobileMenuOpen: !state.isMobileMenuOpen })),
+  setIsMobileMenuOpen: (isOpen: boolean) => set({ isMobileMenuOpen: isOpen }),
   toggleSearchModal: () => set((state) => ({ isSearchModalOpen: !state.isSearchModalOpen })),
   setIsBottomModalOpen: (isOpen: boolean) => set({ isBottomModalOpen: isOpen }),
   setIsPDP: (isPDP: boolean) => set({ isPDP }),

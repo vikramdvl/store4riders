@@ -162,6 +162,7 @@ export interface CategoryShowcaseCardData {
   placeholderText: string;
   guideLinkText?: string;
   guideLinkUrl?: string;
+  badgeText?: string;
 }
 
 /**

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description:
     "Official manufacturer warranty coverage details, genuine product guarantee, and step-by-step claim procedures for riding gear at Store4Riders.",
   alternates: {
-    canonical: "https://store4riders.com/warranty",
+    canonical: "/warranty",
   },
 };
 

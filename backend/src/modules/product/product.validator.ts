@@ -134,8 +134,14 @@ export class ProductValidator {
       // Admin Name search / filter
       const nameParam = searchParams.get("name");
       const parentOnlyParam = searchParams.get("parentOnly");
-      if (parentOnlyParam === "true") {
-        andConditions.push({ visibility: { $nin: ["1", "Not Visible Individually"] } });
+      // Strictly hide standalone child variants ("Not Visible Individually" or "1") in All Products
+      if (parentOnlyParam !== "false") {
+        andConditions.push({
+          $and: [
+            { visibility: { $ne: "1" } },
+            { visibility: { $not: /^not\s*visible\s*individually$/i } }
+          ]
+        });
       }
       if (nameParam) {
         andConditions.push({
@@ -596,8 +602,21 @@ export class ProductValidator {
     }
 
     if (search) {
+      const cleanSearch = search.trim();
+      const escapedFullSearch = ProductValidator.escapeRegExp(cleanSearch);
+      const fullSearchRegex = new RegExp(escapedFullSearch, "i");
+
+      // Check if search query directly matches a parent SKU, variant SKU, or product title
+      const directSkuCondition = {
+        $or: [
+          { sku: fullSearchRegex },
+          { "variants.sku": fullSearchRegex },
+          { name: fullSearchRegex },
+        ]
+      };
+
       // Resolve search terms with fuzzy typo-tolerance (e.g. 'helmt' -> 'helmet')
-      const { terms, correctedTerms } = resolveFuzzySearchTerms(search);
+      const { terms, correctedTerms } = resolveFuzzySearchTerms(cleanSearch);
       
       if (terms.length > 0) {
         const searchConditions = terms.map((term, idx) => {
@@ -615,6 +634,7 @@ export class ProductValidator {
               { name: { $regex: searchRegex } },
               { brand: { $regex: searchRegex } },
               { sku: { $regex: searchRegex } },
+              { "variants.sku": { $regex: searchRegex } },
               { magentoCategories: { $regex: searchRegex } },
               { "variants.attributes.motorcycle_model": { $regex: searchRegex } },
               { configurableVariations: { $regex: searchRegex } },
@@ -622,13 +642,22 @@ export class ProductValidator {
           };
         });
         
-        // $and ensures ALL typed concepts match (either exact or typo-corrected)
-        andConditions.push({ $and: searchConditions });
+        const wordSearchAnd: any = { $and: searchConditions };
+
+        // Search matches either the full SKU/title directly OR all words
+        andConditions.push({
+          $or: [
+            directSkuCondition,
+            wordSearchAnd
+          ]
+        });
 
         const exclusionRegex = getGearAccessoryExclusion(correctedTerms.length > 0 ? correctedTerms : terms);
-        if (exclusionRegex) {
+        if (exclusionRegex && !isAdmin) {
           andConditions.push({ name: { $not: exclusionRegex } });
         }
+      } else {
+        andConditions.push(directSkuCondition);
       }
     }
 

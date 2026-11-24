@@ -94,7 +94,7 @@ export default function RootLayout({
   };
 
   return (
-    <html lang="en" className={`${inter.variable} ${poppins.variable} font-sans`} suppressHydrationWarning>
+    <html lang="en" className={`${inter.variable} ${poppins.variable} font-sans`} data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         {/* Preconnect & DNS-Prefetch to CloudFront Media Origin for Zero-Latency Image Delivery */}
         <link rel="preconnect" href="https://d2zuvpvc0pfkya.cloudfront.net" crossOrigin="anonymous" />

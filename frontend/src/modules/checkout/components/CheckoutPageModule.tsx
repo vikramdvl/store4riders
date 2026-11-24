@@ -1354,7 +1354,15 @@ export const CheckoutPageModule = () => {
                       </button>
 
                       <p className="text-[9.5px] text-slate-400 text-center font-medium">
-                        By placing your order, you agree to Store4Riders Terms & Conditions.
+                        By placing your order, you agree to Store4Riders{" "}
+                        <Link
+                          href="/store4riders-conditions-of-use-and-sale"
+                          target="_blank"
+                          className="underline hover:text-slate-600 font-semibold"
+                        >
+                          Terms &amp; Conditions
+                        </Link>
+                        .
                       </p>
                     </div>
                   )}

@@ -17,8 +17,11 @@ const DEFAULT_CARDS: CategoryShowcaseCardData[] = [
     title: "RIDING BOOTS",
     description:
       "Short biking boots, sports riding shoes and off-road boots with ankle and shin protection.",
-    linkUrl: "/riding-gear/riding-boots",
+    linkUrl: "/riding-gear/motorcycle-riding-boots",
+    imageUrl:
+      "https://store4riders.s3.ap-south-2.amazonaws.com/catalog/product/f/o/forma-viper-urban-motorcycle-riding-boots-black.jpg",
     placeholderText: "PHOTO: RIDING BOOTS",
+    badgeText: "TOP",
   },
   {
     id: "pants",
@@ -26,15 +29,21 @@ const DEFAULT_CARDS: CategoryShowcaseCardData[] = [
     description:
       "Riding pants, riding jeans and touring pants with removable knee and hip armour.",
     linkUrl: "/riding-gear/riding-pants",
+    imageUrl:
+      "https://store4riders.s3.ap-south-2.amazonaws.com/catalog/product/r/y/rynox-adventour-s2-riding-pants-black.jpg",
     placeholderText: "PHOTO: RIDING PANTS WITH KNEE ARMOUR",
+    badgeText: "TOP",
   },
   {
     id: "luggage",
     title: "MOTORCYCLE LUGGAGE",
     description:
       "Tank bags, saddle bags, tail bags and top boxes for weekend rides and long tours.",
-    linkUrl: "/luggage",
+    linkUrl: "/motorcycle-bags-bike-luggage",
+    imageUrl:
+      "https://store4riders.s3.ap-south-2.amazonaws.com/catalog/product/b/b/bbg_hybrid_tail_bag.jpg",
     placeholderText: "PHOTO: TAIL BAG ON A TOURING BIKE",
+    badgeText: "TOP",
   },
   {
     id: "accessories-spares",
@@ -42,9 +51,12 @@ const DEFAULT_CARDS: CategoryShowcaseCardData[] = [
     description:
       "Auxiliary lights, spark plugs, performance air filters, chains and chain care. New to chain maintenance? Start with our ",
     linkUrl: "/bike-accessories",
+    imageUrl:
+      "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/rolon.jpg",
     placeholderText: "PHOTO: AUXILIARY LIGHTS AND CHAIN CARE",
     guideLinkText: "chain lubing guide.",
     guideLinkUrl: "/products?q=chain+lube",
+    badgeText: "TOP",
   },
 ];
 
@@ -83,7 +95,7 @@ export const CategoryShowcaseSection: React.FC<CategoryShowcaseSectionProps> = (
       )}
 
       {/* Horizontally scrollable on Mobile, 4 columns on Desktop */}
-      <div className="flex lg:grid lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6 overflow-x-auto lg:overflow-visible scroll-smooth snap-x snap-mandatory pb-3 lg:pb-0 hide-scrollbar -mx-4 px-4 sm:-mx-6 sm:px-6 md:-mx-8 md:px-8 lg:mx-0 lg:px-0">
+      <div className="flex lg:grid lg:grid-cols-4 gap-3.5 sm:gap-4 md:gap-6 overflow-x-auto lg:overflow-visible scroll-smooth snap-x snap-mandatory pb-3 lg:pb-0 hide-scrollbar">
         {cards.map((card) => {
           return (
             <div
@@ -117,13 +129,15 @@ export const CategoryShowcaseSection: React.FC<CategoryShowcaseSectionProps> = (
                   </div>
                 )}
 
-                {/* Rating / Category Badge */}
-                <div className="absolute top-1.5 right-1.5 md:top-2 md:right-2 bg-banner text-white text-[9px] md:text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10 shadow-sm">
-                  <svg className="w-2 h-2 md:w-2.5 md:h-2.5 text-white fill-current" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                  <span>TOP</span>
-                </div>
+                {/* Rating / Category Badge (Customizable, hide if empty string) */}
+                {card.badgeText !== "" && (
+                  <div className="absolute top-1.5 right-1.5 md:top-2 md:right-2 bg-banner text-white text-[9px] md:text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 z-10 shadow-sm">
+                    <svg className="w-2 h-2 md:w-2.5 md:h-2.5 text-white fill-current" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    <span>{card.badgeText || "TOP"}</span>
+                  </div>
+                )}
 
                 {/* Hover Action Overlay */}
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto bg-black/5 z-20 hidden lg:flex">

@@ -11,17 +11,12 @@ const nextConfig = {
       },
       {
         source: '/shipping-policy',
-        destination: '/shipping',
+        destination: '/shipping-policies-store4riders',
         permanent: true,
       },
       {
         source: '/terms-and-conditions',
-        destination: '/terms',
-        permanent: true,
-      },
-      {
-        source: '/privacy-policy-cookie-restriction-mode',
-        destination: '/privacy',
+        destination: '/store4riders-conditions-of-use-and-sale',
         permanent: true,
       },
       {

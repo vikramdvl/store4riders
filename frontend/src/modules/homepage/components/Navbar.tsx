@@ -8,6 +8,7 @@ import { Bars3Icon, ShoppingBagIcon, MagnifyingGlassIcon, XMarkIcon, HeartIcon, 
 import { NavbarProps } from "../types/homepage.types";
 import { useCartStore } from "@/stores/useCartStore";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { useUIStore } from "@/stores/useUIStore";
 import { useLogout } from "@/core/hooks/useAuth";
 import { useBrands } from "@/core/hooks/useBrands";
 import { useCategoryTree } from "@/core/hooks/useCategories";
@@ -48,7 +49,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mounted, setMounted] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const isMobileMenuOpen = useUIStore((state) => state.isMobileMenuOpen);
+  const setIsMobileMenuOpen = useUIStore((state) => state.setIsMobileMenuOpen);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [hoveredNavId, setHoveredNavId] = useState<string | null>(null);
   const [hoveredMenuId, setHoveredMenuId] = useState<string | null>(null);
@@ -441,6 +443,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="object-contain object-left"
                 sizes="(max-width: 768px) 160px, 200px"
                 priority
+                unoptimized
               />
             </div>
           </Link>

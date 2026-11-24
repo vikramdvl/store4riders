@@ -27,7 +27,6 @@ import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import {
   useAdminProducts,
-  useBulkUpdateProducts,
   useDeleteProduct,
 } from "@/core/hooks/useProducts";
 import { useBrands } from "@/core/hooks/useBrands";
@@ -140,11 +139,6 @@ export function AdminProducts() {
 
   const deleteProduct = useDeleteProduct();
 
-  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const bulkUpdate = useBulkUpdateProducts();
-  const [uploadReport, setUploadReport] = useState<{ successCount: number; errorRows: any[] } | null>(null);
-
   const [testProductExists, setTestProductExists] = useState(false);
   const [isTogglingTestProduct, setIsTogglingTestProduct] = useState(false);
 
@@ -183,20 +177,6 @@ export function AdminProducts() {
     } finally {
       setIsTogglingTestProduct(false);
     }
-  };
-
-  const handleCsvUpload = () => {
-    if (!csvFile) return;
-    bulkUpdate.mutate(csvFile, {
-      onSuccess: (report) => {
-        setUploadReport(report);
-        toast.success(`Updated ${report.successCount} products successfully.`);
-        setCsvFile(null);
-      },
-      onError: (err: any) => {
-        toast.error(err.response?.data?.error || "CSV upload failed");
-      },
-    });
   };
 
   const handleApplyFilters = () => {
@@ -276,18 +256,6 @@ export function AdminProducts() {
               <span>Create ₹1 Sandbox Item</span>
             </button>
           )}
-
-          <Button
-            variant="outline"
-            className="flex items-center space-x-2 text-slate-700 bg-white hover:bg-slate-50 border-slate-200"
-            onClick={() => {
-              setUploadReport(null);
-              setIsCsvModalOpen(true);
-            }}
-          >
-            <Upload size={18} />
-            <span>Bulk CSV Update</span>
-          </Button>
 
           <Button
             variant="outline"
@@ -564,7 +532,29 @@ export function AdminProducts() {
                       </td>
 
                       <td className="px-4 py-3 font-mono text-slate-700 font-medium">
-                        {product.sku}
+                        <div>{product.sku}</div>
+                        {product.variants && product.variants.length > 0 && (
+                          <div className="text-[10.5px] font-sans text-slate-500 mt-0.5">
+                            <span>{product.variants.length} variant{product.variants.length > 1 ? "s" : ""}</span>
+                            {search && (
+                              (() => {
+                                const cleanQ = search.toLowerCase().trim();
+                                const normQ = cleanQ.replace(/[^a-z0-9]/g, "");
+                                const matchedVar = product.variants.find((v: any) => {
+                                  if (!v.sku) return false;
+                                  const vSku = v.sku.toLowerCase();
+                                  if (vSku.includes(cleanQ)) return true;
+                                  return normQ.length >= 4 && vSku.replace(/[^a-z0-9]/g, "").includes(normQ);
+                                });
+                                return matchedVar ? (
+                                  <span className="block font-mono text-[10px] text-brand bg-brand/5 px-1.5 py-0.5 rounded mt-1 border border-brand/20 font-semibold">
+                                    ↳ Variant: {matchedVar.sku}
+                                  </span>
+                                ) : null;
+                              })()
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       <td className="px-4 py-3 font-medium text-slate-800">
@@ -665,102 +655,6 @@ export function AdminProducts() {
           </div>
         )}
       </div>
-
-      <Modal
-        isOpen={isCsvModalOpen}
-        onClose={() => setIsCsvModalOpen(false)}
-        title="Bulk Update Products (CSV)"
-        maxWidth="max-w-xl"
-      >
-        <div className="space-y-4">
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs text-slate-700">
-            <p className="font-bold text-slate-900 text-sm">
-              Bulk CSV Update Instructions & Column Reference
-            </p>
-            <p className="text-slate-600 leading-relaxed text-[11.5px]">
-              Upload a CSV file to bulk update catalog data. You can export a CSV, edit any fields in Excel/Sheets, and upload it back.
-              The CSV header row must include <code className="px-1 py-0.5 bg-white border border-slate-300 rounded font-mono font-bold text-slate-900">sku</code>.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
-              <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
-                <span className="font-bold text-slate-800 font-sans block text-xs border-b border-slate-100 pb-0.5">Price & Inventory:</span>
-                <div><span className="text-brand font-bold">sku</span>: Target SKU</div>
-                <div><span className="text-brand font-bold">price</span>: Selling Price (₹)</div>
-                <div><span className="text-brand font-bold">special_price</span>: Sale (₹)</div>
-                <div><span className="text-brand font-bold">qty</span>: Inventory Count</div>
-                <div><span className="text-brand font-bold">is_in_stock</span>: 1 (In), 0 (Out)</div>
-              </div>
-
-              <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
-                <span className="font-bold text-slate-800 font-sans block text-xs border-b border-slate-100 pb-0.5">Product Content & Specs:</span>
-                <div><span className="text-brand font-bold">name</span>: Title / Name</div>
-                <div><span className="text-brand font-bold">weight</span>: Weight (kg/g)</div>
-                <div><span className="text-brand font-bold">brand</span>: Brand Name</div>
-                <div><span className="text-brand font-bold">size_chart</span>: Image URL / HTML Table</div>
-                <div><span className="text-brand font-bold">hsn_code</span>: HSN / Tax Code</div>
-                <div><span className="text-brand font-bold">color_swatches</span>: Key=HEX</div>
-              </div>
-
-              <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
-                <span className="font-bold text-slate-800 font-sans block text-xs border-b border-slate-100 pb-0.5">SEO & SKU Renaming:</span>
-                <div><span className="text-brand font-bold">old_sku</span>: Rename from SKU</div>
-                <div><span className="text-brand font-bold">meta_title</span>: SEO Title</div>
-                <div><span className="text-brand font-bold">meta_description</span>: SEO Desc</div>
-                <div><span className="text-brand font-bold">related_skus</span>: SKU1,SKU2</div>
-                <div><span className="text-brand font-bold">status</span>: published / draft</div>
-              </div>
-            </div>
-
-            <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 leading-relaxed">
-              💡 <strong>Smart Safeguard:</strong> Uploading CSV updates only the columns present in your file. Your existing product photos, WebP galleries, and primary hero selections are 100% protected and will never be wiped.
-            </div>
-          </div>
-
-          {!uploadReport ? (
-            <>
-              <input
-                type="file"
-                accept=".csv"
-                onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
-                className="w-full p-2 border border-slate-300 rounded"
-              />
-              <div className="flex justify-end space-x-3 pt-4">
-                <Button variant="outline" onClick={() => setIsCsvModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button disabled={!csvFile || bulkUpdate.isPending} onClick={handleCsvUpload}>
-                  {bulkUpdate.isPending ? "Uploading..." : "Upload & Process"}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <div className="space-y-4">
-              <div className="p-4 bg-green-50 text-green-800 rounded-lg border border-green-200">
-                <h4 className="font-semibold">Update Complete</h4>
-                <p>Successfully updated {uploadReport.successCount} products.</p>
-              </div>
-
-              {uploadReport.errorRows?.length > 0 && (
-                <div className="p-4 bg-red-50 text-red-800 rounded-lg border border-red-200 max-h-60 overflow-y-auto">
-                  <h4 className="font-semibold mb-2">{uploadReport.errorRows.length} Errors Found</h4>
-                  <ul className="list-disc pl-5 text-sm space-y-1">
-                    {uploadReport.errorRows.map((err, i) => (
-                      <li key={i}>
-                        Row {err.row}: {err.reason}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="flex justify-end pt-2">
-                <Button onClick={() => setIsCsvModalOpen(false)}>Close</Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </Modal>
 
       {/* Brand-Specific or Full Catalog CSV Export Modal */}
       <Modal

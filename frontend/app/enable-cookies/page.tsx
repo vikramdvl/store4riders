@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description:
     "Step-by-step instructions to enable cookies across Chrome, Safari, Firefox, and Edge for a smooth shopping, cart preservation, and secure checkout experience on Store4Riders.",
   alternates: {
-    canonical: "https://store4riders.com/enable-cookies",
+    canonical: "/enable-cookies",
   },
 };
 

@@ -141,9 +141,9 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
       <main className="flex-1 max-w-[1400px] w-full mx-auto px-3 sm:px-6 pt-3 pb-16 md:pb-20">
         
         {/* Category Heading (SEO H1) & Size Guide */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-          <div className="min-w-0">
-            <h1 className="font-sans text-lg min-[375px]:text-xl sm:text-2xl md:text-3xl font-extrabold uppercase tracking-wide text-neutral-900 leading-tight">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <div className="min-w-0 flex-1">
+            <h1 className="font-sans text-base min-[375px]:text-lg sm:text-2xl md:text-3xl font-extrabold uppercase tracking-wide text-neutral-900 leading-tight">
               {pageTitle}
             </h1>
             {searchQuery && (
@@ -157,14 +157,14 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
             <button
               type="button"
               onClick={() => setShowSizeChart(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-800 text-xs sm:text-sm font-bold shadow-2xs hover:border-neutral-300 active:scale-95 transition-all cursor-pointer select-none"
+              className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-800 text-[11px] sm:text-sm font-bold shadow-2xs hover:border-neutral-300 active:scale-95 transition-all cursor-pointer select-none"
               title={`View ${pageTitle} Size Guide`}
               aria-label={`View ${pageTitle} Size Guide`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
+                width="15"
+                height="15"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -272,36 +272,6 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
               </div>
 
               <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-                {activeSizeChart && (
-                  <button
-                    type="button"
-                    suppressHydrationWarning
-                    onClick={() => setShowSizeChart(true)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-neutral-700 hover:text-neutral-900 text-[11px] sm:text-xs font-bold transition-all cursor-pointer shadow-2xs select-none"
-                    title="View Size Chart"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-brand shrink-0"
-                    >
-                      <rect x="2" y="8" width="20" height="8" rx="1" />
-                      <line x1="6" y1="16" x2="6" y2="12" />
-                      <line x1="10" y1="16" x2="10" y2="12" />
-                      <line x1="14" y1="16" x2="14" y2="12" />
-                      <line x1="18" y1="16" x2="18" y2="12" />
-                    </svg>
-                    <span>Size Chart</span>
-                  </button>
-                )}
-
                 <label htmlFor="catalog-sort" className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-neutral-500 whitespace-nowrap">
                   Sort by:
                 </label>

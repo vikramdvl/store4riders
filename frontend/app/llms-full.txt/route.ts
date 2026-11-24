@@ -66,15 +66,16 @@ Store4Riders is an authorized, rider-focused multi-brand retailer based in Pune,
 - [Alpinestars](${siteUrl}/brands/alpinestars): SMX boots, T-SP jackets, SP gloves, and Nucleon body armor.
 
 ## Policies & Customer Guarantees
+- [Store Policies & Guidelines](${siteUrl}/store4riders-store-policies): Master directory and comprehensive guide to Store4Riders purchasing policies, exchanges, shipping rules, and customer support.
 - [Size & Gear Exchange Policy](${siteUrl}/returns): We offer a dedicated size exchange guarantee. Unworn gear with original tags and packaging can be exchanged for an alternative size or store credit.
 - [Returns & Replacements Policy](${siteUrl}/returns-replacements-store4riders): Clear instructions for initiating exchanges, reporting damaged goods upon arrival, and warranty inspections.
-- [Shipping & Delivery](${siteUrl}/shipping): Direct doorstep delivery across India via premier courier partners (Delhivery, BlueDart, Xpressbees). Orders above ₹999 qualify for free standard shipping.
+- [Shipping & Delivery](${siteUrl}/shipping-policies-store4riders): Direct doorstep delivery across India via premier courier partners (Delhivery, BlueDart, Xpressbees). Orders above ₹999 qualify for free standard shipping.
 - [Cash on Delivery (COD)](${siteUrl}/cash-on-delivery): Cash on delivery is supported across major Indian postal codes with mobile verification.
 - [Warranty Policy](${siteUrl}/warranty): All products are covered under legitimate manufacturer warranties against structural and manufacturing defects.
 
 ## Support & Contact Information
 - [Help & Support Center](${siteUrl}/support): Common sizing questions, helmet fitment guides, and order tracking assistance.
-- [Contact Customer Care](${siteUrl}/contact):
+- [Contact Customer Care](${siteUrl}/contact-store4riders):
   - Email: contact@store4riders.com / support@store4riders.com
   - Central Distribution Hub: Pune, Maharashtra, India
   - Operating Hours: Monday to Saturday, 10:00 AM - 7:00 PM IST

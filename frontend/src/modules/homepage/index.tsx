@@ -316,6 +316,28 @@ export const HomepageModule: React.FC<{
       })
     : [];
 
+  // Support Admin Panel custom touring gear item assignments
+  const configuredTouringItems = homepageConfig?.sections?.touringGear?.items;
+  const hasConfiguredTouring = Array.isArray(configuredTouringItems) && configuredTouringItems.some((it: any) => it?.name && (it?.imageUrl || it?.productUrl));
+
+  const finalTouringProducts: BrowseProductData[] = hasConfiguredTouring
+    ? Array.from({ length: 4 }, (_, idx) => {
+        const configured = configuredTouringItems?.[idx];
+        if (configured && configured.name && (configured.imageUrl || configured.productUrl)) {
+          return {
+            id: configured.id || `custom-touring-${idx + 1}`,
+            category: (configured.category || "TOURING GEAR").toUpperCase(),
+            name: configured.name,
+            priceFormatted: configured.priceFormatted || "₹ 0",
+            imageUrl: configured.imageUrl || "/no-image.svg",
+            rating: configured.rating || 4.8,
+            productUrl: configured.productUrl || "/products",
+          };
+        }
+        return touringProducts[idx] || touringProducts[0];
+      })
+    : touringProducts;
+
   // Curate real products for the 4 Category Showcase cards (supports Admin Panel custom images & links)
   const categoryShowcaseCards: CategoryShowcaseCardData[] = React.useMemo(() => {
     const configuredCards = homepageConfig?.sections?.categoryShowcase?.cards;
@@ -349,8 +371,8 @@ export const HomepageModule: React.FC<{
         id: "boots",
         title: "RIDING BOOTS",
         description: "Short biking boots, sports riding shoes and off-road boots with ankle and shin protection.",
-        linkUrl: bootProd ? `/${bootProd.slug || bootProd._id}` : "/riding-gear/riding-boots",
-        imageUrl: bootProd?.images?.[0]?.url,
+        linkUrl: bootProd ? `/${bootProd.slug || bootProd._id}` : "/riding-gear/motorcycle-riding-boots",
+        imageUrl: bootProd ? getProductThumbnailUrl(bootProd) : "https://store4riders.s3.ap-south-2.amazonaws.com/catalog/product/f/o/forma-viper-urban-motorcycle-riding-boots-black.jpg",
         placeholderText: "PHOTO: RIDING BOOTS",
       },
       {
@@ -358,15 +380,15 @@ export const HomepageModule: React.FC<{
         title: "RIDING PANTS",
         description: "Riding pants, riding jeans and touring pants with removable knee and hip armour.",
         linkUrl: pantProd ? `/${pantProd.slug || pantProd._id}` : "/riding-gear/riding-pants",
-        imageUrl: pantProd?.images?.[0]?.url,
+        imageUrl: pantProd ? getProductThumbnailUrl(pantProd) : "https://store4riders.s3.ap-south-2.amazonaws.com/catalog/product/r/y/rynox-adventour-s2-riding-pants-black.jpg",
         placeholderText: "PHOTO: RIDING PANTS WITH KNEE ARMOUR",
       },
       {
         id: "luggage",
         title: "MOTORCYCLE LUGGAGE",
         description: "Tank bags, saddle bags, tail bags and top boxes for weekend rides and long tours.",
-        linkUrl: luggageProd ? `/${luggageProd.slug || luggageProd._id}` : "/luggage",
-        imageUrl: luggageProd?.images?.[0]?.url,
+        linkUrl: luggageProd ? `/${luggageProd.slug || luggageProd._id}` : "/motorcycle-bags-bike-luggage",
+        imageUrl: luggageProd ? getProductThumbnailUrl(luggageProd) : "https://store4riders.s3.ap-south-2.amazonaws.com/catalog/product/b/b/bbg_hybrid_tail_bag.jpg",
         placeholderText: "PHOTO: TAIL BAG ON A TOURING BIKE",
       },
       {
@@ -374,7 +396,7 @@ export const HomepageModule: React.FC<{
         title: "BIKE ACCESSORIES AND SPARES",
         description: "Auxiliary lights, spark plugs, performance air filters, chains and chain care. New to chain maintenance? Start with our ",
         linkUrl: sparesProd ? `/${sparesProd.slug || sparesProd._id}` : "/bike-accessories",
-        imageUrl: sparesProd?.images?.[0]?.url,
+        imageUrl: sparesProd ? getProductThumbnailUrl(sparesProd) : "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/rolon.jpg",
         placeholderText: "PHOTO: AUXILIARY LIGHTS AND CHAIN CARE",
         guideLinkText: "chain lubing guide.",
         guideLinkUrl: "/products?q=chain+lube",
@@ -394,6 +416,7 @@ export const HomepageModule: React.FC<{
           placeholderText: custom.placeholderText || defCard.placeholderText,
           guideLinkText: custom.guideLinkText !== undefined ? custom.guideLinkText : defCard.guideLinkText,
           guideLinkUrl: custom.guideLinkUrl !== undefined ? custom.guideLinkUrl : defCard.guideLinkUrl,
+          badgeText: custom.badgeText !== undefined ? custom.badgeText : (defCard.badgeText || "TOP"),
         };
       });
     }
@@ -584,7 +607,7 @@ export const HomepageModule: React.FC<{
         {/* 6. Touring Gear Section - 2x2 vertical grid on mobile, horizontal row on desktop */}
         <BrowseProductsSection
           title={homepageConfig?.sections?.touringGear?.sectionTitle || "BEST GEAR FOR TOURING"}
-          products={touringProducts}
+          products={finalTouringProducts}
           showSeeMore={true}
           seeMoreText={homepageConfig?.sections?.touringGear?.seeMoreText || "SEE MORE"}
           seeMoreLink={homepageConfig?.sections?.touringGear?.seeMoreLink || "/products?q=touring"}
@@ -626,6 +649,9 @@ export const HomepageModule: React.FC<{
           title={homepageConfig?.sections?.categoryShowcase?.sectionTitle || "RIDER'S ESSENTIAL GEAR"}
           subtitle={homepageConfig?.sections?.categoryShowcase?.subtitle}
           cards={categoryShowcaseCards}
+          bottomNoteText={homepageConfig?.sections?.categoryShowcase?.bottomNoteText ?? "Looking for motocross kit? Browse "}
+          bottomNoteLinkText={homepageConfig?.sections?.categoryShowcase?.bottomNoteLinkText ?? "off-road and motocross gear."}
+          bottomNoteLinkUrl={homepageConfig?.sections?.categoryShowcase?.bottomNoteLinkUrl ?? "/products?q=motocross"}
         />
 
         {/* 10. Riders' Favourites Section (4 Real Best Sellers across Helmets, Jackets, Gloves, Gadgets) */}

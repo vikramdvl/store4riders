@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description:
     "Get expert motorcycle gear consultation, helmet head-shape sizing, armor placement advice, and personalized recommendations from Store4Riders Rider Assist.",
   alternates: {
-    canonical: "https://store4riders.com/rider-assist",
+    canonical: "/rider-assist",
   },
 };
 

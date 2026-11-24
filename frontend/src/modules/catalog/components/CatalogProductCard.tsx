@@ -100,8 +100,8 @@ export const CatalogProductCard: React.FC<{ product: CatalogProduct; priority?: 
         aria-label={`View ${product.name}`}
       />
 
-      {/* 1. MOBILE CARD (Exact Wireframe Match: Portrait Aspect with Bottom Gradient Overlay & Orange Rating Badge) */}
-      <div className="sm:hidden relative aspect-[4/5] w-full bg-[#f4f4f4] overflow-hidden rounded-lg border border-neutral-200/70 shadow-xs pointer-events-none z-10">
+      {/* 1. MOBILE & TABLET CARD (Portrait Aspect with Bottom Gradient Overlay & Orange Rating Badge) */}
+      <div className="lg:hidden relative aspect-[4/5] w-full bg-[#f4f4f4] overflow-hidden rounded-lg border border-neutral-200/70 shadow-xs pointer-events-none z-10">
         <Image
           key={`mob-${fadeKey}`}
           src={imgSrc}
@@ -110,8 +110,8 @@ export const CatalogProductCard: React.FC<{ product: CatalogProduct; priority?: 
           priority={priority}
           loading={priority ? "eager" : "lazy"}
           fetchPriority={priority ? "high" : "auto"}
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          className="object-contain pb-8 group-active:scale-95 transition-opacity duration-200 mix-blend-multiply"
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 50vw, 25vw"
+          className="object-cover group-active:scale-95 transition-opacity duration-200"
           onError={handleImageError}
           unoptimized={true}
           referrerPolicy="no-referrer"
@@ -178,7 +178,7 @@ export const CatalogProductCard: React.FC<{ product: CatalogProduct; priority?: 
       </div>
 
       {/* 2. DESKTOP CARD (Standard E-Commerce Clean Layout with Hover Quick-Add) */}
-      <div className="hidden sm:flex flex-col gap-3 w-full pointer-events-none relative z-10">
+      <div className="hidden lg:flex flex-col gap-3 w-full pointer-events-none relative z-10">
         <div className="relative aspect-square w-full bg-[#f4f4f4] overflow-hidden rounded-xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] border border-neutral-100">
           <Image
             key={`desk-${fadeKey}`}

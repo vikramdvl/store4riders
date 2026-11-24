@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description:
     "Learn about Cash on Delivery options, order verification procedures, eligible pin codes, and doorstep payment rules at Store4Riders.",
   alternates: {
-    canonical: "https://store4riders.com/cash-on-delivery",
+    canonical: "/cash-on-delivery",
   },
 };
 

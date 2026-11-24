@@ -154,11 +154,15 @@ export const categoryShowcaseCardSchema = z.object({
   placeholderText: z.string().optional().default(""),
   guideLinkText: z.string().optional().default(""),
   guideLinkUrl: z.string().optional().default(""),
+  badgeText: z.string().max(50).optional().default("TOP"),
 });
 
 export const categoryShowcaseSectionSchema = z.object({
   sectionTitle: z.string().min(1, "Section title is required").max(100).default("RIDER'S ESSENTIAL GEAR"),
   subtitle: z.string().max(300).optional().default(""),
+  bottomNoteText: z.string().max(200).optional().default("Looking for motocross kit? Browse "),
+  bottomNoteLinkText: z.string().max(200).optional().default("off-road and motocross gear."),
+  bottomNoteLinkUrl: z.string().max(500).optional().default("/products?q=motocross"),
   cards: z.array(categoryShowcaseCardSchema).max(8).optional().default([]),
 });
 

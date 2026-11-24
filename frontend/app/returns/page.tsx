@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description:
     "Official Store4Riders exchange and replacement policy. Size & Gear Exchange on all eligible riding essentials.",
   alternates: {
-    canonical: "https://store4riders.com/returns",
+    canonical: "/returns-replacements-store4riders",
   },
 };
 
@@ -19,7 +19,7 @@ export default function ReturnsPage() {
       badge="Size & Fit Guarantee"
       badgeIcon={<ArrowLeftRight size={14} className="text-brand shrink-0" />}
       lastUpdated="October 2026"
-      currentSlug="/returns"
+      currentSlug="/returns-replacements-store4riders"
       summaryAlert={{
         type: "warning",
         title: "Strict Exchange-Only Policy",

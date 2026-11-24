@@ -220,26 +220,164 @@ function findValueByAliases(obj: Record<string, any>, aliases: string[]): any {
 }
 
 /**
- * Parses Magento-style additional_attributes string, e.g.:
- * 'condition="New",length="20",breadth="15",height="10"' or 'dimensions="20x15x10"'
+ * Parses attributes string in various formats:
+ * - Magento: 'condition="New",length="20",breadth="15",weight="1.2kg"'
+ * - Unquoted/KV: 'condition=New,length=20,breadth=15,capacity=25L'
+ * - Semicolon or pipe separated: 'length=20;breadth=15' or 'length=20|breadth=15'
+ * - JSON: '{"condition":"New","length":"20"}'
  */
-function parseMagentoAdditionalAttributes(attrStr: string): Record<string, string> {
+export function parseAttributesString(attrStr: string): Record<string, string> {
   const result: Record<string, string> = {};
   if (!attrStr || typeof attrStr !== "string") return result;
 
-  // Split on commas not inside quotes or standard comma-separated key=value pairs
-  const pairs = attrStr.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+  const trimmed = attrStr.trim();
+  if (!trimmed) return result;
+
+  // Try JSON parse first
+  if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        for (const [k, v] of Object.entries(parsed)) {
+          if (v !== undefined && v !== null && String(v).trim() !== "") {
+            result[k.trim()] = String(v).trim();
+          }
+        }
+        return result;
+      }
+    } catch {
+      // Fall through to delimiter parsing
+    }
+  }
+
+  // Split on commas, semicolons, pipes, or newlines (not inside quotes)
+  const delimiterRegex = /[,;|\n](?=(?:[^"]*"[^"]*")*[^"]*$)/;
+  const pairs = trimmed.split(delimiterRegex);
+
   for (const pair of pairs) {
-    const eqIdx = pair.indexOf("=");
+    if (!pair.trim()) continue;
+    let eqIdx = pair.indexOf("=");
+    if (eqIdx === -1) {
+      eqIdx = pair.indexOf(":");
+    }
+
     if (eqIdx > 0) {
-      const k = pair.substring(0, eqIdx).trim().replace(/^["']|["']$/g, "");
-      const v = pair.substring(eqIdx + 1).trim().replace(/^["']|["']$/g, "");
+      const k = pair.substring(0, eqIdx).trim().replace(/^["']|["']$/g, "").trim();
+      const v = pair.substring(eqIdx + 1).trim().replace(/^["']|["']$/g, "").trim();
       if (k && v) {
         result[k] = v;
       }
     }
   }
+
   return result;
+}
+
+/**
+ * Backward-compatible alias for Magento additional_attributes parsing
+ */
+export function parseMagentoAdditionalAttributes(attrStr: string): Record<string, string> {
+  return parseAttributesString(attrStr);
+}
+
+export interface IParsedWeight {
+  weight?: number;
+  weightUnit: "kg" | "g" | "ml" | "L";
+}
+
+const WEIGHT_ALIASES = [
+  "weight",
+  "pkg_weight",
+  "package_weight",
+  "packageweight",
+  "shipping_weight",
+  "shippingweight",
+  "item_weight",
+  "itemweight",
+  "gross_weight",
+  "grossweight",
+  "net_weight",
+  "netweight",
+  "dead_weight",
+  "deadweight",
+];
+
+const WEIGHT_UNIT_ALIASES = [
+  "weight_unit",
+  "weightunit",
+  "pkg_weight_unit",
+  "shipping_weight_unit",
+];
+
+/**
+ * Product & Shipping Weight Extractor
+ * 
+ * Extracts weight from dedicated columns or attributes.
+ * Normalizes grams (g/gm), ml, and litres to kilograms (kg) for Shiprocket compliance.
+ */
+export function extractProductWeight(
+  row: Record<string, any>,
+  attributes?: Record<string, any>
+): IParsedWeight {
+  const mergedAttrs: Record<string, any> = { ...(attributes || {}) };
+
+  if (row.additional_attributes && typeof row.additional_attributes === "string") {
+    Object.assign(mergedAttrs, parseAttributesString(row.additional_attributes));
+  }
+
+  const rawWeight =
+    findValueByAliases(row, WEIGHT_ALIASES) ??
+    findValueByAliases(mergedAttrs, WEIGHT_ALIASES);
+
+  if (rawWeight === undefined || rawWeight === null || String(rawWeight).trim() === "") {
+    return { weightUnit: "kg" };
+  }
+
+  const strWeight = String(rawWeight).trim().toLowerCase();
+  const rawUnit =
+    findValueByAliases(row, WEIGHT_UNIT_ALIASES) ??
+    findValueByAliases(mergedAttrs, WEIGHT_UNIT_ALIASES);
+
+  let detectedUnit: "kg" | "g" | "ml" | "L" = "kg";
+  if (rawUnit) {
+    const u = String(rawUnit).trim().toLowerCase();
+    if (u === "g" || u === "gm" || u === "gram" || u === "grams") detectedUnit = "g";
+    else if (u === "ml" || u === "milliliter" || u === "millilitre") detectedUnit = "ml";
+    else if (u === "l" || u === "ltr" || u === "liter" || u === "litre" || u === "litres" || u === "liters") detectedUnit = "L";
+    else detectedUnit = "kg";
+  }
+
+  // Check embedded unit in string e.g. "500g", "1.5kg", "250ml", "2L"
+  if (/\b(?:g|gm|gram|grams)\b/i.test(strWeight) || /[0-9]\s*(?:g|gm)\b/i.test(strWeight)) {
+    detectedUnit = "g";
+  } else if (/\b(?:ml|milliliter|millilitre)\b/i.test(strWeight) || /[0-9]\s*ml\b/i.test(strWeight)) {
+    detectedUnit = "ml";
+  } else if (/\b(?:l|ltr|liter|litre|litres|liters)\b/i.test(strWeight) || /[0-9]\s*(?:l|ltr)\b/i.test(strWeight)) {
+    detectedUnit = "L";
+  } else if (/\b(?:kg|kgs|kilo|kilogram|kilograms)\b/i.test(strWeight) || /[0-9]\s*kg\b/i.test(strWeight)) {
+    detectedUnit = "kg";
+  }
+
+  const numericPart = parseFloat(strWeight.replace(/[^0-9.]/g, ""));
+  if (isNaN(numericPart) || numericPart <= 0) {
+    return { weightUnit: detectedUnit };
+  }
+
+  // Convert to standard KG for Indian courier / Shiprocket compliance
+  let weightInKg = numericPart;
+  if (detectedUnit === "g" || detectedUnit === "ml") {
+    weightInKg = numericPart / 1000;
+  } else if (detectedUnit === "L") {
+    weightInKg = numericPart; // 1 Litre approx 1 Kg
+  } else if (detectedUnit === "kg" && numericPart >= 50 && numericPart <= 50000 && !strWeight.includes("kg")) {
+    // If entered e.g. 500 or 800 without explicit unit in a weight column, in e-commerce riders gear it's likely grams!
+    weightInKg = numericPart / 1000;
+  }
+
+  return {
+    weight: Number(weightInKg.toFixed(3)),
+    weightUnit: "kg",
+  };
 }
 
 /**

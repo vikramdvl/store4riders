@@ -201,13 +201,13 @@ export function ContactPageModule() {
               <span className="font-bold text-slate-900 uppercase tracking-wider block text-[11px]">Helpful Resources</span>
               <ul className="space-y-2 text-slate-600">
                 <li>
-                  <Link href="/returns" className="text-slate-800 hover:text-brand font-semibold flex items-center justify-between">
+                  <Link href="/returns-replacements-store4riders" className="text-slate-800 hover:text-brand font-semibold flex items-center justify-between">
                     <span>{exchangePolicyTitle}</span>
                     <span>&rarr;</span>
                   </Link>
                 </li>
                 <li>
-                  <Link href="/shipping" className="text-slate-800 hover:text-brand font-semibold flex items-center justify-between">
+                  <Link href="/shipping-policies-store4riders" className="text-slate-800 hover:text-brand font-semibold flex items-center justify-between">
                     <span>Shipping Timelines &amp; Courier Coverage</span>
                     <span>&rarr;</span>
                   </Link>

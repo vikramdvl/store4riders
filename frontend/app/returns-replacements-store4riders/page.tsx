@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     "Official Store4Riders exchange and replacement policy. Size & Gear Exchange on all eligible riding essentials.",
   alternates: {
-    canonical: "https://store4riders.com/returns",
+    canonical: "/returns-replacements-store4riders",
   },
 };
 

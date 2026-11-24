@@ -52,12 +52,12 @@ export const POLICY_NAV_GROUPS: PolicyNavGroup[] = [
     items: [
       {
         label: "Exchange & Replacements",
-        href: "/returns",
+        href: "/returns-replacements-store4riders",
         icon: ArrowLeftRight,
       },
       {
         label: "Shipping & Delivery",
-        href: "/shipping",
+        href: "/shipping-policies-store4riders",
         icon: Truck,
       },
       {
@@ -82,12 +82,12 @@ export const POLICY_NAV_GROUPS: PolicyNavGroup[] = [
     items: [
       {
         label: "Conditions of Sale & Use",
-        href: "/terms",
+        href: "/store4riders-conditions-of-use-and-sale",
         icon: FileText,
       },
       {
         label: "Privacy & Cookie Policy",
-        href: "/privacy",
+        href: "/privacy-policy-cookie-restriction-mode",
         icon: Lock,
       },
       {
@@ -97,12 +97,12 @@ export const POLICY_NAV_GROUPS: PolicyNavGroup[] = [
       },
       {
         label: "Legal Information",
-        href: "/legal",
+        href: "/legal-stuff",
         icon: Scale,
       },
       {
         label: "Store Policies",
-        href: "/store-policies",
+        href: "/store4riders-store-policies",
         icon: BookOpen,
       },
     ],
@@ -133,12 +133,12 @@ export const POLICY_NAV_GROUPS: PolicyNavGroup[] = [
     items: [
       {
         label: "About Store4Riders",
-        href: "/about-us",
+        href: "/about-us-store4riders",
         icon: Info,
       },
       {
         label: "Contact & Support",
-        href: "/contact-us",
+        href: "/contact-store4riders",
         icon: PhoneCall,
       },
     ],
@@ -180,8 +180,22 @@ export function PolicyPageLayout({
   const cleanSlug = (currentSlug || pathname || "").replace(/^\/+/, "").replace(/\/+$/, "");
   const slugAliases: Record<string, string> = {
     "store4riders-conditions-of-use-and-sale": "terms",
+    "terms": "store4riders-conditions-of-use-and-sale",
     "store4riders-store-policies": "store-policies",
+    "store-policies": "store4riders-store-policies",
     "returns-replacements-store4riders": "returns",
+    "returns": "returns-replacements-store4riders",
+    "shipping-policies-store4riders": "shipping",
+    "shipping": "shipping-policies-store4riders",
+    "legal-stuff": "legal",
+    "legal": "legal-stuff",
+    "privacy-policy-cookie-restriction-mode": "privacy",
+    "privacy": "privacy-policy-cookie-restriction-mode",
+    "about-us-store4riders": "about-us",
+    "about-us": "about-us-store4riders",
+    "contact-store4riders": "contact-us",
+    "contact-us": "contact-store4riders",
+    "contact": "contact-store4riders",
   };
   const targetSlug = slugAliases[cleanSlug] || cleanSlug;
   const customPage = settings?.policyPages?.find(
@@ -216,7 +230,7 @@ export function PolicyPageLayout({
   const breadcrumbSchema = buildBreadcrumbSchema(
     [
       { name: "Home", url: "/" },
-      { name: "Support & Policies", url: "/store-policies" },
+      { name: "Support & Policies", url: "/store4riders-store-policies" },
       { name: displayTitle, url: activePath },
     ],
     siteUrl
@@ -230,10 +244,42 @@ export function PolicyPageLayout({
 
   const isItemActive = (href: string) => {
     if (activePath === href) return true;
-    if (href === "/returns" && (activePath === "/returns" || activePath === "/returns-replacements-store4riders")) return true;
-    if (href === "/terms" && (activePath === "/terms" || activePath === "/store4riders-conditions-of-use-and-sale")) return true;
-    if (href === "/store-policies" && (activePath === "/store-policies" || activePath === "/store4riders-store-policies")) return true;
-    if (href === "/googlepay-phonepay" && (activePath === "/gpay" || activePath === "/googlepay-phonepay")) return true;
+    if (
+      (href === "/returns" || href === "/returns-replacements-store4riders") &&
+      (activePath === "/returns" || activePath === "/returns-replacements-store4riders")
+    ) return true;
+    if (
+      (href === "/terms" || href === "/store4riders-conditions-of-use-and-sale") &&
+      (activePath === "/terms" || activePath === "/store4riders-conditions-of-use-and-sale")
+    ) return true;
+    if (
+      (href === "/store-policies" || href === "/store4riders-store-policies") &&
+      (activePath === "/store-policies" || activePath === "/store4riders-store-policies")
+    ) return true;
+    if (
+      (href === "/shipping" || href === "/shipping-policies-store4riders") &&
+      (activePath === "/shipping" || activePath === "/shipping-policies-store4riders")
+    ) return true;
+    if (
+      (href === "/legal" || href === "/legal-stuff") &&
+      (activePath === "/legal" || activePath === "/legal-stuff")
+    ) return true;
+    if (
+      (href === "/privacy" || href === "/privacy-policy-cookie-restriction-mode") &&
+      (activePath === "/privacy" || activePath === "/privacy-policy-cookie-restriction-mode")
+    ) return true;
+    if (
+      (href === "/about-us" || href === "/about-us-store4riders") &&
+      (activePath === "/about-us" || activePath === "/about-us-store4riders")
+    ) return true;
+    if (
+      (href === "/contact-us" || href === "/contact" || href === "/contact-store4riders") &&
+      (activePath === "/contact-us" || activePath === "/contact" || activePath === "/contact-store4riders")
+    ) return true;
+    if (
+      (href === "/googlepay-phonepay" || href === "/gpay") &&
+      (activePath === "/gpay" || activePath === "/googlepay-phonepay")
+    ) return true;
     return false;
   };
 
@@ -270,7 +316,7 @@ export function PolicyPageLayout({
             </Link>
             <ChevronRight size={14} className="text-slate-400 shrink-0" />
             <Link
-              href="/store-policies"
+              href="/store4riders-store-policies"
               className="hover:text-slate-900 transition-colors font-medium"
             >
               Support & Policies

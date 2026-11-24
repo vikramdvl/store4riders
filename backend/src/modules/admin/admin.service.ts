@@ -25,8 +25,27 @@ export class AdminService {
       isLogisticRole 
         ? Promise.resolve([])
         : OrderModel.aggregate([
-            { $match: { status: { $nin: ["cancelled", "failed", "pending_payment", "refunded"] } } },
-            { $group: { _id: null, totalRevenue: { $sum: "$pricing.total" } } }
+            { $match: { status: { $nin: ["cancelled", "failed", "pending_payment", "refunded", "returned"] } } },
+            {
+              $group: {
+                _id: null,
+                totalRevenue: {
+                  $sum: {
+                    $cond: {
+                      if: { $ne: ["$paymentMethod", "cod"] },
+                      then: "$pricing.total",
+                      else: {
+                        $cond: {
+                          if: { $eq: ["$status", "delivered"] },
+                          then: "$pricing.total",
+                          else: { $ifNull: ["$pricing.codPartialPaymentAmount", 0] }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           ])
     ]);
 
@@ -505,13 +524,27 @@ export class AdminService {
       {
         $match: {
           createdAt: { $gte: thirtyDaysAgo },
-          status: { $nin: ["cancelled", "failed", "pending_payment", "refunded"] }
+          status: { $nin: ["cancelled", "failed", "pending_payment", "refunded", "returned"] }
         }
       },
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-          revenue: { $sum: "$pricing.total" }
+          revenue: {
+            $sum: {
+              $cond: {
+                if: { $ne: ["$paymentMethod", "cod"] },
+                then: "$pricing.total",
+                else: {
+                  $cond: {
+                    if: { $eq: ["$status", "delivered"] },
+                    then: "$pricing.total",
+                    else: { $ifNull: ["$pricing.codPartialPaymentAmount", 0] }
+                  }
+                }
+              }
+            }
+          }
         }
       },
       {

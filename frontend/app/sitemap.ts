@@ -39,7 +39,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.85,
     },
     {
-      url: `${baseUrl}/shipping`,
+      url: `${baseUrl}/shipping-policies-store4riders`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.4,
+    },
+    {
+      url: `${baseUrl}/store4riders-store-policies`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.4,
@@ -51,16 +57,34 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.4,
     },
     {
-      url: `${baseUrl}/privacy`,
+      url: `${baseUrl}/privacy-policy-cookie-restriction-mode`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.3,
     },
     {
-      url: `${baseUrl}/terms`,
+      url: `${baseUrl}/store4riders-conditions-of-use-and-sale`,
       lastModified: now,
       changeFrequency: "monthly",
       priority: 0.3,
+    },
+    {
+      url: `${baseUrl}/legal-stuff`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.3,
+    },
+    {
+      url: `${baseUrl}/about-us-store4riders`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
+    {
+      url: `${baseUrl}/contact-store4riders`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.5,
     },
     {
       url: `${baseUrl}/warranty`,

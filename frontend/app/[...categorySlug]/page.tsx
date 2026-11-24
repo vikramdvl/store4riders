@@ -3,6 +3,7 @@ import { Suspense, cache } from "react";
 import { notFound, permanentRedirect } from "next/navigation";
 import { ProductsPageModule } from "@/modules/catalog/components/ProductsPageModule";
 import { ProductDetailPageModule } from "@/modules/product-detail/components/ProductDetailPageModule";
+import { PolicyPageLayout } from "@/components/layout/PolicyPageLayout";
 import ProductsLoading from "../products/loading";
 import ProductDetailLoading from "../products/[slug]/loading";
 import {
@@ -75,6 +76,35 @@ const getCategoryNode = cache(async (categorySlug: string) => {
       if (singleData?.data) return singleData.data;
     }
     return null;
+  } catch {
+    return null;
+  }
+});
+
+const getPolicyPage = cache(async (candidateSlug: string) => {
+  try {
+    const rawApiBase = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+    const apiBase = rawApiBase.includes("/v1")
+      ? rawApiBase
+      : rawApiBase.endsWith("/api")
+      ? `${rawApiBase}/v1`
+      : `${rawApiBase}/api/v1`;
+    const res = await fetch(`${apiBase}/settings`, {
+      next: { revalidate: 60 },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const cleanTarget = candidateSlug.toLowerCase().trim();
+    const policyPages: any[] = json?.data?.policyPages || [];
+    return (
+      policyPages.find(
+        (p: any) =>
+          ((p.slug || "").toLowerCase().trim() === cleanTarget ||
+            (p.slug || "").toLowerCase().trim().replace(/-/g, "") === cleanTarget.replace(/-/g, "")) &&
+          p.isActive !== false
+      ) || null
+    );
   } catch {
     return null;
   }
@@ -170,6 +200,37 @@ export async function generateMetadata({ params, searchParams }: CategoryPagePro
     };
   }
 
+  // 3. Check if this resolves to a Policy Page in Admin Settings
+  const policyPage = candidateSlug ? await getPolicyPage(candidateSlug) : null;
+  if (policyPage) {
+    const title = policyPage.title ? `${policyPage.title} | Store4Riders` : "Store Policy | Store4Riders";
+    const description = policyPage.subtitle || "Official Store4Riders policy information.";
+    const canonicalPath = `/${candidateSlug}`;
+
+    return {
+      title: {
+        absolute: title,
+      },
+      description,
+      alternates: {
+        canonical: canonicalPath,
+      },
+      robots: getRobotsMetadata(),
+      openGraph: {
+        title,
+        description,
+        url: canonicalPath,
+        type: "website",
+        siteName: "Store4Riders",
+      },
+      twitter: {
+        card: "summary_large_image",
+        title,
+        description,
+      },
+    };
+  }
+
   return {
     title: "Page Not Found | Store4Riders",
     robots: getRobotsMetadata(false),
@@ -244,6 +305,34 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   // 2. Candidate is NOT a product. Check if it resolves to a valid Category.
   const categoryNode = await getCategoryNode(candidateSlug);
   if (!categoryNode) {
+    // 3. Check if candidateSlug resolves to a Policy Page in Admin Settings!
+    const policyPage = await getPolicyPage(candidateSlug);
+    if (policyPage) {
+      return (
+        <PolicyPageLayout
+          title={policyPage.title}
+          subtitle={policyPage.subtitle}
+          badge={policyPage.badge || "Official Store Policy"}
+          lastUpdated={policyPage.lastUpdated || "October 2026"}
+          currentSlug={`/${candidateSlug}`}
+          summaryAlert={
+            policyPage.summaryAlertText
+              ? {
+                  type: (policyPage.summaryAlertType || "info") as any,
+                  title: policyPage.summaryAlertTitle,
+                  text: policyPage.summaryAlertText,
+                }
+              : undefined
+          }
+        >
+          <div
+            className="policy-content prose prose-slate max-w-none text-slate-700 leading-relaxed space-y-4"
+            dangerouslySetInnerHTML={{ __html: policyPage.contentHtml || "" }}
+          />
+        </PolicyPageLayout>
+      );
+    }
+
     notFound();
   }
 

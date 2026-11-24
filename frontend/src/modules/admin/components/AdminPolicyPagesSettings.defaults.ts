@@ -33,7 +33,7 @@ export interface OfficialPageDefinition {
 
 export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
   {
-    slug: "returns",
+    slug: "returns-replacements-store4riders",
     name: "Exchange & Returns",
     icon: ArrowLeftRight,
     defaultTitle: "Exchange & Replacement Policy",
@@ -91,7 +91,7 @@ export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
 </blockquote>`,
   },
   {
-    slug: "shipping",
+    slug: "shipping-policies-store4riders",
     name: "Shipping & Delivery",
     icon: Truck,
     defaultTitle: "Shipping & Delivery Policy",
@@ -196,7 +196,7 @@ export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
 </ul>`,
   },
   {
-    slug: "terms",
+    slug: "store4riders-conditions-of-use-and-sale",
     name: "Terms of Service",
     icon: FileText,
     defaultTitle: "Conditions of Sale & Website Use",
@@ -218,7 +218,7 @@ export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
 <p>All trademarks, logos, brand names, product photography, and text displayed on this website are the property of Store4Riders or their respective motorcycle gear manufacturer licensors.</p>`,
   },
   {
-    slug: "privacy",
+    slug: "privacy-policy-cookie-restriction-mode",
     name: "Privacy Policy",
     icon: Lock,
     defaultTitle: "Privacy & Data Protection Policy",
@@ -240,7 +240,7 @@ export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
 <p>We utilize standard functional and session cookies to remember items in your shopping cart, maintain authentication status, and deliver personalized product recommendations.</p>`,
   },
   {
-    slug: "legal",
+    slug: "legal-stuff",
     name: "Legal Information",
     icon: Scale,
     defaultTitle: "Legal Information & Compliance",
@@ -262,7 +262,7 @@ export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
 <p>In accordance with the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, you may address statutory grievances to our designated Grievance Officer at legal@store4riders.com.</p>`,
   },
   {
-    slug: "store-policies",
+    slug: "store4riders-store-policies",
     name: "Store Policies",
     icon: BookOpen,
     defaultTitle: "Consolidated Store Policies",
@@ -281,7 +281,7 @@ export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
 <p>Every product in our inventory is procured through authorized manufacturer distribution channels. We reject unauthorized gray-market imports that lack valid serial numbers or brand warranty backing.</p>`,
   },
   {
-    slug: "about-us",
+    slug: "about-us-store4riders",
     name: "About Store4Riders",
     icon: Info,
     defaultTitle: "About Store4Riders",
@@ -430,7 +430,7 @@ export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
 </ul>`,
   },
   {
-    slug: "contact-us",
+    slug: "contact-store4riders",
     name: "Contact Us",
     icon: PhoneCall,
     defaultTitle: "How Can We Assist You Today?",

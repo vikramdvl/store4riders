@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -43,6 +44,7 @@ export const NavMobileDrawer: React.FC<NavMobileDrawerProps> = ({
 }) => {
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState(false);
 
   const handleSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -53,7 +55,11 @@ export const NavMobileDrawer: React.FC<NavMobileDrawerProps> = ({
     }
   };
 
-  return (
+  if (!mounted || typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
@@ -64,7 +70,7 @@ export const NavMobileDrawer: React.FC<NavMobileDrawerProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-[998] bg-black/60 backdrop-blur-sm"
             onClick={onClose}
           />
 
@@ -75,20 +81,31 @@ export const NavMobileDrawer: React.FC<NavMobileDrawerProps> = ({
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", stiffness: 350, damping: 30 }}
-            className="fixed top-0 right-0 bottom-0 z-[70] w-[85vw] max-w-sm bg-white flex flex-col shadow-2xl"
+            className="fixed inset-y-0 right-0 z-[999] w-[85vw] max-w-sm h-dvh bg-white flex flex-col shadow-2xl"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100">
               <Link href="/" onClick={onClose} className="cursor-pointer">
-                <div className="relative h-[42.32px] w-[184px]">
-                  <Image
-                    src="/Store4riders-Logo.jpg"
-                    alt="Store4Riders"
-                    fill
-                    className="object-contain object-left"
-                    sizes="184px"
-                  />
-                </div>
+                {!logoError ? (
+                  <div className="relative h-[42.32px] w-[184px]">
+                    <Image
+                      src="/Store4riders-Logo.jpg"
+                      alt="Store4Riders"
+                      fill
+                      priority
+                      unoptimized
+                      className="object-contain object-left"
+                      sizes="184px"
+                      onError={() => setLogoError(true)}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 h-[42.32px]">
+                    <span className="text-xl font-black tracking-tight text-neutral-900">
+                      STORE<span className="text-brand">4</span>RIDERS
+                    </span>
+                  </div>
+                )}
               </Link>
               <button
                 onClick={onClose}
@@ -371,7 +388,8 @@ export const NavMobileDrawer: React.FC<NavMobileDrawerProps> = ({
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };
 

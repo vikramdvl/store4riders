@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Mail, Phone, MapPin, ArrowRight, Instagram, Facebook, Youtube, ChevronDown } from "lucide-react";
@@ -10,20 +10,20 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { IFooterLink } from "@store4riders/shared-types";
 
 const DEFAULT_ABOUT_LINKS: IFooterLink[] = [
-  { label: "About us", url: "/about-us", openInNewTab: false },
-  { label: "Contact Us", url: "/contact-us", openInNewTab: false },
+  { label: "About us", url: "/about-us-store4riders", openInNewTab: false },
+  { label: "Contact Us", url: "/contact-store4riders", openInNewTab: false },
 ];
 
 const DEFAULT_EXCHANGE_LINKS: IFooterLink[] = [
-  { label: "Exchange & Replacements", url: "/returns", openInNewTab: false },
+  { label: "Exchange & Replacements", url: "/returns-replacements-store4riders", openInNewTab: false },
   { label: "Warranty", url: "/warranty", openInNewTab: false },
-  { label: "Shipping Policies", url: "/shipping", openInNewTab: false },
+  { label: "Shipping Policies", url: "/shipping-policies-store4riders", openInNewTab: false },
 ];
 
 const DEFAULT_POLICIES_LINKS: IFooterLink[] = [
   { label: "Conditions of Sale & Use", url: "/store4riders-conditions-of-use-and-sale", openInNewTab: false },
-  { label: "Privacy and Cookie Policy", url: "/privacy", openInNewTab: false },
-  { label: "Legal", url: "/legal", openInNewTab: false },
+  { label: "Privacy and Cookie Policy", url: "/privacy-policy-cookie-restriction-mode", openInNewTab: false },
+  { label: "Legal", url: "/legal-stuff", openInNewTab: false },
   { label: "Store Policies", url: "/store4riders-store-policies", openInNewTab: false },
 ];
 
@@ -37,9 +37,9 @@ const DEFAULT_SUPPORT_LINKS: IFooterLink[] = [
 ];
 
 const DEFAULT_BOTTOM_LINKS: IFooterLink[] = [
-  { label: "Privacy Policy", url: "/privacy", openInNewTab: false },
+  { label: "Privacy Policy", url: "/privacy-policy-cookie-restriction-mode", openInNewTab: false },
   { label: "Terms of Service", url: "/store4riders-conditions-of-use-and-sale", openInNewTab: false },
-  { label: "Exchange Policy", url: "/returns", openInNewTab: false },
+  { label: "Exchange Policy", url: "/returns-replacements-store4riders", openInNewTab: false },
 ];
 
 /**
@@ -57,6 +57,11 @@ export const Footer: React.FC = () => {
   const { isAuthenticated } = useAuthStore();
   const [email, setEmail] = useState("");
   const [openSection, setOpenSection] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const toggleSection = (section: string) => {
     setOpenSection((prev) => (prev === section ? null : section));
@@ -69,7 +74,7 @@ export const Footer: React.FC = () => {
     return url;
   };
 
-  const footer = settings?.footerConfig;
+  const footer = mounted ? settings?.footerConfig : undefined;
 
   // Column 1 Contact & About Data
   const aboutText = footer?.aboutText?.trim() || "";
@@ -92,8 +97,16 @@ export const Footer: React.FC = () => {
     "/store-policies",
     "/store4riders-conditions-of-use-and-sale",
     "/store4riders-store-policies",
+    "/legal-stuff",
+    "/privacy-policy-cookie-restriction-mode",
   ]);
-  const aboutUrls = new Set(["/about-us", "/contact-us"]);
+  const aboutUrls = new Set([
+    "/about-us",
+    "/contact-us",
+    "/about-us-store4riders",
+    "/contact-store4riders",
+    "/contact",
+  ]);
 
   // Tab 1: ABOUT US
   const aboutTitle = footer?.column4Title?.trim() || "ABOUT US";
@@ -287,7 +300,7 @@ export const Footer: React.FC = () => {
               onClick={() => toggleSection("about")}
               className="w-full flex items-center justify-between py-2 lg:py-0 text-left cursor-pointer group"
             >
-              <h3 className="text-xs sm:text-sm font-semibold tracking-wider text-white uppercase lg:mb-6">
+              <h3 className="text-xs sm:text-sm font-semibold tracking-wider text-white uppercase lg:mb-6" suppressHydrationWarning>
                 {aboutTitle}
               </h3>
               <ChevronDown 
@@ -296,12 +309,13 @@ export const Footer: React.FC = () => {
                 }`} 
               />
             </button>
-            <ul className={`flex flex-col gap-2.5 sm:gap-3 text-xs sm:text-sm text-neutral-400 pt-3 lg:pt-0 ${
+            <ul suppressHydrationWarning className={`flex flex-col gap-2.5 sm:gap-3 text-xs sm:text-sm text-neutral-400 pt-3 lg:pt-0 ${
               openSection === "about" ? "flex" : "hidden lg:flex"
             }`}>
               {aboutLinks.map((link, idx) => (
                 <li key={`about-link-${idx}`}>
                   <Link 
+                    suppressHydrationWarning
                     href={resolveLinkHref(link.url)}
                     target={link.openInNewTab ? "_blank" : undefined}
                     rel={link.openInNewTab ? "noopener noreferrer" : undefined}
@@ -322,7 +336,7 @@ export const Footer: React.FC = () => {
               onClick={() => toggleSection("exchange")}
               className="w-full flex items-center justify-between py-2 lg:py-0 text-left cursor-pointer group"
             >
-              <h3 className="text-xs sm:text-sm font-semibold tracking-wider text-white uppercase lg:mb-6">
+              <h3 className="text-xs sm:text-sm font-semibold tracking-wider text-white uppercase lg:mb-6" suppressHydrationWarning>
                 {exchangeTitle}
               </h3>
               <ChevronDown 
@@ -331,12 +345,13 @@ export const Footer: React.FC = () => {
                 }`} 
               />
             </button>
-            <ul className={`flex flex-col gap-2.5 sm:gap-3 text-xs sm:text-sm text-neutral-400 pt-3 lg:pt-0 ${
+            <ul suppressHydrationWarning className={`flex flex-col gap-2.5 sm:gap-3 text-xs sm:text-sm text-neutral-400 pt-3 lg:pt-0 ${
               openSection === "exchange" ? "flex" : "hidden lg:flex"
             }`}>
               {exchangeLinks.map((link, idx) => (
                 <li key={`exchange-link-${idx}`}>
                   <Link 
+                    suppressHydrationWarning
                     href={resolveLinkHref(link.url)}
                     target={link.openInNewTab ? "_blank" : undefined}
                     rel={link.openInNewTab ? "noopener noreferrer" : undefined}
@@ -357,7 +372,7 @@ export const Footer: React.FC = () => {
               onClick={() => toggleSection("policies")}
               className="w-full flex items-center justify-between py-2 lg:py-0 text-left cursor-pointer group"
             >
-              <h3 className="text-xs sm:text-sm font-semibold tracking-wider text-white uppercase lg:mb-6">
+              <h3 className="text-xs sm:text-sm font-semibold tracking-wider text-white uppercase lg:mb-6" suppressHydrationWarning>
                 {policiesTitle}
               </h3>
               <ChevronDown 
@@ -366,12 +381,13 @@ export const Footer: React.FC = () => {
                 }`} 
               />
             </button>
-            <ul className={`flex flex-col gap-2.5 sm:gap-3 text-xs sm:text-sm text-neutral-400 pt-3 lg:pt-0 ${
+            <ul suppressHydrationWarning className={`flex flex-col gap-2.5 sm:gap-3 text-xs sm:text-sm text-neutral-400 pt-3 lg:pt-0 ${
               openSection === "policies" ? "flex" : "hidden lg:flex"
             }`}>
               {policiesLinks.map((link, idx) => (
                 <li key={`policies-link-${idx}`}>
                   <Link 
+                    suppressHydrationWarning
                     href={resolveLinkHref(link.url)}
                     target={link.openInNewTab ? "_blank" : undefined}
                     rel={link.openInNewTab ? "noopener noreferrer" : undefined}
@@ -392,7 +408,7 @@ export const Footer: React.FC = () => {
               onClick={() => toggleSection("support")}
               className="w-full flex items-center justify-between py-2 lg:py-0 text-left cursor-pointer group"
             >
-              <h3 className="text-xs sm:text-sm font-semibold tracking-wider text-white uppercase lg:mb-6">
+              <h3 className="text-xs sm:text-sm font-semibold tracking-wider text-white uppercase lg:mb-6" suppressHydrationWarning>
                 {supportTitle}
               </h3>
               <ChevronDown 
@@ -401,12 +417,13 @@ export const Footer: React.FC = () => {
                 }`} 
               />
             </button>
-            <ul className={`flex flex-col gap-2.5 sm:gap-3 text-xs sm:text-sm text-neutral-400 pt-3 lg:pt-0 ${
+            <ul suppressHydrationWarning className={`flex flex-col gap-2.5 sm:gap-3 text-xs sm:text-sm text-neutral-400 pt-3 lg:pt-0 ${
               openSection === "support" ? "flex" : "hidden lg:flex"
             }`}>
               {supportLinks.map((link, idx) => (
                 <li key={`support-link-${idx}`}>
                   <Link 
+                    suppressHydrationWarning
                     href={resolveLinkHref(link.url)}
                     target={link.openInNewTab ? "_blank" : undefined}
                     rel={link.openInNewTab ? "noopener noreferrer" : undefined}

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description:
     "Learn how to properly clean, maintain, wash, and store your motorcycle helmets, leather suits, textile jackets, boots, and riding gloves to maximize lifespan and safety.",
   alternates: {
-    canonical: "https://store4riders.com/care",
+    canonical: "/care",
   },
 };
 

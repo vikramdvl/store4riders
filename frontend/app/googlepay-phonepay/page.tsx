@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     "Official GooglePay or PhonePay number, UPI ID, and Axis Bank transfer details for Store4Riders (Motohive Media Pvt. Ltd.) in Pune.",
   alternates: {
-    canonical: "https://www.store4riders.com/googlepay-phonepay",
+    canonical: "/googlepay-phonepay",
   },
 };
 

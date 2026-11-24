@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description:
     "Partner with Store4Riders. We collaborate with moto-vloggers, motorcycle touring creators, track racers, riding clubs, and gear brands.",
   alternates: {
-    canonical: "https://store4riders.com/collaboration",
+    canonical: "/collaboration",
   },
 };
 

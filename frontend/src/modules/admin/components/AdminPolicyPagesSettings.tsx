@@ -619,11 +619,24 @@ export function AdminPolicyPagesSettings() {
       const existingPages: IPolicyPageConfig[] = res.data?.data?.policyPages || [];
 
       const initialMap: Record<string, IPolicyPageConfig> = {};
+      const slugAliases: Record<string, string> = {
+        returns: "returns-replacements-store4riders",
+        shipping: "shipping-policies-store4riders",
+        terms: "store4riders-conditions-of-use-and-sale",
+        privacy: "privacy-policy-cookie-restriction-mode",
+        legal: "legal-stuff",
+        "store-policies": "store4riders-store-policies",
+        "about-us": "about-us-store4riders",
+        "contact-us": "contact-store4riders",
+        contact: "contact-store4riders",
+      };
 
       OFFICIAL_PAGE_DEFINITIONS.forEach((def) => {
-        const found = existingPages.find((p) => p.slug === def.slug);
+        const found = existingPages.find(
+          (p) => p.slug === def.slug || slugAliases[p.slug] === def.slug
+        );
         if (found) {
-          initialMap[def.slug] = { ...found };
+          initialMap[def.slug] = { ...found, slug: found.slug || def.slug };
         } else {
           // Initialize with default template values
           initialMap[def.slug] = {
@@ -820,10 +833,10 @@ export function AdminPolicyPagesSettings() {
         <div className="p-4 bg-neutral-50 border-b border-neutral-200 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-neutral-800">
-              Editing: <span className="text-brand">/{currentDef.slug}</span> ({currentDef.name})
+              Editing: <span className="text-brand">/{currentPage.slug || currentDef.slug}</span> ({currentDef.name})
             </span>
             <a
-              href={`/${currentDef.slug}`}
+              href={`/${currentPage.slug || currentDef.slug}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 font-medium ml-2"
@@ -871,7 +884,7 @@ export function AdminPolicyPagesSettings() {
         {/* Content Body Based on Selected Mode */}
         <div className="p-6 space-y-6">
           {/* Metadata Controls Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-semibold text-neutral-700 mb-1">Page Title (H1)</label>
               <input
@@ -881,6 +894,20 @@ export function AdminPolicyPagesSettings() {
                 placeholder="Page Title"
                 className="w-full text-xs p-2.5 bg-white border border-neutral-200 rounded-lg font-bold focus:outline-none focus:border-brand"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-neutral-700 mb-1">URL Path (Slug)</label>
+              <div className="flex items-center">
+                <span className="text-xs text-neutral-400 font-mono px-2 py-2.5 bg-neutral-100 border border-r-0 border-neutral-200 rounded-l-lg select-none">/</span>
+                <input
+                  type="text"
+                  value={currentPage.slug || ""}
+                  onChange={(e) => updateCurrentPage("slug", e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ""))}
+                  placeholder="e.g. shipping-policies-store4riders"
+                  className="w-full text-xs p-2.5 bg-white border border-neutral-200 rounded-r-lg font-mono focus:outline-none focus:border-brand"
+                />
+              </div>
             </div>
 
             <div>

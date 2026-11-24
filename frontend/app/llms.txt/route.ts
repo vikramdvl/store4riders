@@ -41,18 +41,20 @@ Store4Riders equips motorcyclists across India with 100% genuine, certified ridi
 - [Motorcycle Gear Guides](${siteUrl}/guides): Expert advice on helmet sizing, CE armor ratings (Level 1 vs Level 2), riding gear maintenance, and long-distance touring preparation.
 
 ## Policies & Customer Service
+- [Store Policies & Guidelines](${siteUrl}/store4riders-store-policies): Consolidated store policies, customer service standards, and operational guidelines.
 - [Size & Gear Exchange Policy](${siteUrl}/returns): Hassle-free size and gear exchange policy on unworn apparel with original tags.
 - [Returns & Replacements Policy](${siteUrl}/returns-replacements-store4riders): Comprehensive guidelines on product return criteria, exchanges, and warranty claims.
-- [Shipping & Delivery Policy](${siteUrl}/shipping): Express doorstep delivery across India with free shipping on qualifying orders above ₹999.
+- [Shipping & Delivery Policy](${siteUrl}/shipping-policies-store4riders): Express doorstep delivery across India with free shipping on qualifying orders above ₹999.
 - [Cash on Delivery (COD)](${siteUrl}/cash-on-delivery): Payment terms, pin code availability, and verification guidelines for COD orders.
 - [Customer Support](${siteUrl}/support): Frequently asked questions, sizing assistance, order status tracking, and rider support.
 - [Warranty Information](${siteUrl}/warranty): Brand warranty coverage, claim submission guidelines, and manufacturer guarantees.
 
 ## Optional
-- [About Store4Riders](${siteUrl}/about-us): The history, mission, and rider-first philosophy behind Store4Riders India.
-- [Contact Us](${siteUrl}/contact): Customer care contact numbers, Pune distribution hub details, and official email addresses.
-- [Privacy Policy](${siteUrl}/privacy): Data privacy policies, customer protection guidelines, and cookie disclosures.
-- [Terms & Conditions](${siteUrl}/terms): Legal terms of service, platform policies, and purchase conditions.
+- [About Store4Riders](${siteUrl}/about-us-store4riders): The history, mission, and rider-first philosophy behind Store4Riders India.
+- [Contact Us](${siteUrl}/contact-store4riders): Customer care contact numbers, Pune distribution hub details, and official email addresses.
+- [Privacy Policy](${siteUrl}/privacy-policy-cookie-restriction-mode): Data privacy policies, customer protection guidelines, and cookie disclosures.
+- [Terms & Conditions](${siteUrl}/store4riders-conditions-of-use-and-sale): Legal terms of service, platform policies, and purchase conditions.
+- [Legal Disclosures](${siteUrl}/legal-stuff): Statutory corporate entity disclosures and regulatory compliance.
 - [Full Site Context (llms-full.txt)](${siteUrl}/llms-full.txt): Comprehensive extended catalog, policy details, and guides for LLMs and autonomous agents.
 `;
 

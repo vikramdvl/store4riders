@@ -102,6 +102,7 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
 
   const setIsPDP = useUIStore((state) => state.setIsPDP);
   const setCurrentProductName = useUIStore((state) => state.setCurrentProductName);
+  const isMobileMenuOpen = useUIStore((state) => state.isMobileMenuOpen);
   useEffect(() => {
     setIsPDP(true);
     if (productName) {
@@ -117,7 +118,7 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
     <div
       id="pdp-sticky-bar"
       className={`fixed bottom-0 left-0 w-full z-40 bg-white/95 supports-[backdrop-filter]:bg-white/90 backdrop-blur-2xl border-t border-neutral-200/80 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] transform-gpu will-change-transform transition-all duration-300 pb-safe ${
-        openDropdown || showSizeChart ? "translate-y-full opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
+        openDropdown || showSizeChart || isMobileMenuOpen ? "translate-y-full opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
       }`}
     >
       

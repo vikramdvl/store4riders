@@ -63,8 +63,17 @@ export class SettingRepository {
     if (settings.footerConfig) {
       const fc = settings.footerConfig as any;
       let footerChanged = false;
-      const policyUrls = ["/terms", "/privacy", "/legal", "/store-policies"];
-      const aboutUrls = ["/about-us", "/contact-us"];
+      const policyUrls = [
+        "/terms",
+        "/privacy",
+        "/legal",
+        "/store-policies",
+        "/store4riders-store-policies",
+        "/store4riders-conditions-of-use-and-sale",
+        "/legal-stuff",
+        "/privacy-policy-cookie-restriction-mode",
+      ];
+      const aboutUrls = ["/about-us", "/contact-us", "/about-us-store4riders", "/contact-store4riders", "/contact"];
 
       if (!fc.column3Title) {
         fc.column3Title = "POLICIES & LEGAL";
@@ -73,6 +82,21 @@ export class SettingRepository {
       if (!fc.column4Title) {
         fc.column4Title = "ABOUT US";
         footerChanged = true;
+      }
+
+      // Migrate legacy URLs in Column 1 (e.g. /shipping -> /shipping-policies-store4riders)
+      if (Array.isArray(fc.column1Links)) {
+        fc.column1Links = fc.column1Links.map((l: any) => {
+          if (l.url === "/shipping") {
+            footerChanged = true;
+            return { ...l, url: "/shipping-policies-store4riders" };
+          }
+          if (l.url === "/returns") {
+            footerChanged = true;
+            return { ...l, url: "/returns-replacements-store4riders" };
+          }
+          return l;
+        });
       }
 
       if (Array.isArray(fc.column1Links) && fc.column1Links.some((l: any) => policyUrls.includes(l.url))) {
@@ -84,12 +108,35 @@ export class SettingRepository {
         footerChanged = true;
       } else if (!fc.column3Links || fc.column3Links.length === 0) {
         fc.column3Links = [
-          { label: "Conditions of Sale & Use", url: "/terms", openInNewTab: false },
-          { label: "Privacy and Cookie Policy", url: "/privacy", openInNewTab: false },
-          { label: "Legal", url: "/legal", openInNewTab: false },
-          { label: "Store Policies", url: "/store-policies", openInNewTab: false },
+          { label: "Conditions of Sale & Use", url: "/store4riders-conditions-of-use-and-sale", openInNewTab: false },
+          { label: "Privacy and Cookie Policy", url: "/privacy-policy-cookie-restriction-mode", openInNewTab: false },
+          { label: "Legal", url: "/legal-stuff", openInNewTab: false },
+          { label: "Store Policies", url: "/store4riders-store-policies", openInNewTab: false },
         ];
         footerChanged = true;
+      }
+
+      // Migrate legacy URLs in Column 3
+      if (Array.isArray(fc.column3Links)) {
+        fc.column3Links = fc.column3Links.map((l: any) => {
+          if (l.url === "/store-policies") {
+            footerChanged = true;
+            return { ...l, url: "/store4riders-store-policies" };
+          }
+          if (l.url === "/terms") {
+            footerChanged = true;
+            return { ...l, url: "/store4riders-conditions-of-use-and-sale" };
+          }
+          if (l.url === "/privacy") {
+            footerChanged = true;
+            return { ...l, url: "/privacy-policy-cookie-restriction-mode" };
+          }
+          if (l.url === "/legal") {
+            footerChanged = true;
+            return { ...l, url: "/legal-stuff" };
+          }
+          return l;
+        });
       }
 
       if (Array.isArray(fc.column2Links) && fc.column2Links.some((l: any) => aboutUrls.includes(l.url))) {
@@ -101,10 +148,25 @@ export class SettingRepository {
         footerChanged = true;
       } else if (!fc.column4Links || fc.column4Links.length === 0) {
         fc.column4Links = [
-          { label: "About us", url: "/about-us", openInNewTab: false },
-          { label: "Contact Us", url: "/contact-us", openInNewTab: false },
+          { label: "About us", url: "/about-us-store4riders", openInNewTab: false },
+          { label: "Contact Us", url: "/contact-store4riders", openInNewTab: false },
         ];
         footerChanged = true;
+      }
+
+      // Migrate legacy URLs in Column 4
+      if (Array.isArray(fc.column4Links)) {
+        fc.column4Links = fc.column4Links.map((l: any) => {
+          if (l.url === "/about-us") {
+            footerChanged = true;
+            return { ...l, url: "/about-us-store4riders" };
+          }
+          if (l.url === "/contact-us" || l.url === "/contact") {
+            footerChanged = true;
+            return { ...l, url: "/contact-store4riders" };
+          }
+          return l;
+        });
       }
 
       if (footerChanged) {

@@ -100,9 +100,9 @@ const footerConfigMongooseSchema = new Schema(
     column1Links: {
       type: [footerLinkMongooseSchema],
       default: [
-        { label: "Exchange & Replacements", url: "/returns", openInNewTab: false },
+        { label: "Exchange & Replacements", url: "/returns-replacements-store4riders", openInNewTab: false },
         { label: "Warranty", url: "/warranty", openInNewTab: false },
-        { label: "Shipping Policies", url: "/shipping", openInNewTab: false },
+        { label: "Shipping Policies", url: "/shipping-policies-store4riders", openInNewTab: false },
       ],
     },
     column2Title: { type: String, default: "SUPPORT AND SERVICES" },
@@ -122,8 +122,8 @@ const footerConfigMongooseSchema = new Schema(
       type: [footerLinkMongooseSchema],
       default: [
         { label: "Conditions of Sale & Use", url: "/store4riders-conditions-of-use-and-sale", openInNewTab: false },
-        { label: "Privacy and Cookie Policy", url: "/privacy", openInNewTab: false },
-        { label: "Legal", url: "/legal", openInNewTab: false },
+        { label: "Privacy and Cookie Policy", url: "/privacy-policy-cookie-restriction-mode", openInNewTab: false },
+        { label: "Legal", url: "/legal-stuff", openInNewTab: false },
         { label: "Store Policies", url: "/store4riders-store-policies", openInNewTab: false },
       ],
     },
@@ -131,8 +131,8 @@ const footerConfigMongooseSchema = new Schema(
     column4Links: {
       type: [footerLinkMongooseSchema],
       default: [
-        { label: "About us", url: "/about-us", openInNewTab: false },
-        { label: "Contact Us", url: "/contact-us", openInNewTab: false },
+        { label: "About us", url: "/about-us-store4riders", openInNewTab: false },
+        { label: "Contact Us", url: "/contact-store4riders", openInNewTab: false },
       ],
     },
     newsletterTitle: { type: String, default: "SUBSCRIBE US" },

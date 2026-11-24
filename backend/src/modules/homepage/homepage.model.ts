@@ -172,6 +172,10 @@ const touringGearSectionSchema = new Schema(
     sectionTitle: { type: String, default: "BEST GEAR FOR TOURING" },
     seeMoreText: { type: String, default: "SEE MORE" },
     seeMoreLink: { type: String, default: "/products?q=touring" },
+    items: {
+      type: [browseProductItemSchema],
+      default: [],
+    },
   },
   { _id: false }
 );
@@ -301,6 +305,7 @@ const categoryShowcaseCardSchema = new Schema(
     placeholderText: { type: String, default: "" },
     guideLinkText: { type: String, default: "" },
     guideLinkUrl: { type: String, default: "" },
+    badgeText: { type: String, default: "TOP" },
   },
   { _id: false }
 );
@@ -309,6 +314,9 @@ const categoryShowcaseSectionSchema = new Schema(
   {
     sectionTitle: { type: String, default: "RIDER'S ESSENTIAL GEAR" },
     subtitle: { type: String, default: "" },
+    bottomNoteText: { type: String, default: "Looking for motocross kit? Browse " },
+    bottomNoteLinkText: { type: String, default: "off-road and motocross gear." },
+    bottomNoteLinkUrl: { type: String, default: "/products?q=motocross" },
     cards: {
       type: [categoryShowcaseCardSchema],
       default: [],

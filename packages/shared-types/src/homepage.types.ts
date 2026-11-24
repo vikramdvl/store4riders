@@ -70,6 +70,7 @@ export interface ITouringGearSectionConfig {
   sectionTitle: string;
   seeMoreText: string;
   seeMoreLink: string;
+  items?: IBrowseProductItem[];
 }
 
 export interface ISocialMediaBannerBottom {
@@ -155,12 +156,16 @@ export interface ICategoryShowcaseCardConfig {
   placeholderText?: string;
   guideLinkText?: string;
   guideLinkUrl?: string;
+  badgeText?: string;
 }
 
 export interface ICategoryShowcaseSectionConfig {
   sectionTitle: string;
   subtitle?: string;
   cards?: ICategoryShowcaseCardConfig[];
+  bottomNoteText?: string;
+  bottomNoteLinkText?: string;
+  bottomNoteLinkUrl?: string;
 }
 
 export interface ITopBannerConfig {

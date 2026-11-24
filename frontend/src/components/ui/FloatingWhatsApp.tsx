@@ -20,8 +20,11 @@ const ROUTES_WITHOUT_BOTTOM_BAR = [
   "/register",
   "/forgot-password",
   "/terms",
+  "/store4riders-conditions-of-use-and-sale",
   "/privacy",
+  "/privacy-policy-cookie-restriction-mode",
   "/shipping",
+  "/shipping-policies-store4riders",
   "/returns",
   "/returns-replacements-store4riders",
   "/cash-on-delivery",
@@ -36,7 +39,14 @@ const ROUTES_WITHOUT_BOTTOM_BAR = [
   "/support",
   "/warranty",
   "/store-policies",
+  "/store4riders-store-policies",
   "/legal",
+  "/legal-stuff",
+  "/about-us",
+  "/about-us-store4riders",
+  "/contact",
+  "/contact-us",
+  "/contact-store4riders",
 ];
 
 /**
@@ -59,6 +69,7 @@ export const FloatingWhatsApp: React.FC = () => {
   const cartItemCount = useCartStore((state) => state.items.length);
   const isPDP = useUIStore((state) => state.isPDP);
   const currentProductName = useUIStore((state) => state.currentProductName);
+  const isMobileMenuOpen = useUIStore((state) => state.isMobileMenuOpen);
 
   // Dynamic Product Name resolution:
   // 1. From Zustand UI store (set by ProductDetailModule / StickyFooterBar)
@@ -71,6 +82,11 @@ export const FloatingWhatsApp: React.FC = () => {
     }
     return null;
   }, [currentProductName, isPDP]);
+
+  // Do not render when mobile navigation menu is open
+  if (isMobileMenuOpen) {
+    return null;
+  }
 
   // Do not render on Admin or API routes
   if (!pathname || pathname.startsWith("/admin") || pathname.startsWith("/api")) {

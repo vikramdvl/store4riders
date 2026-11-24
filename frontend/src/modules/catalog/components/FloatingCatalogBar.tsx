@@ -5,6 +5,7 @@ import { StarIcon } from "@heroicons/react/24/solid";
 import { FunnelIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { SidebarFilters } from "./SidebarFilters";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useUIStore } from "@/stores/useUIStore";
 
 interface FloatingCatalogBarProps {
   totalCount?: number;
@@ -53,6 +54,15 @@ export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
     router.push(`${pathname}?${current.toString()}`, { scroll: false });
   };
 
+  const isMobileMenuOpen = useUIStore((state) => state.isMobileMenuOpen);
+
+  // Close filter drawer if mobile nav menu is opened
+  useEffect(() => {
+    if (isMobileMenuOpen && isFilterDrawerOpen) {
+      setIsFilterDrawerOpen(false);
+    }
+  }, [isMobileMenuOpen, isFilterDrawerOpen]);
+
   // Prevent background scroll when mobile filter drawer is open
   useEffect(() => {
     if (isFilterDrawerOpen) {
@@ -64,6 +74,11 @@ export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
       document.body.style.overflow = "";
     };
   }, [isFilterDrawerOpen]);
+
+  // Hide review & filter floating buttons completely when mobile side drawer is open
+  if (isMobileMenuOpen) {
+    return null;
+  }
 
   return (
     <>

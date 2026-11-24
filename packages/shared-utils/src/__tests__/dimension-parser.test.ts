@@ -4,6 +4,8 @@ import {
   parseCombinedDimensionsString,
   convertToCm,
   normalizeDimensionUnit,
+  extractProductWeight,
+  parseAttributesString,
 } from "../dimension-parser";
 
 describe("dimension-parser", () => {
@@ -130,6 +132,63 @@ describe("dimension-parser", () => {
       breadth: 20,
       height: 10,
       dimensionUnit: "cm",
+    });
+  });
+
+  it("parses additional attributes into clean key-value dictionary", () => {
+    const raw = 'size="XL",color="Matte Black",capacity="30L",material="Cordura 600D"';
+    const parsed = parseAttributesString(raw);
+    expect(parsed).toEqual({
+      size: "XL",
+      color: "Matte Black",
+      capacity: "30L",
+      material: "Cordura 600D",
+    });
+  });
+
+  it("extracts and normalizes product weights properly", () => {
+    // 1. Direct kg float
+    expect(extractProductWeight({ weight: "1.5" })).toEqual({
+      weight: 1.5,
+      weightUnit: "kg",
+    });
+
+    // 2. String with kg
+    expect(extractProductWeight({ package_weight: "2.5 kg" })).toEqual({
+      weight: 2.5,
+      weightUnit: "kg",
+    });
+
+    // 3. String with grams (auto-converts to kg for Shiprocket)
+    expect(extractProductWeight({ weight: "500g" })).toEqual({
+      weight: 0.5,
+      weightUnit: "kg",
+    });
+
+    expect(extractProductWeight({ shipping_weight: "750 gm" })).toEqual({
+      weight: 0.75,
+      weightUnit: "kg",
+    });
+
+    // 4. Large number without unit (assumed grams e.g. 800)
+    expect(extractProductWeight({ weight: "800" })).toEqual({
+      weight: 0.8,
+      weightUnit: "kg",
+    });
+
+    // 5. Volume in Litres
+    expect(extractProductWeight({ weight: "1.5L" })).toEqual({
+      weight: 1.5,
+      weightUnit: "kg",
+    });
+
+    // 6. Weight from additional_attributes string
+    const rowWithAttrs = {
+      additional_attributes: 'condition="New",weight="1.2kg",size="L"',
+    };
+    expect(extractProductWeight(rowWithAttrs)).toEqual({
+      weight: 1.2,
+      weightUnit: "kg",
     });
   });
 });

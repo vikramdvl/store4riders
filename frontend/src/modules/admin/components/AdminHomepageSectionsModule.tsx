@@ -60,35 +60,39 @@ const DEFAULT_SHOWCASE_CARDS: ICategoryShowcaseCardConfig[] = [
     id: "boots",
     title: "RIDING BOOTS",
     description: "Short biking boots, sports riding shoes and off-road boots with ankle and shin protection.",
-    linkUrl: "/riding-gear/riding-boots",
-    imageUrl: "",
+    linkUrl: "/riding-gear/motorcycle-riding-boots",
+    imageUrl: "https://store4riders.s3.ap-south-2.amazonaws.com/catalog/product/f/o/forma-viper-urban-motorcycle-riding-boots-black.jpg",
     placeholderText: "PHOTO: RIDING BOOTS",
+    badgeText: "TOP",
   },
   {
     id: "pants",
     title: "RIDING PANTS",
     description: "Riding pants, riding jeans and touring pants with removable knee and hip armour.",
     linkUrl: "/riding-gear/riding-pants",
-    imageUrl: "",
+    imageUrl: "https://store4riders.s3.ap-south-2.amazonaws.com/catalog/product/r/y/rynox-adventour-s2-riding-pants-black.jpg",
     placeholderText: "PHOTO: RIDING PANTS WITH KNEE ARMOUR",
+    badgeText: "TOP",
   },
   {
     id: "luggage",
     title: "MOTORCYCLE LUGGAGE",
     description: "Tank bags, saddle bags, tail bags and top boxes for weekend rides and long tours.",
-    linkUrl: "/luggage",
-    imageUrl: "",
+    linkUrl: "/motorcycle-bags-bike-luggage",
+    imageUrl: "https://store4riders.s3.ap-south-2.amazonaws.com/catalog/product/b/b/bbg_hybrid_tail_bag.jpg",
     placeholderText: "PHOTO: TAIL BAG ON A TOURING BIKE",
+    badgeText: "TOP",
   },
   {
     id: "accessories-spares",
     title: "BIKE ACCESSORIES AND SPARES",
     description: "Auxiliary lights, spark plugs, performance air filters, chains and chain care. New to chain maintenance? Start with our ",
     linkUrl: "/bike-accessories",
-    imageUrl: "",
+    imageUrl: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/rolon.jpg",
     placeholderText: "PHOTO: AUXILIARY LIGHTS AND CHAIN CARE",
     guideLinkText: "chain lubing guide.",
     guideLinkUrl: "/products?q=chain+lube",
+    badgeText: "TOP",
   },
 ];
 
@@ -115,6 +119,13 @@ export function AdminHomepageSectionsModule() {
   // Section: Riders' Favourites Modal & Edit State
   const [favPickerSlotIdx, setFavPickerSlotIdx] = useState<number | null>(null);
   const [favEditingSlotIdx, setFavEditingSlotIdx] = useState<number | null>(null);
+
+  // Section: Rider's Essential Gear (Showcase) Picker State
+  const [showcasePickerSlotIdx, setShowcasePickerSlotIdx] = useState<number | null>(null);
+
+  // Section: Touring Gear Modal & Edit State
+  const [touringPickerSlotIdx, setTouringPickerSlotIdx] = useState<number | null>(null);
+  const [touringEditingSlotIdx, setTouringEditingSlotIdx] = useState<number | null>(null);
 
   // Section 4: Instagram Reels Modal & Edit State
   const [isReelModalOpen, setIsReelModalOpen] = useState<boolean>(false);
@@ -154,10 +165,14 @@ export function AdminHomepageSectionsModule() {
       sectionTitle: "BEST GEAR FOR TOURING",
       seeMoreText: "SEE MORE",
       seeMoreLink: "/products?q=touring",
+      items: [],
     },
     categoryShowcase: {
       sectionTitle: "RIDER'S ESSENTIAL GEAR",
       subtitle: "",
+      bottomNoteText: "Looking for motocross kit? Browse ",
+      bottomNoteLinkText: "off-road and motocross gear.",
+      bottomNoteLinkUrl: "/products?q=motocross",
       cards: DEFAULT_SHOWCASE_CARDS,
     },
     ridersFavourites: {
@@ -255,9 +270,17 @@ export function AdminHomepageSectionsModule() {
             ...config.sections?.browseCategories,
             items: config.sections?.browseCategories?.items || [],
           },
+          touringGear: {
+            ...prev.touringGear,
+            ...config.sections?.touringGear,
+            items: config.sections?.touringGear?.items || [],
+          },
           categoryShowcase: {
             sectionTitle: config.sections?.categoryShowcase?.sectionTitle || "RIDER'S ESSENTIAL GEAR",
             subtitle: config.sections?.categoryShowcase?.subtitle || "",
+            bottomNoteText: config.sections?.categoryShowcase?.bottomNoteText ?? "Looking for motocross kit? Browse ",
+            bottomNoteLinkText: config.sections?.categoryShowcase?.bottomNoteLinkText ?? "off-road and motocross gear.",
+            bottomNoteLinkUrl: config.sections?.categoryShowcase?.bottomNoteLinkUrl ?? "/products?q=motocross",
             cards: config.sections?.categoryShowcase?.cards && config.sections.categoryShowcase.cards.length > 0
               ? config.sections.categoryShowcase.cards
               : (prev.categoryShowcase?.cards || DEFAULT_SHOWCASE_CARDS),
@@ -535,10 +558,97 @@ export function AdminHomepageSectionsModule() {
         ...prev.categoryShowcase,
         sectionTitle: "RIDER'S ESSENTIAL GEAR",
         subtitle: "",
+        bottomNoteText: "Looking for motocross kit? Browse ",
+        bottomNoteLinkText: "off-road and motocross gear.",
+        bottomNoteLinkUrl: "/products?q=motocross",
         cards: DEFAULT_SHOWCASE_CARDS.map((c) => ({ ...c })),
       },
     }));
     toast.success("Reset Rider's Essential Gear cards to defaults!");
+  };
+
+  const handleProductSelectedForShowcase = (selected: SelectedItemData) => {
+    if (showcasePickerSlotIdx === null) return;
+    const targetIdx = showcasePickerSlotIdx;
+    handleUpdateShowcaseCard(targetIdx, {
+      title: selected.title,
+      linkUrl: selected.linkUrl || "/products",
+      imageUrl: selected.imageUrl || "",
+    });
+    setShowcasePickerSlotIdx(null);
+    toast.success(`Assigned "${selected.title}" to Card #${targetIdx + 1}!`);
+  };
+
+  // -------------------------------------------------------------
+  // Touring Gear Handlers
+  // -------------------------------------------------------------
+  const handleUpdateTouringItem = (idx: number, updates: Partial<IBrowseProductItem>) => {
+    setSectionsState((prev) => {
+      const existingItems = prev.touringGear?.items ? [...prev.touringGear.items] : [];
+      while (existingItems.length <= idx) {
+        existingItems.push({
+          id: `tour-${existingItems.length + 1}`,
+          name: "",
+          category: "TOURING GEAR",
+          priceFormatted: "",
+          imageUrl: "",
+          productUrl: "/products",
+          rating: 4.8,
+        });
+      }
+      existingItems[idx] = { ...existingItems[idx], ...updates };
+      return {
+        ...prev,
+        touringGear: {
+          ...prev.touringGear,
+          items: existingItems,
+        },
+      };
+    });
+  };
+
+  const handleClearTouringSlot = (idx: number) => {
+    handleUpdateTouringItem(idx, {
+      name: "",
+      priceFormatted: "",
+      imageUrl: "",
+      productUrl: "/products",
+    });
+    toast.success(`Cleared Touring slot #${idx + 1}`);
+  };
+
+  const handleClearAllTouringSlots = () => {
+    setSectionsState((prev) => ({
+      ...prev,
+      touringGear: {
+        ...prev.touringGear,
+        items: Array.from({ length: 4 }, (_, i) => ({
+          id: `tour-${i + 1}`,
+          name: "",
+          category: "TOURING GEAR",
+          priceFormatted: "",
+          imageUrl: "",
+          productUrl: "/products",
+          rating: 4.8,
+        })),
+      },
+    }));
+    setTouringEditingSlotIdx(null);
+    toast.success("All Touring slots reset to automatic catalog curation!");
+  };
+
+  const handleProductSelectedForTouring = (selected: SelectedItemData) => {
+    if (touringPickerSlotIdx === null) return;
+    const targetIdx = touringPickerSlotIdx;
+    handleUpdateTouringItem(targetIdx, {
+      name: selected.title,
+      category: selected.categoryName || "TOURING GEAR",
+      priceFormatted: selected.priceFormatted || "₹ 0",
+      imageUrl: selected.imageUrl || "",
+      productUrl: selected.linkUrl || "/products",
+    });
+    setTouringPickerSlotIdx(null);
+    toast.success(`Assigned "${selected.title}" to Touring Slot #${targetIdx + 1}!`);
   };
 
   // -------------------------------------------------------------
@@ -1243,6 +1353,19 @@ export function AdminHomepageSectionsModule() {
                   </div>
                 </div>
               </div>
+
+              {/* Product Category Picker Modal for Rider's Essential Gear */}
+              <ProductCategoryPicker
+                isOpen={showcasePickerSlotIdx !== null}
+                onClose={() => setShowcasePickerSlotIdx(null)}
+                onSelect={handleProductSelectedForShowcase}
+                mode="product-only"
+                title={
+                  showcasePickerSlotIdx !== null
+                    ? `Assign Product to Card #${showcasePickerSlotIdx + 1}`
+                    : "Select Product"
+                }
+              />
             </div>
           )}
 
@@ -1703,7 +1826,207 @@ export function AdminHomepageSectionsModule() {
                     />
                   </div>
                 </div>
+
+                {/* 4 Touring Product Slots */}
+                <div className="pt-3 border-t border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-800 uppercase tracking-wider">
+                        Assigned Touring Products (4 Slots)
+                      </label>
+                      <p className="text-[10px] text-slate-500">
+                        Assign specific products or leave empty to automatically curate from the touring catalog.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleClearAllTouringSlots}
+                      className="text-[11px] px-2 py-0.5 rounded border border-slate-300 text-slate-600 hover:text-red-600 hover:border-red-300 transition-colors cursor-pointer flex items-center gap-1 font-medium bg-slate-50"
+                      title="Reset all touring slots to auto-catalog"
+                    >
+                      <Trash2 size={11} />
+                      <span>Reset to Auto</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {[0, 1, 2, 3].map((idx) => {
+                      const item = sectionsState.touringGear?.items?.[idx];
+                      const isAssigned = !!(item && (item.name || item.imageUrl));
+                      const isEditing = touringEditingSlotIdx === idx;
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`border rounded-lg p-3 transition-all ${
+                            isAssigned
+                              ? "border-slate-300 bg-white shadow-xs"
+                              : "border-dashed border-slate-300 bg-slate-50/50 hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+                            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-brand shrink-0" />
+                              Slot #{idx + 1}
+                            </span>
+                            {isAssigned ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  Assigned
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleClearTouringSlot(idx)}
+                                  className="text-slate-400 hover:text-red-500 p-0.5 transition-colors cursor-pointer"
+                                  title="Clear slot"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                                Auto
+                              </span>
+                            )}
+                          </div>
+
+                          {isAssigned && !isEditing ? (
+                            <div className="space-y-2">
+                              <div className="flex items-start gap-2.5">
+                                <div className="relative w-14 h-14 bg-slate-100 rounded border border-slate-200 shrink-0 overflow-hidden p-1">
+                                  <Image
+                                    src={item.imageUrl || "/no-image.svg"}
+                                    alt={item.name || `Slot ${idx + 1}`}
+                                    fill
+                                    className="object-contain"
+                                  />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <span className="text-[9px] font-bold text-brand uppercase tracking-wider block">
+                                    {item.category || "TOURING GEAR"}
+                                  </span>
+                                  <p className="text-xs font-bold text-slate-900 line-clamp-1 mt-0.5" title={item.name}>
+                                    {item.name}
+                                  </p>
+                                  <p className="text-xs font-bold text-emerald-700 mt-0.5">
+                                    {item.priceFormatted || "₹ 0"}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px]">
+                                <button
+                                  type="button"
+                                  onClick={() => setTouringPickerSlotIdx(idx)}
+                                  className="font-bold text-brand hover:text-brand/80 flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Search size={11} />
+                                  <span>Change Product</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTouringEditingSlotIdx(idx)}
+                                  className="font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-0.5 cursor-pointer"
+                                >
+                                  <Sliders size={11} />
+                                  <span>Edit / Image</span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : isEditing ? (
+                            <div className="space-y-2 bg-slate-50/70 p-2.5 rounded border border-slate-200">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-slate-700 uppercase">Edit Touring Slot</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setTouringEditingSlotIdx(null)}
+                                  className="text-[10px] font-bold text-slate-500 hover:text-slate-800"
+                                >
+                                  Close
+                                </button>
+                              </div>
+
+                              <div>
+                                <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Name</label>
+                                <input
+                                  type="text"
+                                  value={item?.name || ""}
+                                  onChange={(e) => handleUpdateTouringItem(idx, { name: e.target.value })}
+                                  placeholder="Product Name"
+                                  className="w-full bg-white border border-slate-300 text-xs px-2 py-1 rounded font-medium"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Price Display</label>
+                                <input
+                                  type="text"
+                                  value={item?.priceFormatted || ""}
+                                  onChange={(e) => handleUpdateTouringItem(idx, { priceFormatted: e.target.value })}
+                                  placeholder="e.g. ₹ 4,999"
+                                  className="w-full bg-white border border-slate-300 text-xs px-2 py-1 rounded"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Link URL</label>
+                                <input
+                                  type="text"
+                                  value={item?.productUrl || "/products"}
+                                  onChange={(e) => handleUpdateTouringItem(idx, { productUrl: e.target.value })}
+                                  placeholder="/products/..."
+                                  className="w-full bg-white border border-slate-300 text-xs px-2 py-1 rounded text-slate-700"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Custom Image Upload</label>
+                                <ImageUploadWebP
+                                  value={item?.imageUrl || ""}
+                                  onChange={(url) => handleUpdateTouringItem(idx, { imageUrl: url })}
+                                  aspectRatio="aspect-square"
+                                  hint="Square WebP"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="py-4 text-center space-y-2">
+                              <p className="text-[11px] text-slate-500">Auto-curated from touring catalog</p>
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setTouringPickerSlotIdx(idx)}
+                                  className="text-xs px-2.5 py-1 bg-brand text-white font-bold rounded hover:bg-brand-dark transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Search size={11} />
+                                  <span>Assign Product</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTouringEditingSlotIdx(idx)}
+                                  className="text-xs px-2 py-1 border border-slate-300 text-slate-700 rounded hover:bg-white transition-colors cursor-pointer"
+                                  title="Custom image/text"
+                                >
+                                  <Sliders size={11} />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
+
+              {/* Product Category Picker Modal for Touring Gear */}
+              <ProductCategoryPicker
+                isOpen={touringPickerSlotIdx !== null}
+                onClose={() => setTouringPickerSlotIdx(null)}
+                onSelect={handleProductSelectedForTouring}
+                mode="product-only"
+                title={touringPickerSlotIdx !== null ? `Select Product for Touring Slot #${touringPickerSlotIdx + 1}` : "Select Product"}
+              />
             </div>
           )}
 
@@ -1810,71 +2133,150 @@ export function AdminHomepageSectionsModule() {
                           )}
                         </div>
 
-                        {/* Title & Description */}
-                        <div className="space-y-2">
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
-                              Card Title
-                            </label>
-                            <input
-                              type="text"
-                              value={card.title}
-                              onChange={(e) => handleUpdateShowcaseCard(idx, { title: e.target.value })}
-                              placeholder="e.g. RIDING BOOTS"
-                              className="w-full bg-white border border-slate-300 text-slate-900 text-xs px-2.5 py-1.5 rounded font-semibold focus:outline-none focus:border-brand"
-                            />
+                        {/* Live Card Preview Box */}
+                        <div className="bg-white border border-slate-200/90 rounded-lg p-2.5 flex items-start gap-3 shadow-2xs">
+                          <div className="relative w-16 h-16 bg-[#f4f4f4] rounded shrink-0 overflow-hidden flex items-center justify-center border border-slate-100">
+                            {card.imageUrl ? (
+                              <Image
+                                src={card.imageUrl}
+                                alt={card.title || "Preview"}
+                                fill
+                                className="object-contain"
+                              />
+                            ) : (
+                              <span className="text-[8px] font-bold text-slate-400 text-center px-1">
+                                NO IMAGE
+                              </span>
+                            )}
+                            {card.badgeText !== "" && (
+                              <span className="absolute top-1 right-1 bg-banner text-white text-[7.5px] font-bold px-1 py-0.2 rounded-full shadow-xs">
+                                ★ {card.badgeText || "TOP"}
+                              </span>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-bold text-slate-900 block truncate uppercase">
+                              {card.title || "RIDING GEAR TITLE"}
+                            </span>
+                            <p className="text-[10.5px] text-slate-600 line-clamp-2 mt-0.5 leading-snug">
+                              {card.description || "Enter subtext / description below..."}
+                              {card.guideLinkText && (
+                                <span className="text-banner font-bold ml-1">
+                                  {card.guideLinkText}
+                                </span>
+                              )}
+                            </p>
+                            <span className="text-[9.5px] text-slate-400 truncate block mt-1 font-mono">
+                              {card.linkUrl || "/products"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Quick Product Binding & Actions */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 bg-white p-2 rounded-lg border border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => setShowcasePickerSlotIdx(idx)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-brand text-white text-[11px] font-bold rounded hover:bg-brand-dark transition-colors cursor-pointer shadow-2xs"
+                          >
+                            <Search size={12} />
+                            <span>Assign / Bind Product from Store</span>
+                          </button>
+
+                          {card.imageUrl && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateShowcaseCard(idx, { imageUrl: "" })}
+                              className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500 hover:text-red-600 transition-colors cursor-pointer"
+                              title="Clear image"
+                            >
+                              <Trash2 size={11} />
+                              <span>Reset Image</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Title, Subtext/Description, Badge & Links */}
+                        <div className="space-y-2.5">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div className="sm:col-span-2">
+                              <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                                Card Title (Heading)
+                              </label>
+                              <input
+                                type="text"
+                                value={card.title}
+                                onChange={(e) => handleUpdateShowcaseCard(idx, { title: e.target.value })}
+                                placeholder="e.g. RIDING BOOTS"
+                                className="w-full bg-white border border-slate-300 text-slate-900 text-xs px-2.5 py-1.5 rounded font-bold focus:outline-none focus:border-brand uppercase"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                                Top Badge Text
+                              </label>
+                              <input
+                                type="text"
+                                value={card.badgeText !== undefined ? card.badgeText : "TOP"}
+                                onChange={(e) => handleUpdateShowcaseCard(idx, { badgeText: e.target.value })}
+                                placeholder="e.g. TOP (blank=hide)"
+                                className="w-full bg-white border border-slate-300 text-slate-900 text-xs px-2 py-1.5 rounded font-semibold focus:outline-none focus:border-brand"
+                              />
+                            </div>
                           </div>
 
                           <div>
-                            <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
-                              Description
+                            <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                              Subtext / Description (Text under title)
                             </label>
                             <textarea
                               rows={2}
                               value={card.description}
                               onChange={(e) => handleUpdateShowcaseCard(idx, { description: e.target.value })}
-                              placeholder="Short card description..."
-                              className="w-full bg-white border border-slate-300 text-slate-900 text-xs px-2.5 py-1.5 rounded focus:outline-none focus:border-brand resize-none"
+                              placeholder="e.g. Short biking boots, sports riding shoes and off-road boots with ankle and shin protection."
+                              className="w-full bg-white border border-slate-300 text-slate-900 text-xs px-2.5 py-1.5 rounded focus:outline-none focus:border-brand resize-none leading-relaxed"
                             />
+                            <p className="text-[9.5px] text-slate-400 mt-0.5">
+                              This text displays directly below the card title on the homepage.
+                            </p>
                           </div>
 
                           <div>
                             <LinkSelectorInput
-                              label="Destination Link"
+                              label="Destination Link (Where clicking card goes)"
                               value={card.linkUrl || "/products"}
                               onChange={(url) => handleUpdateShowcaseCard(idx, { linkUrl: url })}
-                              placeholder="e.g. /riding-gear/riding-boots"
+                              placeholder="e.g. /riding-gear/motorcycle-riding-boots"
                             />
                           </div>
 
-                          {idx === 3 && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200">
-                              <div>
-                                <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
-                                  Guide Link Text (Optional)
-                                </label>
-                                <input
-                                  type="text"
-                                  value={card.guideLinkText || ""}
-                                  onChange={(e) => handleUpdateShowcaseCard(idx, { guideLinkText: e.target.value })}
-                                  placeholder="e.g. chain lubing guide."
-                                  className="w-full bg-white border border-slate-300 text-slate-900 text-xs px-2 py-1 rounded"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
-                                  Guide Link URL (Optional)
-                                </label>
-                                <input
-                                  type="text"
-                                  value={card.guideLinkUrl || ""}
-                                  onChange={(e) => handleUpdateShowcaseCard(idx, { guideLinkUrl: e.target.value })}
-                                  placeholder="e.g. /products?q=chain+lube"
-                                  className="w-full bg-white border border-slate-300 text-slate-900 text-xs px-2 py-1 rounded"
-                                />
-                              </div>
+                          {/* Optional Guide Link Text & URL */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
+                                In-Text Guide Link (Optional)
+                              </label>
+                              <input
+                                type="text"
+                                value={card.guideLinkText || ""}
+                                onChange={(e) => handleUpdateShowcaseCard(idx, { guideLinkText: e.target.value })}
+                                placeholder="e.g. chain lubing guide."
+                                className="w-full bg-white border border-slate-300 text-slate-900 text-xs px-2 py-1 rounded"
+                              />
                             </div>
-                          )}
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">
+                                Guide Destination URL (Optional)
+                              </label>
+                              <input
+                                type="text"
+                                value={card.guideLinkUrl || ""}
+                                onChange={(e) => handleUpdateShowcaseCard(idx, { guideLinkUrl: e.target.value })}
+                                placeholder="e.g. /products?q=chain+lube"
+                                className="w-full bg-white border border-slate-300 text-slate-900 text-xs px-2 py-1 rounded"
+                              />
+                            </div>
+                          </div>
                         </div>
 
                         {/* Image Upload WebP */}
@@ -1894,7 +2296,100 @@ export function AdminHomepageSectionsModule() {
                     );
                   })}
                 </div>
+
+                {/* Bottom Motocross Note Settings */}
+                <div className="mt-4 pt-4 border-t border-slate-200 bg-slate-50/60 rounded-lg p-3.5 space-y-3">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-banner shrink-0" />
+                      Bottom Motocross Notice / Footer Link Settings
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Configure the callout message that appears directly below the 4 gear cards (e.g. &quot;Looking for motocross kit? Browse off-road and motocross gear.&quot;)
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                        Notice Leading Text
+                      </label>
+                      <input
+                        type="text"
+                        value={sectionsState.categoryShowcase?.bottomNoteText ?? "Looking for motocross kit? Browse "}
+                        onChange={(e) =>
+                          setSectionsState((prev) => ({
+                            ...prev,
+                            categoryShowcase: {
+                              ...prev.categoryShowcase,
+                              sectionTitle: prev.categoryShowcase?.sectionTitle || "RIDER'S ESSENTIAL GEAR",
+                              bottomNoteText: e.target.value,
+                              cards: prev.categoryShowcase?.cards || [],
+                            },
+                          }))
+                        }
+                        placeholder="e.g. Looking for motocross kit? Browse "
+                        className="w-full bg-white border border-slate-300 text-slate-900 text-xs px-2.5 py-1.5 rounded"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase mb-0.5">
+                        Clickable Link Text
+                      </label>
+                      <input
+                        type="text"
+                        value={sectionsState.categoryShowcase?.bottomNoteLinkText ?? "off-road and motocross gear."}
+                        onChange={(e) =>
+                          setSectionsState((prev) => ({
+                            ...prev,
+                            categoryShowcase: {
+                              ...prev.categoryShowcase,
+                              sectionTitle: prev.categoryShowcase?.sectionTitle || "RIDER'S ESSENTIAL GEAR",
+                              bottomNoteLinkText: e.target.value,
+                              cards: prev.categoryShowcase?.cards || [],
+                            },
+                          }))
+                        }
+                        placeholder="e.g. off-road and motocross gear."
+                        className="w-full bg-white border border-slate-300 text-slate-900 text-xs px-2.5 py-1.5 rounded font-semibold text-banner"
+                      />
+                    </div>
+
+                    <div>
+                      <LinkSelectorInput
+                        label="Destination URL"
+                        value={sectionsState.categoryShowcase?.bottomNoteLinkUrl || "/products?q=motocross"}
+                        onChange={(url) =>
+                          setSectionsState((prev) => ({
+                            ...prev,
+                            categoryShowcase: {
+                              ...prev.categoryShowcase,
+                              sectionTitle: prev.categoryShowcase?.sectionTitle || "RIDER'S ESSENTIAL GEAR",
+                              bottomNoteLinkUrl: url,
+                              cards: prev.categoryShowcase?.cards || [],
+                            },
+                          }))
+                        }
+                        placeholder="e.g. /products?q=motocross"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              {/* Product Category Picker Modal for Rider's Essential Gear */}
+              <ProductCategoryPicker
+                isOpen={showcasePickerSlotIdx !== null}
+                onClose={() => setShowcasePickerSlotIdx(null)}
+                onSelect={handleProductSelectedForShowcase}
+                mode="product-only"
+                title={
+                  showcasePickerSlotIdx !== null
+                    ? `Assign Product to Card #${showcasePickerSlotIdx + 1}`
+                    : "Select Product"
+                }
+              />
             </div>
           )}
 
