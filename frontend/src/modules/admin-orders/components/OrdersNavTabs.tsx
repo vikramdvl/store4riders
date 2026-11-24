@@ -49,7 +49,7 @@ export const OrdersNavTabs: React.FC<OrdersNavTabsProps> = ({ className = "" }) 
       countColor: counts?.exchangeCount ? "bg-amber-100 text-amber-700 font-bold" : "bg-slate-100 text-slate-500",
       activeColor: "border-amber-600 text-amber-600",
       isActive: pathname === "/admin/orders/exchanges",
-      description: "7-Day Size & Defect Swaps",
+      description: "Size & Defect Swaps",
       hideForSupport: true,
     },
   ];

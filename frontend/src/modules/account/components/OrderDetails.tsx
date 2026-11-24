@@ -367,7 +367,7 @@ export function OrderDetails({ orderId }: { orderId: string }) {
 
                       <div className="mt-1.5 flex items-baseline gap-1">
                         <span className="text-[10px] text-neutral-400 uppercase font-bold">Item Total:</span>
-                        <span className="text-xs sm:text-sm font-black text-brand">{formatPrice(lineTotal)}</span>
+                        <span className="text-xs sm:text-sm font-black text-neutral-900">{formatPrice(lineTotal)}</span>
                       </div>
                     </div>
 
@@ -399,6 +399,12 @@ export function OrderDetails({ orderId }: { orderId: string }) {
                   {order.pricing?.shipping > 0 ? formatPrice(order.pricing.shipping) : "FREE"}
                 </span>
               </div>
+              {order.paymentMethod === "cod" && (order.pricing?.codHandlingFee || 0) > 0 && (
+                <div className="flex justify-between text-amber-800">
+                  <span>COD Cash Handling Fee</span>
+                  <span className="font-semibold text-amber-900">+{formatPrice(order.pricing?.codHandlingFee || 0)}</span>
+                </div>
+              )}
               {order.pricing?.tax > 0 && (
                 <div className="flex justify-between text-neutral-600">
                   <span className="flex items-center gap-1">

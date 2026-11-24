@@ -71,9 +71,9 @@ export default function AboutUsPage() {
             <div className="w-10 h-10 rounded-xl bg-brand/10 text-brand flex items-center justify-center">
               <HeartHandshake size={20} />
             </div>
-            <h4 className="font-bold text-slate-900 text-sm">7-Day Fit Guarantee</h4>
+            <h4 className="font-bold text-slate-900 text-sm">Size &amp; Fit Guarantee</h4>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Riding safety requires a snug, accurate fit. Our hassle-free 7-day size exchange ensures your armor and helmet fit securely without compromise.
+              Riding safety requires a snug, accurate fit. Our hassle-free size exchange ensures your armor and helmet fit securely without compromise.
             </p>
           </div>
         </div>

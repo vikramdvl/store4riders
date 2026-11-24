@@ -4,7 +4,8 @@ import React, { useMemo } from "react";
 import { 
   X, 
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Check
 } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useProductAggregations } from "@/core/hooks/useProducts";
@@ -16,6 +17,40 @@ const PRICE_RANGES = [
   { label: "₹6k – ₹10k", short: "₹6,000.00 - ₹9,999.99", id: "6k-10k", min: 6000, max: 10000 },
   { label: "> ₹10,000", short: "₹10,000.00 and above", id: "above-10k", min: 10000, max: undefined },
 ];
+
+function FilterCheckbox({
+  checked,
+  onChange,
+  disabled,
+  ariaLabel,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+  ariaLabel?: string;
+}) {
+  return (
+    <div className="relative flex items-center justify-center shrink-0">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        className="sr-only peer"
+      />
+      <div
+        className={`w-4 h-4 rounded-sm border transition-all duration-150 flex items-center justify-center select-none peer-focus-visible:ring-2 peer-focus-visible:ring-banner/40 peer-focus-visible:ring-offset-1 ${
+          checked
+            ? "bg-banner border-banner text-white shadow-2xs"
+            : "border-neutral-300 bg-white group-hover:border-neutral-400"
+        }`}
+      >
+        {checked && <Check className="w-3 h-3 text-white stroke-[3]" />}
+      </div>
+    </div>
+  );
+}
 
 function AccordionSection({ title, children, defaultOpen = true }: { title: string, children: React.ReactNode, defaultOpen?: boolean }) {
   const [isOpen, setIsOpen] = React.useState(defaultOpen);
@@ -493,27 +528,26 @@ export function SidebarFilters({
           if (config.code === "category" && CATEGORIES.length > 0) {
             return (
               <AccordionSection key="category" title={config.label} defaultOpen={false}>
-                <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto scrollbar-thin pr-2">
+                <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto scrollbar-thin pl-1 pr-2 py-1">
                   {CATEGORIES.map((cat: any) => {
                     const active = isCategoryActive(cat.slug);
                     return (
                       <label 
                         key={cat.fullName} 
-                        className="flex items-center justify-between cursor-pointer group"
+                        className="flex items-center justify-between cursor-pointer group py-0.5 select-none"
                         style={{ paddingLeft: `${cat.indent}px` }}
                       >
-                        <div className="flex items-center gap-2.5">
-                          <input 
-                            type="checkbox" 
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <FilterCheckbox 
                             checked={active}
                             onChange={() => handleCategoryClick(active ? "" : cat.slug, cat.fullSlug)}
-                            className="w-4 h-4 rounded-sm border-neutral-300 text-banner focus:ring-banner cursor-pointer bg-white transition-colors"
+                            ariaLabel={cat.displayName}
                           />
-                          <span className={`text-[14px] ${active ? "text-banner font-bold" : "text-neutral-700 group-hover:text-banner"}`}>
+                          <span className={`text-[14px] truncate transition-colors ${active ? "text-banner font-bold" : "text-neutral-700 group-hover:text-banner"}`}>
                             {cat.displayName}
                           </span>
                         </div>
-                        <span className="text-[11px] text-neutral-400">
+                        <span className="text-[11px] text-neutral-400 shrink-0 ml-2">
                           ({cat.count})
                         </span>
                       </label>
@@ -590,23 +624,22 @@ export function SidebarFilters({
                     <span>View {sizeLabel} Size Chart</span>
                   </button>
                 )}
-                <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto scrollbar-thin pr-2">
+                <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto scrollbar-thin pl-1 pr-2 py-1">
                   {SIZES.map((sz: any) => {
                     const active = isParamActive("size", sz.name, activeSizes);
                     return (
-                      <label key={sz.name} className="flex items-center justify-between cursor-pointer group">
-                        <div className="flex items-center gap-2.5">
-                          <input 
-                            type="checkbox" 
+                      <label key={sz.name} className="flex items-center justify-between cursor-pointer group py-0.5 select-none">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <FilterCheckbox 
                             checked={active}
                             onChange={() => handleSizeToggle(sz.name)}
-                            className="w-4 h-4 rounded-sm border-neutral-300 text-banner focus:ring-banner cursor-pointer bg-white transition-colors"
+                            ariaLabel={sz.name}
                           />
-                          <span className={`text-[14px] ${active ? "text-banner font-bold" : "text-neutral-700 group-hover:text-banner"}`}>
+                          <span className={`text-[14px] truncate transition-colors ${active ? "text-banner font-bold" : "text-neutral-700 group-hover:text-banner"}`}>
                             {sz.name}
                           </span>
                         </div>
-                        <span className="text-[11px] text-neutral-400">
+                        <span className="text-[11px] text-neutral-400 shrink-0 ml-2">
                           ({sz.count})
                         </span>
                       </label>
@@ -621,23 +654,22 @@ export function SidebarFilters({
           if (config.code === "brand" && BRANDS.length > 0 && !isDedicatedBrandView) {
             return (
               <AccordionSection key="brand" title={config.label} defaultOpen={false}>
-                <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto scrollbar-thin pr-2">
+                <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto scrollbar-thin pl-1 pr-2 py-1">
                   {BRANDS.map((brand: any) => {
                     const active = isParamActive("brand", brand.name, activeBrands);
                     return (
-                      <label key={brand.name} className="flex items-center justify-between cursor-pointer group">
-                        <div className="flex items-center gap-2.5">
-                          <input 
-                            type="checkbox" 
+                      <label key={brand.name} className="flex items-center justify-between cursor-pointer group py-0.5 select-none">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <FilterCheckbox 
                             checked={active}
                             onChange={() => handleBrandToggle(brand.name)}
-                            className="w-4 h-4 rounded-sm border-neutral-300 text-banner focus:ring-banner cursor-pointer bg-white transition-colors"
+                            ariaLabel={brand.short}
                           />
-                          <span className={`text-[14px] ${active ? "text-banner font-bold" : "text-neutral-700 group-hover:text-banner"}`}>
+                          <span className={`text-[14px] truncate transition-colors ${active ? "text-banner font-bold" : "text-neutral-700 group-hover:text-banner"}`}>
                             {brand.short}
                           </span>
                         </div>
-                        <span className="text-[11px] text-neutral-400">
+                        <span className="text-[11px] text-neutral-400 shrink-0 ml-2">
                           ({brand.count})
                         </span>
                       </label>
@@ -652,24 +684,23 @@ export function SidebarFilters({
           if (config.code === "color" && COLOURS.length > 0) {
             return (
               <AccordionSection key="color" title={config.label} defaultOpen={false}>
-                <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto scrollbar-thin pr-2">
+                <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto scrollbar-thin pl-1 pr-2 py-1">
                   {COLOURS.map((color: any) => {
                     const active = isParamActive("colour", color.name, activeColours);
                     return (
-                      <label key={color.name} className="flex items-center justify-between cursor-pointer group">
-                        <div className="flex items-center gap-2.5">
-                          <input 
-                            type="checkbox" 
+                      <label key={color.name} className="flex items-center justify-between cursor-pointer group py-0.5 select-none">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <FilterCheckbox 
                             checked={active}
                             onChange={() => handleColourToggle(color.name)}
-                            className="w-4 h-4 rounded-sm border-neutral-300 text-banner focus:ring-banner cursor-pointer bg-white transition-colors"
+                            ariaLabel={color.name}
                           />
-                          <div className="w-3.5 h-3.5 rounded-sm border border-neutral-200" style={{ backgroundColor: color.hex }}></div>
-                          <span className={`text-[14px] ${active ? "text-banner font-bold" : "text-neutral-700 group-hover:text-banner"}`}>
+                          <div className="w-3.5 h-3.5 rounded-sm border border-neutral-200 shrink-0" style={{ backgroundColor: color.hex }}></div>
+                          <span className={`text-[14px] truncate transition-colors ${active ? "text-banner font-bold" : "text-neutral-700 group-hover:text-banner"}`}>
                             {color.name}
                           </span>
                         </div>
-                        <span className="text-[11px] text-neutral-400">
+                        <span className="text-[11px] text-neutral-400 shrink-0 ml-2">
                           ({color.count})
                         </span>
                       </label>
@@ -689,7 +720,7 @@ export function SidebarFilters({
             
             return (
               <AccordionSection key={dynamicFilter.code} title={dynamicFilter.label} defaultOpen={activeValues.length > 0 || (isBikeSpecificCat && dynamicFilter.code === 'motorcycle_model')}>
-                <div className="flex flex-col gap-2 max-h-72 overflow-y-auto scrollbar-thin pr-2">
+                <div className="flex flex-col gap-2 max-h-72 overflow-y-auto scrollbar-thin pl-1 pr-2 py-1">
                   {dynamicFilter.values.map((val: any) => {
                     const active = isParamActive(dynamicFilter.code, val.name, activeValues);
 
@@ -715,19 +746,18 @@ export function SidebarFilters({
                     }
 
                     return (
-                      <label key={val.name} className="flex items-center justify-between cursor-pointer group">
-                        <div className="flex items-center gap-2.5">
-                          <input 
-                            type="checkbox" 
+                      <label key={val.name} className="flex items-center justify-between cursor-pointer group py-0.5 select-none">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <FilterCheckbox 
                             checked={active}
                             onChange={() => handleDynamicFilterToggle(dynamicFilter.code, val.name)}
-                            className="w-4 h-4 rounded-sm border-neutral-300 text-banner focus:ring-banner cursor-pointer bg-white transition-colors"
+                            ariaLabel={val.name}
                           />
-                          <span className={`text-[14px] ${active ? "text-banner font-bold" : "text-neutral-700 group-hover:text-banner"}`}>
+                          <span className={`text-[14px] truncate transition-colors ${active ? "text-banner font-bold" : "text-neutral-700 group-hover:text-banner"}`}>
                             {val.name}
                           </span>
                         </div>
-                        <span className="text-[11px] text-neutral-400">
+                        <span className="text-[11px] text-neutral-400 shrink-0 ml-2">
                           ({val.count})
                         </span>
                       </label>

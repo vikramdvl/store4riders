@@ -348,6 +348,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
         selectedColor: hasColor ? selectedColor : undefined,
         selectedSize: hasSize ? selectedSize : undefined,
         isFreeShipping: Boolean((product as any).isFreeShipping),
+        weight: (product as any).weight,
       } as any,
     });
 
@@ -401,7 +402,7 @@ export const QuickAddModal: React.FC<QuickAddModalProps> = ({
 
             {/* Price Row */}
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <span className="text-sm sm:text-base font-black text-brand tracking-tight">
+              <span className="text-sm sm:text-base font-black text-neutral-900 tracking-tight">
                 {effectivePrice > 0 ? formatPrice(effectivePrice) : product.priceFormatted}
               </span>
               {hasDiscount && originalPrice > 0 && (

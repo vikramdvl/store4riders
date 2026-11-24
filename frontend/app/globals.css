@@ -338,6 +338,7 @@ textarea {
  * ==========================================*/
 .magento-layout a,
 .magento-layout-accordion a,
+.policy-prose a,
 .prose a {
   color: #2563eb;
   text-decoration: underline;
@@ -347,6 +348,7 @@ textarea {
 
 .magento-layout a:hover,
 .magento-layout-accordion a:hover,
+.policy-prose a:hover,
 .prose a:hover {
   color: #1e40af;
   text-decoration: underline;
@@ -494,5 +496,18 @@ textarea {
   border: 1px solid #e2e8f0;
   margin: 1.5rem 0;
 }
+
+.policy-prose a {
+  color: #2563eb !important;
+  text-decoration: underline !important;
+  font-weight: 500;
+  transition: color 0.15s ease-in-out;
+}
+
+.policy-prose a:hover {
+  color: #1d4ed8 !important;
+  text-decoration: underline !important;
+}
+
 
 

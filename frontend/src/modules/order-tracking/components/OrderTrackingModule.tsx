@@ -43,7 +43,7 @@ const OrderActionsRow = ({ order }: { order: any }) => {
             <div className="flex gap-2 items-center">
               <input 
                 type="text" 
-                placeholder="Reason for exchange (e.g. size/fit)..." 
+                placeholder="Reason for exchange..." 
                 value={returnReason}
                 onChange={e => setReturnReason(e.target.value)}
                 className="px-3 py-1.5 border border-neutral-300 rounded text-sm focus:outline-none focus:border-brand"
@@ -130,7 +130,7 @@ export const OrderTrackingModule = ({ orderId }: { orderId: string }) => {
             </div>
             <div className="text-right">
               <span className="block text-xs font-bold text-neutral-500 uppercase">Order Total</span>
-              <span className="font-sans font-black text-xl text-brand">{formatPrice(order.pricing?.total || 0)}</span>
+              <span className="font-sans font-black text-xl text-neutral-900">{formatPrice(order.pricing?.total || 0)}</span>
             </div>
           </div>
           

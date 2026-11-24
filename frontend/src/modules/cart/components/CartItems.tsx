@@ -33,7 +33,7 @@ export function CartItems({ items, onUpdate, onRemove }: CartItemsProps) {
           </div>
           <div className="flex-1">
             <h3 className="font-bold text-lg mb-1">Product {item.productId.slice(-6)}</h3>
-            <p className="text-brand font-bold">{formatPrice(5000)}</p>
+            <p className="text-neutral-900 font-bold">{formatPrice(5000)}</p>
             
             <div className="flex items-center gap-4 mt-4">
               <div className="flex items-center border border-zinc-200 dark:border-zinc-800 rounded-lg">

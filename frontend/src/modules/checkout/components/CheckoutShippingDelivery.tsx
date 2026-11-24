@@ -255,7 +255,7 @@ export const CheckoutShippingDelivery = ({
                     name="businessName"
                     type="text"
                     required={Boolean(formData.isB2b)}
-                    placeholder="e.g. Acme Motors Pvt Ltd"
+                    placeholder="Registered company name"
                     value={formData.businessName || ""}
                     onChange={handleInputChange}
                     className={`w-full border ${fieldErrors?.businessName ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200/90'} bg-white rounded-xl px-3.5 py-2.5 text-sm text-neutral-900 focus:border-banner focus:ring-4 focus:ring-banner/10 focus:outline-none transition-all shadow-[inset_0_1px_2px_rgba(15,23,42,0.02)]`}
@@ -482,13 +482,13 @@ export const CheckoutShippingDelivery = ({
                   type="text"
                   required
                   maxLength={6}
-                  placeholder="6 digits [0-9] PIN code"
+                  placeholder="6-digit PIN"
                   value={formData.pinCode}
                   onChange={(e) => {
                     const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 6);
                     handleInputChange({ target: { name: "pinCode", value: digitsOnly } } as any);
                   }}
-                  className={`w-full border ${fieldErrors.pinCode ? 'border-red-400 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200/90 bg-white focus:border-banner focus:ring-4 focus:ring-banner/10'} rounded-xl px-4 py-3 text-base md:text-sm text-neutral-900 focus:outline-none transition-all duration-200 font-mono tracking-wider shadow-[inset_0_1px_2px_rgba(15,23,42,0.02)]`}
+                  className={`w-full border ${fieldErrors.pinCode ? 'border-red-400 bg-red-50/30 ring-2 ring-red-400/20' : 'border-slate-200/90 bg-white focus:border-banner focus:ring-4 focus:ring-banner/10'} rounded-xl px-4 py-3 text-base md:text-sm text-neutral-900 focus:outline-none transition-all duration-200 font-mono tracking-wider placeholder:font-sans placeholder:tracking-normal placeholder:text-xs sm:placeholder:text-sm placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,0.02)]`}
                 />
                 {fieldErrors.pinCode ? (
                   <span className="text-red-500 text-xs font-semibold animate-in fade-in zoom-in-95 duration-200">{fieldErrors.pinCode}</span>
@@ -528,9 +528,9 @@ export const CheckoutShippingDelivery = ({
                   required
                   disabled
                   readOnly
-                  placeholder={formData.pinCode.length === 6 && isPincodeLoading ? "Detecting city..." : "Auto-detected from PIN code"}
+                  placeholder={formData.pinCode.length === 6 && isPincodeLoading ? "Detecting..." : "Auto from PIN"}
                   value={formData.city}
-                  className="w-full border border-slate-200/70 bg-slate-100/90 text-slate-800 font-semibold cursor-not-allowed rounded-xl px-4 py-3 text-base md:text-sm select-none shadow-[inset_0_1px_2px_rgba(15,23,42,0.04)]"
+                  className="w-full border border-slate-200/70 bg-slate-100/90 text-slate-800 font-semibold cursor-not-allowed rounded-xl px-4 py-3 text-base md:text-sm select-none shadow-[inset_0_1px_2px_rgba(15,23,42,0.04)] placeholder:text-xs sm:placeholder:text-sm placeholder:text-slate-400"
                 />
                 {fieldErrors.city && <span className="text-red-500 text-xs font-semibold animate-in fade-in zoom-in-95 duration-200">{fieldErrors.city}</span>}
               </div>
@@ -552,9 +552,9 @@ export const CheckoutShippingDelivery = ({
                   required
                   disabled
                   readOnly
-                  placeholder={formData.pinCode.length === 6 && isPincodeLoading ? "Detecting state..." : "Auto-detected from PIN code"}
+                  placeholder={formData.pinCode.length === 6 && isPincodeLoading ? "Detecting..." : "Auto from PIN"}
                   value={formData.state}
-                  className="w-full border border-slate-200/70 bg-slate-100/90 text-slate-800 font-semibold cursor-not-allowed rounded-xl px-4 py-3 text-base md:text-sm select-none shadow-[inset_0_1px_2px_rgba(15,23,42,0.04)]"
+                  className="w-full border border-slate-200/70 bg-slate-100/90 text-slate-800 font-semibold cursor-not-allowed rounded-xl px-4 py-3 text-base md:text-sm select-none shadow-[inset_0_1px_2px_rgba(15,23,42,0.04)] placeholder:text-xs sm:placeholder:text-sm placeholder:text-slate-400"
                 />
                 {fieldErrors.state && <span className="text-red-500 text-xs font-semibold animate-in fade-in zoom-in-95 duration-200">{fieldErrors.state}</span>}
               </div>
@@ -651,7 +651,6 @@ export const CheckoutShippingDelivery = ({
                   Standard Delivery
                 </span>
                 <span className="text-xs text-neutral-500 mt-0.5">
-                  {cartWeightKg > 0 && <span>Total weight: {cartWeightKg.toFixed(2)} kg • </span>}
                   {isNotServiceable
                     ? "Service unavailable to selected pincode"
                     : serviceabilityData?.estimatedDays

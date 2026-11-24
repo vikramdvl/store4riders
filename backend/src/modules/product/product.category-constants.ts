@@ -102,8 +102,9 @@ export const CATEGORY_ALIAS_MAP: Record<string, string[]> = {
   "thigh-bags": ["thigh-bags", "thigh-bag", "thigh-pouch", "thigh-bags-for-motorcycle-riders"],
   "thigh-bag": ["thigh-bags", "thigh-bag", "thigh-pouch", "thigh-bags-for-motorcycle-riders"],
   "thigh-bags-for-motorcycle-riders": ["thigh-bags", "thigh-bag", "thigh-pouch"],
-  "helmet-bags": ["helmet-bags", "helmet-bag"],
-  "helmet-bag": ["helmet-bags", "helmet-bag"],
+  "helmet-bags": ["helmet-bags", "helmet-bag", "helmet-bags-for-bike-riders"],
+  "helmet-bag": ["helmet-bags", "helmet-bag", "helmet-bags-for-bike-riders"],
+  "helmet-bags-for-bike-riders": ["helmet-bags", "helmet-bag", "helmet-bags-for-bike-riders"],
   "other-luggage": ["other-luggage"],
   "motorcycle-other-luggage": ["other-luggage", "other-luggages", "motorcycle-other-luggage"],
 

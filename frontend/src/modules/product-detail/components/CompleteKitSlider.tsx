@@ -37,10 +37,7 @@ export const CompleteKitSlider: React.FC<{ products: KitProduct[] }> = ({ produc
   };
 
   return (
-    <div className="w-full relative rounded-xl border border-neutral-200/80 bg-gradient-to-br from-neutral-50/90 via-white/85 to-orange-50/20 backdrop-blur-xl p-3 sm:p-3.5 shadow-2xs overflow-hidden group/kit">
-      {/* Subtle decorative ambient glow */}
-      <div className="absolute -top-10 -right-10 w-24 h-24 bg-orange-400/10 rounded-full blur-xl pointer-events-none" />
-
+    <div className="w-full relative rounded-xl border border-neutral-200/80 bg-neutral-50/60 p-3 sm:p-3.5 shadow-2xs overflow-hidden group/kit">
       {/* Header with badge */}
       <div className="flex items-center justify-between mb-2.5 relative z-10">
         <div className="flex items-center gap-2">
@@ -89,21 +86,18 @@ export const CompleteKitSlider: React.FC<{ products: KitProduct[] }> = ({ produc
             className="shrink-0 w-[115px] sm:w-[125px] block group cursor-pointer transform-gpu"
           >
             {/* Image Container */}
-            <div className="relative aspect-square w-full bg-[#f4f4f4] rounded-lg overflow-hidden mb-2 border border-neutral-200/80 group-hover:border-neutral-300 transition-colors pointer-events-none">
+            <div className="relative aspect-square w-full bg-white rounded-lg overflow-hidden mb-2 border border-neutral-200/80 group-hover:border-neutral-300 transition-colors pointer-events-none">
               <KitImage src={product.imageUrl} alt={product.name} />
             </div>
 
             {/* Typography Details */}
             <div className="px-0.5">
-              <h4 className="text-[11px] font-bold text-neutral-900 font-sans line-clamp-2 leading-tight group-hover:text-brand transition-colors">
+              <h4 className="text-[11px] font-bold text-neutral-900 font-sans line-clamp-2 leading-tight group-hover:text-brand transition-colors no-underline">
                 {product.name}
               </h4>
-              <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-neutral-100">
-                <span className="text-[11px] font-extrabold text-brand font-sans">
+              <div className="mt-1.5 pt-1 border-t border-neutral-100">
+                <span className="text-[11px] font-extrabold text-neutral-900 font-sans">
                   {product.priceFormatted}
-                </span>
-                <span className="w-4 h-4 rounded-full bg-neutral-100 text-neutral-400 flex items-center justify-center text-[10px] font-bold group-hover:bg-brand group-hover:text-white transition-colors">
-                  +
                 </span>
               </div>
             </div>

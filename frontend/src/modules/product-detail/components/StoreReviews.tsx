@@ -35,7 +35,7 @@ const ReviewCard: React.FC<{ review: ReviewData }> = ({ review }) => {
           &ldquo;{review.text}&rdquo;
         </p>
         {isLong && (
-          <span className="text-[8px] font-bold text-brand mt-0.5 uppercase tracking-wider group-hover:underline inline-block">
+          <span className="text-[8px] font-bold text-blue-700 mt-0.5 uppercase tracking-wider group-hover:underline inline-block">
             Read More
           </span>
         )}
@@ -126,7 +126,7 @@ export const StoreReviews: React.FC<{ reviews?: ReviewData[]; hideHeader?: boole
             href="https://www.google.com/maps/search/?api=1&query=Store4Riders" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="shrink-0 text-[10px] sm:text-xs font-bold text-brand hover:text-orange-700 hover:underline uppercase tracking-wider flex items-center gap-1 transition-colors bg-orange-50/50 px-2 py-1 rounded-md no-underline"
+            className="shrink-0 text-[10px] sm:text-xs font-bold text-blue-700 hover:text-blue-900 hover:underline uppercase tracking-wider flex items-center gap-1 transition-colors bg-blue-50/70 hover:bg-blue-100/70 px-2 py-1 rounded-md no-underline"
           >
             See all reviews
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -141,7 +141,7 @@ export const StoreReviews: React.FC<{ reviews?: ReviewData[]; hideHeader?: boole
             href="https://www.google.com/maps/search/?api=1&query=Store4Riders" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="shrink-0 text-[10px] sm:text-xs font-bold text-brand hover:text-orange-700 hover:underline uppercase tracking-wider flex items-center gap-1 transition-colors bg-orange-50/50 px-2.5 py-1 rounded-md no-underline"
+            className="shrink-0 text-[10px] sm:text-xs font-bold text-blue-700 hover:text-blue-900 hover:underline uppercase tracking-wider flex items-center gap-1 transition-colors bg-blue-50/70 hover:bg-blue-100/70 px-2.5 py-1 rounded-md no-underline"
           >
             See all reviews on Google
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">

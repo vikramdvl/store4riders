@@ -45,8 +45,8 @@ const Thumbnail = React.memo(
         type="button"
         suppressHydrationWarning
         onClick={onClick}
-        className={`relative w-24 sm:w-28 md:w-32 aspect-square shrink-0 rounded-md overflow-hidden bg-[#f1eee9] transition-all duration-150 cursor-pointer shadow-2xs ${
-          isActive ? "border-2 border-[#111111]" : "border border-[#cfcfcf] hover:border-neutral-400"
+        className={`relative w-24 sm:w-28 md:w-32 aspect-square shrink-0 rounded-md overflow-hidden bg-neutral-100 transition-all duration-150 cursor-pointer shadow-2xs ${
+          isActive ? "border-2 border-neutral-900" : "border border-neutral-200 hover:border-neutral-400"
         }`}
       >
         <img
@@ -277,7 +277,7 @@ export const ProductGallery: React.FC<{
       {/* Main Large Viewer (Photo / Zoom / Video Player) ÔÇö Exact same container, Flipkart style */}
       <div
         ref={containerRef}
-        className={`relative aspect-square md:aspect-[10/11] w-full max-h-[500px] md:max-h-[580px] bg-[#f1eee9] rounded-xl border border-[#e6e1da] overflow-hidden will-change-transform ${
+        className={`relative aspect-square md:aspect-[10/11] w-full max-h-[500px] md:max-h-[580px] bg-white rounded-xl border border-neutral-200 overflow-hidden will-change-transform ${
           isVideoActive ? "cursor-default" : "cursor-default lg:cursor-none"
         }`}
         onMouseEnter={handleMouseEnter}
@@ -359,7 +359,7 @@ export const ProductGallery: React.FC<{
                     clipPath: "circle(125px at var(--zoom-x, 50%) var(--zoom-y, 50%))",
                   }}
                 >
-                  <div className="relative w-full h-full bg-[#f1eee9]">
+                  <div className="relative w-full h-full bg-white">
                     <Image
                       src={mainSrc}
                       alt={displayedImages[activeIndex]?.altText ? `${displayedImages[activeIndex].altText} (Zoomed)` : (productTitle ? `${productTitle} (Zoomed)` : "Product zoomed view")}
@@ -427,8 +427,8 @@ export const ProductGallery: React.FC<{
               onClick={handleVideoClick}
               className={`relative w-24 sm:w-28 md:w-32 aspect-square shrink-0 rounded-md overflow-hidden bg-slate-900 transition-all duration-150 flex flex-col items-center justify-center group cursor-pointer shadow-2xs ${
                 isVideoActive
-                  ? "border-2 border-[#111111]"
-                  : "border border-[#cfcfcf] hover:border-neutral-400"
+                  ? "border-2 border-neutral-900"
+                  : "border border-neutral-200 hover:border-neutral-400"
               }`}
               title="Watch Product Video"
             >

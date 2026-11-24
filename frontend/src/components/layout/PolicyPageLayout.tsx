@@ -2,7 +2,8 @@
 
 import React, { useId } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { cleanRichContent, handleRichTextClick } from "@/core/utils/cleanRichContent";
 import {
   ArrowLeftRight,
   ShieldCheck,
@@ -26,7 +27,8 @@ import {
   Compass,
   Wrench,
   ChevronDown,
-  Smartphone
+  Smartphone,
+  Cookie
 } from "lucide-react";
 import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
 import { buildBreadcrumbSchema } from "@/core/utils/seo-schema";
@@ -50,7 +52,7 @@ export const POLICY_NAV_GROUPS: PolicyNavGroup[] = [
     items: [
       {
         label: "Exchange & Replacements",
-        href: "/returns-replacements-store4riders",
+        href: "/returns",
         icon: ArrowLeftRight,
       },
       {
@@ -87,6 +89,11 @@ export const POLICY_NAV_GROUPS: PolicyNavGroup[] = [
         label: "Privacy & Cookie Policy",
         href: "/privacy",
         icon: Lock,
+      },
+      {
+        label: "Enable Cookies Guide",
+        href: "/enable-cookies",
+        icon: Cookie,
       },
       {
         label: "Legal Information",
@@ -164,14 +171,21 @@ export function PolicyPageLayout({
   children,
 }: PolicyPageLayoutProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const activePath = currentSlug || pathname;
   const { data: settings } = usePublicSettings();
   const breadcrumbId = useId();
 
   // Check if admin has customized this page in database settings
-  const cleanSlug = (currentSlug || pathname || "").replace(/^\/+/, "");
+  const cleanSlug = (currentSlug || pathname || "").replace(/^\/+/, "").replace(/\/+$/, "");
+  const slugAliases: Record<string, string> = {
+    "store4riders-conditions-of-use-and-sale": "terms",
+    "store4riders-store-policies": "store-policies",
+    "returns-replacements-store4riders": "returns",
+  };
+  const targetSlug = slugAliases[cleanSlug] || cleanSlug;
   const customPage = settings?.policyPages?.find(
-    (p) => p.slug === cleanSlug && p.isActive !== false
+    (p) => (p.slug === cleanSlug || p.slug === targetSlug) && p.isActive !== false
   );
 
   const displayTitle = customPage?.title || title;
@@ -214,6 +228,15 @@ export function PolicyPageLayout({
   const digits = rawWhatsapp.replace(/\D/g, "");
   const whatsappNumber = digits.length === 10 ? `91${digits}` : digits;
 
+  const isItemActive = (href: string) => {
+    if (activePath === href) return true;
+    if (href === "/returns" && (activePath === "/returns" || activePath === "/returns-replacements-store4riders")) return true;
+    if (href === "/terms" && (activePath === "/terms" || activePath === "/store4riders-conditions-of-use-and-sale")) return true;
+    if (href === "/store-policies" && (activePath === "/store-policies" || activePath === "/store4riders-store-policies")) return true;
+    if (href === "/googlepay-phonepay" && (activePath === "/gpay" || activePath === "/googlepay-phonepay")) return true;
+    return false;
+  };
+
   return (
     <>
       <script
@@ -226,8 +249,8 @@ export function PolicyPageLayout({
         {/* Top Announcement Bar */}
         <header className="w-full">
           <TopBanner />
-          <div className="w-full bg-white relative z-40 border-b border-zinc-200 shadow-2xs sticky top-0">
-            <Navbar logoText="Store4Riders" theme="light" />
+          <div className="w-full bg-[#161616] relative z-40 border-b border-[#2a2a2a] shadow-2xs sticky top-0">
+            <Navbar logoText="Store4Riders" theme="dark-solid" />
           </div>
         </header>
 
@@ -321,7 +344,7 @@ export function PolicyPageLayout({
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none snap-x">
               {POLICY_NAV_GROUPS.flatMap((g) => g.items).map((item) => {
-                const isActive = activePath === item.href || (item.href === "/googlepay-phonepay" && (activePath === "/gpay" || activePath === "/googlepay-phonepay"));
+                const isActive = isItemActive(item.href);
                 const Icon = item.icon;
                 return (
                   <Link
@@ -365,7 +388,7 @@ export function PolicyPageLayout({
                       </div>
                       <div className="space-y-0.5">
                         {group.items.map((item) => {
-                          const isActive = activePath === item.href || (item.href === "/googlepay-phonepay" && (activePath === "/gpay" || activePath === "/googlepay-phonepay"));
+                          const isActive = isItemActive(item.href);
                           const Icon = item.icon;
                           return (
                             <Link
@@ -470,9 +493,12 @@ export function PolicyPageLayout({
             <main className="lg:col-span-8 xl:col-span-9 space-y-8 min-w-0 max-w-full overflow-hidden">
               {/* Robust Content Card (Never breaks or overflows) */}
               <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 sm:p-10 min-w-0 max-w-full overflow-hidden">
-                <article className="policy-prose break-words max-w-none text-slate-700 leading-relaxed text-sm sm:text-base space-y-6">
+                <article
+                  onClick={(e) => handleRichTextClick(e, router)}
+                  className="policy-prose break-words max-w-none text-slate-700 leading-relaxed text-sm sm:text-base space-y-6 prose-a:text-blue-600 hover:prose-a:text-blue-800 prose-a:underline"
+                >
                   {hasCustomContent ? (
-                    <div dangerouslySetInnerHTML={{ __html: customPage!.contentHtml }} />
+                    <div dangerouslySetInnerHTML={{ __html: cleanRichContent(customPage!.contentHtml) }} />
                   ) : (
                     children
                   )}

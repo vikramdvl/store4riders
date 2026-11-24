@@ -68,7 +68,7 @@ export const UpSellProducts: React.FC<{ products: KitProduct[]; title?: string }
             className="shrink-0 w-[190px] sm:w-[225px] md:w-[265px] block group cursor-pointer transform-gpu"
           >
             {/* Image Box */}
-            <div className="relative aspect-square w-full bg-[#f1eee9] rounded-xl overflow-hidden mb-3 border border-[#e6e1da] group-hover:border-neutral-400 transition-colors">
+            <div className="relative aspect-square w-full bg-white rounded-xl overflow-hidden mb-3 border border-neutral-200 group-hover:border-neutral-400 transition-colors">
               <Image
                 src={product.imageUrl}
                 alt={product.name}
@@ -84,7 +84,7 @@ export const UpSellProducts: React.FC<{ products: KitProduct[]; title?: string }
 
             {/* Product Meta */}
             <div className="px-1 mt-1">
-              <h3 className="text-xs md:text-sm font-bold text-[#111111] font-sans line-clamp-2 leading-snug group-hover:underline transition-all">
+              <h3 className="text-xs md:text-sm font-bold text-[#111111] font-sans line-clamp-2 leading-snug group-hover:text-brand transition-colors no-underline">
                 {product.name}
               </h3>
               <div className="text-xs md:text-sm font-extrabold text-[#111111] font-sans mt-1.5">

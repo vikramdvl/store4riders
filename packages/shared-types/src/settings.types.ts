@@ -56,6 +56,10 @@ export interface ISetting {
   codPartialPaymentEnabled: boolean;
   codPartialPaymentType: "percentage" | "fixed";
   codPartialPaymentValue: number;
+  codHandlingFeeEnabled?: boolean;
+  codHandlingFeeThreshold?: number;
+  codHandlingFeeTier1Amount?: number;
+  codHandlingFeeTier2Amount?: number;
   storeOriginPincode: string;
   storeOriginCity: string;
   storeOriginState: string;
@@ -105,6 +109,10 @@ export interface IPublicSettings {
   codPartialPaymentEnabled?: boolean;
   codPartialPaymentType?: "percentage" | "fixed";
   codPartialPaymentValue?: number;
+  codHandlingFeeEnabled?: boolean;
+  codHandlingFeeThreshold?: number;
+  codHandlingFeeTier1Amount?: number;
+  codHandlingFeeTier2Amount?: number;
   taxRate: number;
   freeShippingThreshold: number;
   shippingCost: number;

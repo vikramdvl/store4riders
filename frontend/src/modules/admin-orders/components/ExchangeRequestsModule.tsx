@@ -113,7 +113,7 @@ export const ExchangeRequestsModule = () => {
 
     let msg = `*Store4Riders — Exchange Support*\n\n`;
     msg += `Hello *${customerName}*,\n\n`;
-    msg += `We have received your 7-day size/defect exchange request for Order *#${orderNum}*.\n\n`;
+    msg += `We have received your size/defect exchange request for Order *#${orderNum}*.\n\n`;
     msg += `Our team is reviewing the replacement size availability for you. Would you like us to proceed with dispatching the exchange?\n\n`;
     msg += `Best regards,\nStore4Riders Exchange Team`;
 
@@ -133,7 +133,7 @@ export const ExchangeRequestsModule = () => {
             </span>
           </h1>
           <p className="text-sm text-neutral-500 mt-1">
-            Manage incoming size replacement and defective gear exchange requests per Store4Riders 7-day exchange policy.
+            Manage incoming size replacement and defective gear exchange requests per Store4Riders exchange policy.
           </p>
         </div>
       </div>
@@ -149,7 +149,7 @@ export const ExchangeRequestsModule = () => {
           </div>
           <div>
             <h2 className="text-xs font-bold uppercase tracking-wider text-amber-900">
-              Strict 7-Day Size & Defect Exchange Policy
+              Strict Size &amp; Defect Exchange Policy
             </h2>
             <p className="text-xs text-amber-800 mt-0.5">
               Only unwashed, unused gear with original manufacturer tags & boxes is eligible. No cash refunds are permitted.
@@ -334,7 +334,7 @@ export const ExchangeRequestsModule = () => {
                           {returnNote ? (
                             <span>{returnNote.text}</span>
                           ) : (
-                            <span className="italic text-neutral-400">Customer requested 7-day size/defect exchange.</span>
+                            <span className="italic text-neutral-400">Customer requested size/defect exchange.</span>
                           )}
                         </div>
                       </td>
@@ -454,7 +454,7 @@ export const ExchangeRequestsModule = () => {
               <span className="font-bold text-neutral-900">
                 {rejectModalOrder.orderNumber}
               </span>
-              . Please provide a clear explanation for the customer (e.g., tags missing, outside 7-day window, sign of wear).
+              . Please provide a clear explanation for the customer (e.g., tags missing, outside return window, sign of wear).
             </p>
 
             <div>

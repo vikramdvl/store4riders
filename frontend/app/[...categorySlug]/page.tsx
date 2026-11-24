@@ -4,6 +4,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { ProductsPageModule } from "@/modules/catalog/components/ProductsPageModule";
 import { ProductDetailPageModule } from "@/modules/product-detail/components/ProductDetailPageModule";
 import ProductsLoading from "../products/loading";
+import ProductDetailLoading from "../products/[slug]/loading";
 import {
   buildProductSchema,
   buildBreadcrumbSchema,
@@ -233,7 +234,9 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
             dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
           />
         )}
-        <ProductDetailPageModule initialProduct={product} slug={candidateSlug} />
+        <Suspense fallback={<ProductDetailLoading />}>
+          <ProductDetailPageModule initialProduct={product} slug={candidateSlug} />
+        </Suspense>
       </>
     );
   }

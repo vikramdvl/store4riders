@@ -14,6 +14,10 @@ export interface ISetting extends Document {
   codPartialPaymentEnabled: boolean;
   codPartialPaymentType: "percentage" | "fixed";
   codPartialPaymentValue: number;
+  codHandlingFeeEnabled?: boolean;
+  codHandlingFeeThreshold?: number;
+  codHandlingFeeTier1Amount?: number;
+  codHandlingFeeTier2Amount?: number;
   storeOriginPincode: string;
   storeOriginCity: string;
   storeOriginState: string;
@@ -96,7 +100,7 @@ const footerConfigMongooseSchema = new Schema(
     column1Links: {
       type: [footerLinkMongooseSchema],
       default: [
-        { label: "Exchange & Replacements", url: "/returns-replacements-store4riders", openInNewTab: false },
+        { label: "Exchange & Replacements", url: "/returns", openInNewTab: false },
         { label: "Warranty", url: "/warranty", openInNewTab: false },
         { label: "Shipping Policies", url: "/shipping", openInNewTab: false },
       ],
@@ -117,10 +121,10 @@ const footerConfigMongooseSchema = new Schema(
     column3Links: {
       type: [footerLinkMongooseSchema],
       default: [
-        { label: "Conditions of Sale & Use", url: "/terms", openInNewTab: false },
+        { label: "Conditions of Sale & Use", url: "/store4riders-conditions-of-use-and-sale", openInNewTab: false },
         { label: "Privacy and Cookie Policy", url: "/privacy", openInNewTab: false },
         { label: "Legal", url: "/legal", openInNewTab: false },
-        { label: "Store Policies", url: "/store-policies", openInNewTab: false },
+        { label: "Store Policies", url: "/store4riders-store-policies", openInNewTab: false },
       ],
     },
     column4Title: { type: String, default: "ABOUT US" },
@@ -145,7 +149,7 @@ const footerConfigMongooseSchema = new Schema(
       type: [footerLinkMongooseSchema],
       default: [
         { label: "Privacy Policy", url: "/privacy", openInNewTab: false },
-        { label: "Terms of Service", url: "/terms", openInNewTab: false },
+        { label: "Terms of Service", url: "/store4riders-conditions-of-use-and-sale", openInNewTab: false },
         { label: "Exchange Policy", url: "/returns", openInNewTab: false },
       ],
     },
@@ -162,6 +166,10 @@ const settingSchema = new Schema<ISetting>(
     codPartialPaymentEnabled: { type: Boolean, default: false },
     codPartialPaymentType: { type: String, enum: ["percentage", "fixed"], default: "percentage" },
     codPartialPaymentValue: { type: Number, default: 10 },
+    codHandlingFeeEnabled: { type: Boolean, default: true },
+    codHandlingFeeThreshold: { type: Number, default: 5000 },
+    codHandlingFeeTier1Amount: { type: Number, default: 100 },
+    codHandlingFeeTier2Amount: { type: Number, default: 200 },
     snapmintMinOrderValue: { type: Number },
     storeOriginPincode: { type: String, default: "411001" },
     storeOriginCity: { type: String, default: "Pune" },

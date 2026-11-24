@@ -58,7 +58,7 @@ const GridProductCard: React.FC<{ product: BrowseProductData; priority?: boolean
 
       {/* Product Details */}
       <div className="flex flex-col space-y-0.5 md:space-y-1 mt-1">
-        <h3 className="font-sans font-bold text-[12px] md:text-[14px] text-neutral-900 line-clamp-1 leading-tight">
+        <h3 className="font-sans font-bold text-[12px] md:text-[14px] text-neutral-900 line-clamp-1 leading-tight group-hover:text-brand transition-colors no-underline">
           {product.name}
         </h3>
         <span className="text-[11px] md:text-sm text-neutral-600 font-sans font-semibold tracking-wide">

@@ -372,7 +372,7 @@ export const DirectUpiModal: React.FC<DirectUpiModalProps> = ({
                       id="utrInput"
                       type="text"
                       maxLength={12}
-                      placeholder="e.g. 432109876543"
+                      placeholder="Enter 12-digit UTR number"
                       value={manualUtr}
                       onChange={(e) => setManualUtr(e.target.value.replace(/\D/g, ""))}
                       className="flex-1 px-3 py-2 border border-neutral-300 rounded-lg text-xs font-mono focus:outline-hidden focus:ring-1 focus:ring-banner"

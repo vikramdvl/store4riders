@@ -131,9 +131,9 @@ export const CartPageModule = () => {
   if (!mounted || !isLoaded) {
     return (
       <div className="w-full min-h-screen bg-white flex flex-col font-sans">
-        <TopBanner message="Discount 20% For New Member," highlightText="ONLY FOR TODAY!!" />
-        <div className="bg-white border-b border-neutral-200">
-          <Navbar logoText="Store4Riders" theme="light" />
+        <TopBanner message="Helmets, jackets, gloves: 100% genuine, EMI and COD available." />
+        <div className="bg-[#161616] border-b border-[#2a2a2a]">
+          <Navbar logoText="Store4Riders" theme="dark-solid" />
         </div>
         <div className="max-w-[1400px] w-full mx-auto px-4 md:px-8 py-16 animate-pulse">
           <div className="h-12 w-48 bg-neutral-100 rounded mb-10" />
@@ -198,9 +198,9 @@ export const CartPageModule = () => {
   return (
     <div className="w-full min-h-screen bg-white flex flex-col font-sans relative">
       {/* 1. Header Global Area */}
-      <TopBanner message="Discount 20% For New Member," highlightText="ONLY FOR TODAY!!" />
-      <div className="bg-white border-b border-neutral-200 relative z-40">
-        <Navbar logoText="Store4Riders" theme="light" />
+      <TopBanner message="Helmets, jackets, gloves: 100% genuine, EMI and COD available." />
+      <div className="bg-[#161616] border-b border-[#2a2a2a] relative z-40">
+        <Navbar logoText="Store4Riders" theme="dark-solid" />
       </div>
 
       {/* Breadcrumb Navigation matching URL /cart */}
@@ -275,7 +275,7 @@ export const CartPageModule = () => {
                         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                           <Link
                             href={product.slug ? `/${product.slug}` : "/products"}
-                            className="font-sans font-bold text-sm sm:text-base text-neutral-900 uppercase hover:text-banner transition-colors line-clamp-2"
+                            className="font-sans font-bold text-sm sm:text-base text-neutral-900 uppercase hover:text-brand transition-colors line-clamp-2 no-underline"
                           >
                             {name}
                           </Link>
@@ -301,11 +301,7 @@ export const CartPageModule = () => {
                                 )}
                               </>
                             )}
-                            <span
-                              className={`text-sm md:text-base font-bold ${
-                                hasDiscount ? "text-[#DC2626]" : "text-neutral-900"
-                              }`}
-                            >
+                            <span className="text-sm md:text-base font-bold text-neutral-900">
                               {formatPrice(price)}
                             </span>
                           </div>
@@ -393,7 +389,7 @@ export const CartPageModule = () => {
                           <div className="flex-1 min-w-0">
                             <Link
                               href={`/${rec.slug}`}
-                              className="font-bold text-xs text-neutral-900 line-clamp-1 hover:text-banner transition-colors"
+                              className="font-bold text-xs text-neutral-900 line-clamp-1 hover:text-brand transition-colors no-underline"
                             >
                               {rec.name}
                             </Link>
@@ -585,7 +581,7 @@ export const CartPageModule = () => {
             <div className="flex items-center gap-2">
               <input
                 type="text"
-                placeholder="Enter coupon code (e.g. TESTCOUPON)"
+                placeholder="Enter coupon code"
                 value={manualCodeInput}
                 onChange={(e) => setManualCodeInput(e.target.value.toUpperCase())}
                 onKeyDown={(e) => {

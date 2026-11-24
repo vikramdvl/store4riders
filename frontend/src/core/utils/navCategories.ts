@@ -149,7 +149,7 @@ export const CATEGORY_SLUG_ALIASES: Record<string, string[]> = {
   "crash-bar-bags-for-motorcycles": ["crash-bar-bags", "crash-bar-bag", "frame-bags"],
   "thigh-bags": ["thigh-bags", "thigh-bags-for-motorcycle-riders", "thigh-bag", "thigh-pouch"],
   "thigh-bags-for-motorcycle-riders": ["thigh-bags", "thigh-bag", "thigh-pouch"],
-  "helmet-bags": ["helmet-bags", "helmet-bag"],
+  "helmet-bags": ["helmet-bags", "helmet-bag", "helmet-bags-for-bike-riders"],
   "hydration-bag": ["hydration-bag", "hydration-bags"],
   "motorcycle-other-luggage": ["motorcycle-other-luggage", "other-luggage", "other-luggages"],
 

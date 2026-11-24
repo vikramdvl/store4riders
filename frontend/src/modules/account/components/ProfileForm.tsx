@@ -242,7 +242,6 @@ export function ProfileForm() {
               <Input
                 label="Current Password"
                 type="password"
-                placeholder="Enter current password"
                 {...registerPassword("currentPassword")}
                 error={passwordErrors.currentPassword?.message}
               />
@@ -262,7 +261,6 @@ export function ProfileForm() {
                 <Input
                   label="Confirm New Password"
                   type="password"
-                  placeholder="Re-enter new password"
                   {...registerPassword("confirmPassword")}
                   error={passwordErrors.confirmPassword?.message}
                 />

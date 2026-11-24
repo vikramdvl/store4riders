@@ -384,14 +384,12 @@ export const CatalogModule: React.FC<CatalogProps> = ({ products, totalCount, is
       
       {/* 1. Header Global Area */}
       <TopBanner
-        message="Discount 20% For New Member,"
-        highlightText="ONLY FOR TODAY!!"
+        message="Helmets, jackets, gloves: 100% genuine, EMI and COD available."
       />
-      <div className="bg-white border-b border-neutral-200 sticky top-0 z-40 shadow-xs">
+      <div className="bg-[#161616] border-b border-[#2a2a2a] sticky top-0 z-40 shadow-xs">
         <Navbar
           logoText="Store4Riders"
-          theme="light"
-          
+          theme="dark-solid"
         />
       </div>
 

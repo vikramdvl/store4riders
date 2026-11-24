@@ -130,4 +130,15 @@ describe("Navbar & Submenu Navigation Integrity Suite", () => {
     expect(isLegacyNonMenuCategory("full-face-helmets")).toBe(false);
     expect(isLegacyNonMenuCategory("riding-gloves")).toBe(false);
   });
+
+  it("should match brand columns in 'Shop By Brand' with preset admin menu groups", () => {
+    const brandNav = DEFAULT_NAV_ITEMS.find((item) => item.id === "shop-by-brand");
+    expect(brandNav).toBeDefined();
+    const groups = brandNav!.megaMenuItems!.map((g) => g.group);
+    expect(groups).toContain("Helmet Brands");
+    expect(groups).toContain("Riding Gear");
+    expect(groups).toContain("Boots & Protection");
+    expect(groups).toContain("Luggage & Accessories");
+    expect(groups).toContain("Parts & Performance");
+  });
 });

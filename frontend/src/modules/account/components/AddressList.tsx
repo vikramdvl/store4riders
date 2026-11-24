@@ -193,7 +193,7 @@ export function AddressList() {
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingAddress ? "Edit Address" : "Add New Address"}>
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
           <div>
-            <Input label="Street Address" {...register("street")} error={errors.street?.message as string} placeholder="123 Main St, Apt 4B" />
+            <Input label="Street Address" {...register("street")} error={errors.street?.message as string} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>

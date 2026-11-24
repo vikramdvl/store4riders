@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
-import { ReturnsReplacementsModule } from "@/modules/static-pages/components/ReturnsReplacementsModule";
+import ReturnsPage from "../returns/page";
 
 export const metadata: Metadata = {
-  title: "Exchange & Replacements Policy | Store4Riders",
+  title: "Exchange & Replacement Policy | Store4Riders",
   description:
-    "Official Store4Riders exchange and replacement policy. Wrong size, wrong colour - no problem. Learn about our replacement process and guidelines.",
+    "Official Store4Riders exchange and replacement policy. Size & Gear Exchange on all eligible riding essentials.",
   alternates: {
-    canonical: "https://www.store4riders.com/returns-replacements-store4riders/",
+    canonical: "https://store4riders.com/returns",
   },
 };
 
 export default function ReturnsReplacementsPage() {
-  return <ReturnsReplacementsModule />;
+  return <ReturnsPage />;
 }

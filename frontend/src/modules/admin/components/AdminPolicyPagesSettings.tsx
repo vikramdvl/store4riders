@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   FileText,
@@ -20,6 +21,15 @@ import {
   Bold,
   Italic,
   Underline,
+  Strikethrough,
+  Type,
+  Baseline,
+  Highlighter,
+  ChevronDown,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Palette,
   Quote,
   Link as LinkIcon,
   RemoveFormatting,
@@ -41,6 +51,36 @@ import { IPolicyPageConfig } from "@store4riders/shared-types";
 import { useQueryClient } from "@tanstack/react-query";
 import { OFFICIAL_PAGE_DEFINITIONS } from "./AdminPolicyPagesSettings.defaults";
 
+const FONT_SIZES = [
+  { label: "12px", value: "12px", name: "12px Small" },
+  { label: "14px", value: "14px", name: "14px Compact" },
+  { label: "16px", value: "16px", name: "16px Normal" },
+  { label: "18px", value: "18px", name: "18px Medium" },
+  { label: "20px", value: "20px", name: "20px Large" },
+  { label: "24px", value: "24px", name: "24px H3" },
+  { label: "28px", value: "28px", name: "28px H2" },
+  { label: "32px", value: "32px", name: "32px H1" },
+];
+
+const TEXT_COLORS = [
+  { name: "Charcoal (Default)", value: "#0f172a" },
+  { name: "Brand Red", value: "#AB1509" },
+  { name: "Royal Blue", value: "#2563eb" },
+  { name: "Emerald Green", value: "#059669" },
+  { name: "Amber Orange", value: "#d97706" },
+  { name: "Purple", value: "#7c3aed" },
+  { name: "Muted Slate", value: "#64748b" },
+];
+
+const HIGHLIGHT_COLORS = [
+  { name: "Yellow", value: "#fef08a" },
+  { name: "Soft Green", value: "#bbf7d0" },
+  { name: "Soft Blue", value: "#bfdbfe" },
+  { name: "Soft Pink", value: "#fbcfe8" },
+  { name: "Soft Peach", value: "#fed7aa" },
+  { name: "Clear / None", value: "transparent" },
+];
+
 // Sub-component: Visual Rich WYSIWYG Editor
 interface VisualEditorProps {
   html: string;
@@ -50,6 +90,14 @@ interface VisualEditorProps {
 function VisualRichEditor({ html, onChange }: VisualEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const isInternalUpdate = useRef(false);
+  const savedSelectionRef = useRef<Range | null>(null);
+
+  const [currentFontSize, setCurrentFontSize] = useState("16px");
+  const [isTextColorOpen, setIsTextColorOpen] = useState(false);
+  const [isHighlightOpen, setIsHighlightOpen] = useState(false);
+  const [customColor, setCustomColor] = useState("#2563eb");
+  const textColorRef = useRef<HTMLDivElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
 
   // Sync incoming HTML changes only when editor content differs significantly
   useEffect(() => {
@@ -60,6 +108,35 @@ function VisualRichEditor({ html, onChange }: VisualEditorProps) {
     }
     isInternalUpdate.current = false;
   }, [html]);
+
+  // Close color dropdowns when clicking outside
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (textColorRef.current && !textColorRef.current.contains(e.target as Node)) {
+        setIsTextColorOpen(false);
+      }
+      if (highlightRef.current && !highlightRef.current.contains(e.target as Node)) {
+        setIsHighlightOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  const saveSelection = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+      savedSelectionRef.current = sel.getRangeAt(0).cloneRange();
+    }
+  };
+
+  const restoreSelection = () => {
+    if (savedSelectionRef.current) {
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(savedSelectionRef.current);
+    }
+  };
 
   const exec = (command: string, value: string | undefined = undefined) => {
     document.execCommand(command, false, value);
@@ -76,8 +153,78 @@ function VisualRichEditor({ html, onChange }: VisualEditorProps) {
     }
   };
 
+  const applyFontSize = (sizePx: string) => {
+    restoreSelection();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      toast.info("Please select text to change font size");
+      return;
+    }
+    try {
+      document.execCommand("styleWithCSS", false, "false");
+      document.execCommand("fontSize", false, "7");
+      if (editorRef.current) {
+        const fontTags = editorRef.current.querySelectorAll('font[size="7"]');
+        fontTags.forEach((font) => {
+          const span = document.createElement("span");
+          span.style.fontSize = sizePx;
+          span.innerHTML = font.innerHTML;
+          font.parentNode?.replaceChild(span, font);
+        });
+        setCurrentFontSize(sizePx);
+        editorRef.current.focus();
+        handleInput();
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
+  const stepFontSize = (direction: "up" | "down") => {
+    const numericCurrent = parseInt(currentFontSize, 10) || 16;
+    let newIndex = FONT_SIZES.findIndex((s) => parseInt(s.value, 10) === numericCurrent);
+    if (newIndex === -1) newIndex = 2;
+
+    if (direction === "up" && newIndex < FONT_SIZES.length - 1) {
+      applyFontSize(FONT_SIZES[newIndex + 1].value);
+    } else if (direction === "down" && newIndex > 0) {
+      applyFontSize(FONT_SIZES[newIndex - 1].value);
+    }
+  };
+
+  const applyTextColor = (color: string) => {
+    restoreSelection();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      toast.info("Please select text to change color");
+      return;
+    }
+    document.execCommand("styleWithCSS", false, "true");
+    document.execCommand("foreColor", false, color);
+    handleInput();
+    setIsTextColorOpen(false);
+  };
+
+  const applyHighlight = (color: string) => {
+    restoreSelection();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      toast.info("Please select text to highlight");
+      return;
+    }
+    try {
+      if (!document.execCommand("hiliteColor", false, color)) {
+        document.execCommand("backColor", false, color);
+      }
+    } catch {
+      document.execCommand("backColor", false, color);
+    }
+    handleInput();
+    setIsHighlightOpen(false);
+  };
+
   const handleInsertLink = () => {
-    const url = window.prompt("Enter destination URL (e.g. /returns-replacements-store4riders or https://...):", "/");
+    const url = window.prompt("Enter destination URL (e.g. /returns or https://...):", "/");
     if (url) {
       exec("createLink", url);
     }
@@ -123,7 +270,7 @@ function VisualRichEditor({ html, onChange }: VisualEditorProps) {
   return (
     <div className="border border-neutral-300 rounded-xl overflow-hidden shadow-xs bg-white">
       {/* Visual Editor Toolbar */}
-      <div className="bg-neutral-100/90 border-b border-neutral-200 p-2 flex flex-wrap items-center gap-1 text-xs select-none sticky top-0 z-10">
+      <div className="bg-neutral-100/90 border-b border-neutral-200 p-2 flex flex-wrap items-center gap-1.5 text-xs select-none sticky top-0 z-10">
         {/* Paragraph / Heading Block Selector */}
         <select
           onChange={(e) => {
@@ -131,21 +278,23 @@ function VisualRichEditor({ html, onChange }: VisualEditorProps) {
             if (val === "p") exec("formatBlock", "<p>");
             else if (val === "h2") exec("formatBlock", "<h2>");
             else if (val === "h3") exec("formatBlock", "<h3>");
+            else if (val === "h4") exec("formatBlock", "<h4>");
           }}
           className="text-xs py-1 px-2 bg-white border border-neutral-300 rounded-md font-medium text-neutral-800 focus:outline-none focus:border-brand cursor-pointer shadow-2xs mr-1"
         >
-          <option value="p">Paragraph Text</option>
-          <option value="h2">Section Heading (H2)</option>
-          <option value="h3">Sub-Heading (H3)</option>
+          <option value="p">¶ Paragraph</option>
+          <option value="h2">H2 Section Heading</option>
+          <option value="h3">H3 Sub-Heading</option>
+          <option value="h4">H4 Small Header</option>
         </select>
 
-        <div className="h-4 w-px bg-neutral-300 mx-1" />
+        <div className="h-4 w-px bg-neutral-300 mx-0.5" />
 
         {/* Text Style Controls */}
         <button
           type="button"
           onClick={() => exec("bold")}
-          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all font-bold"
+          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all font-bold cursor-pointer"
           title="Bold (Ctrl+B)"
         >
           <Bold size={14} />
@@ -154,7 +303,7 @@ function VisualRichEditor({ html, onChange }: VisualEditorProps) {
         <button
           type="button"
           onClick={() => exec("italic")}
-          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all italic"
+          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all italic cursor-pointer"
           title="Italic (Ctrl+I)"
         >
           <Italic size={14} />
@@ -163,19 +312,206 @@ function VisualRichEditor({ html, onChange }: VisualEditorProps) {
         <button
           type="button"
           onClick={() => exec("underline")}
-          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all underline"
+          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all underline cursor-pointer"
           title="Underline (Ctrl+U)"
         >
           <Underline size={14} />
         </button>
 
-        <div className="h-4 w-px bg-neutral-300 mx-1" />
+        <button
+          type="button"
+          onClick={() => exec("strikeThrough")}
+          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all cursor-pointer"
+          title="Strikethrough"
+        >
+          <Strikethrough size={14} />
+        </button>
+
+        <div className="h-4 w-px bg-neutral-300 mx-0.5" />
+
+        {/* Font Size Steppers & Dropdown */}
+        <div className="flex items-center gap-0.5 bg-white border border-neutral-300 rounded-lg p-0.5 shadow-2xs">
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => stepFontSize("down")}
+            title="Decrease Font Size (A-)"
+            className="px-1.5 py-0.5 hover:bg-neutral-100 text-neutral-700 rounded text-xs font-bold cursor-pointer transition-colors"
+          >
+            A-
+          </button>
+
+          <div className="flex items-center px-1">
+            <Type size={13} className="text-neutral-400 mr-1 shrink-0" />
+            <select
+              value={currentFontSize}
+              onMouseDown={(e) => e.stopPropagation()}
+              onChange={(e) => applyFontSize(e.target.value)}
+              className="text-xs font-semibold text-neutral-800 bg-transparent focus:outline-none cursor-pointer pr-1"
+              title="Font Size"
+            >
+              {FONT_SIZES.map((size) => (
+                <option key={size.value} value={size.value}>
+                  {size.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => stepFontSize("up")}
+            title="Increase Font Size (A+)"
+            className="px-1.5 py-0.5 hover:bg-neutral-100 text-neutral-700 rounded text-xs font-bold cursor-pointer transition-colors"
+          >
+            A+
+          </button>
+        </div>
+
+        <div className="h-4 w-px bg-neutral-300 mx-0.5" />
+
+        {/* Text Font Color Picker */}
+        <div className="relative" ref={textColorRef}>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setIsTextColorOpen(!isTextColorOpen);
+              setIsHighlightOpen(false);
+            }}
+            title="Text Font Color"
+            className="p-1.5 hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 rounded cursor-pointer flex items-center gap-1 transition-all"
+          >
+            <Baseline size={14} className="text-brand" />
+            <span className="text-[11px] font-semibold hidden sm:inline">Color</span>
+            <ChevronDown size={10} className="text-neutral-400" />
+          </button>
+
+          {isTextColorOpen && (
+            <div
+              className="absolute left-0 mt-1.5 w-52 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 p-2.5 space-y-2 animate-in fade-in duration-100"
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 pb-1 border-b border-neutral-100">
+                Preset Colors
+              </div>
+              <div className="grid grid-cols-7 gap-1.5 pt-0.5">
+                {TEXT_COLORS.map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => applyTextColor(c.value)}
+                    title={c.name}
+                    className="w-5 h-5 rounded-md hover:scale-125 transition-transform cursor-pointer shadow-2xs border border-neutral-300"
+                    style={{ backgroundColor: c.value }}
+                  />
+                ))}
+              </div>
+
+              {/* Custom Color Input */}
+              <div className="pt-2 border-t border-neutral-100 flex items-center justify-between text-xs">
+                <span className="text-[11px] font-medium text-neutral-600">Custom Color:</span>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="color"
+                    value={customColor}
+                    onChange={(e) => {
+                      setCustomColor(e.target.value);
+                      applyTextColor(e.target.value);
+                    }}
+                    className="w-6 h-6 rounded cursor-pointer border border-neutral-300 p-0"
+                    title="Choose Custom Color"
+                  />
+                  <span className="font-mono text-[10px] text-neutral-500 uppercase">{customColor}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Text Highlight Background Color */}
+        <div className="relative" ref={highlightRef}>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setIsHighlightOpen(!isHighlightOpen);
+              setIsTextColorOpen(false);
+            }}
+            title="Highlight Marker Color"
+            className="p-1.5 hover:bg-amber-50 text-amber-800 border border-transparent hover:border-amber-300 rounded cursor-pointer flex items-center gap-1 transition-all"
+          >
+            <Highlighter size={14} />
+            <span className="text-[11px] font-semibold hidden sm:inline">Highlight</span>
+            <ChevronDown size={10} className="text-neutral-400" />
+          </button>
+
+          {isHighlightOpen && (
+            <div
+              className="absolute left-0 mt-1.5 w-52 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 p-2.5 space-y-2 animate-in fade-in duration-100"
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 pb-1 border-b border-neutral-100">
+                Highlight Palette
+              </div>
+              <div className="grid grid-cols-6 gap-1.5 pt-0.5">
+                {HIGHLIGHT_COLORS.map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => applyHighlight(c.value)}
+                    title={c.name}
+                    className="w-6 h-6 rounded-md hover:scale-125 transition-transform cursor-pointer shadow-2xs border border-neutral-300 flex items-center justify-center text-[10px] font-bold"
+                    style={{ backgroundColor: c.value === "transparent" ? "#ffffff" : c.value }}
+                  >
+                    {c.value === "transparent" ? "✕" : ""}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="h-4 w-px bg-neutral-300 mx-0.5" />
+
+        {/* Text Alignment */}
+        <button
+          type="button"
+          onClick={() => exec("justifyLeft")}
+          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all cursor-pointer"
+          title="Align Left"
+        >
+          <AlignLeft size={14} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => exec("justifyCenter")}
+          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all cursor-pointer"
+          title="Align Center"
+        >
+          <AlignCenter size={14} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => exec("justifyRight")}
+          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all cursor-pointer"
+          title="Align Right"
+        >
+          <AlignRight size={14} />
+        </button>
+
+        <div className="h-4 w-px bg-neutral-300 mx-0.5" />
 
         {/* Lists */}
         <button
           type="button"
           onClick={() => exec("insertUnorderedList")}
-          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all flex items-center gap-1"
+          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all flex items-center gap-1 cursor-pointer"
           title="Bullet List"
         >
           <List size={14} />
@@ -184,13 +520,13 @@ function VisualRichEditor({ html, onChange }: VisualEditorProps) {
         <button
           type="button"
           onClick={() => exec("insertOrderedList")}
-          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all flex items-center gap-1"
+          className="p-1.5 rounded hover:bg-white text-neutral-700 hover:text-neutral-900 border border-transparent hover:border-neutral-300 transition-all flex items-center gap-1 cursor-pointer"
           title="Numbered List"
         >
           <ListOrdered size={14} />
         </button>
 
-        <div className="h-4 w-px bg-neutral-300 mx-1" />
+        <div className="h-4 w-px bg-neutral-300 mx-0.5" />
 
         {/* Rich Blocks: Callout, Table, Link */}
         <button
@@ -223,12 +559,12 @@ function VisualRichEditor({ html, onChange }: VisualEditorProps) {
           <span>Link</span>
         </button>
 
-        <div className="h-4 w-px bg-neutral-300 mx-1" />
+        <div className="h-4 w-px bg-neutral-300 mx-0.5" />
 
         <button
           type="button"
           onClick={() => exec("removeFormat")}
-          className="p-1.5 rounded hover:bg-white text-neutral-500 hover:text-neutral-800 border border-transparent hover:border-neutral-300 transition-all"
+          className="p-1.5 rounded hover:bg-white text-neutral-500 hover:text-neutral-800 border border-transparent hover:border-neutral-300 transition-all cursor-pointer"
           title="Clear Formatting"
         >
           <RemoveFormatting size={13} />
@@ -240,7 +576,9 @@ function VisualRichEditor({ html, onChange }: VisualEditorProps) {
         ref={editorRef}
         contentEditable
         onInput={handleInput}
-        className="p-6 min-h-[420px] focus:outline-none policy-prose text-slate-800 text-sm leading-relaxed overflow-y-auto"
+        onMouseUp={saveSelection}
+        onKeyUp={saveSelection}
+        className="p-6 min-h-[420px] focus:outline-none policy-prose text-slate-800 text-sm leading-relaxed overflow-y-auto cursor-text"
         style={{ minHeight: "420px" }}
       />
     </div>
@@ -249,10 +587,23 @@ function VisualRichEditor({ html, onChange }: VisualEditorProps) {
 
 export function AdminPolicyPagesSettings() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const pageParam = searchParams.get("page");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeSlug, setActiveSlug] = useState<string>("returns");
+  const [activeSlug, setActiveSlug] = useState<string>(() => {
+    if (pageParam && OFFICIAL_PAGE_DEFINITIONS.some((d) => d.slug === pageParam)) {
+      return pageParam;
+    }
+    return "returns";
+  });
   const [editorMode, setEditorMode] = useState<"visual" | "html" | "preview">("visual");
+
+  useEffect(() => {
+    if (pageParam && OFFICIAL_PAGE_DEFINITIONS.some((d) => d.slug === pageParam)) {
+      setActiveSlug(pageParam);
+    }
+  }, [pageParam]);
 
   // State holding all policy pages
   const [pagesMap, setPagesMap] = useState<Record<string, IPolicyPageConfig>>({});
@@ -423,11 +774,19 @@ export function AdminPolicyPagesSettings() {
       </div>
 
       {/* Page Selector Tabs */}
-      <div className="bg-white rounded-xl border border-neutral-200 p-3 shadow-xs">
-        <div className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider px-2 py-1 mb-2">
-          Select Page to Edit
+      <div className="bg-white rounded-xl border border-neutral-200 p-4 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-100 pb-2">
+          <div className="text-xs font-bold text-neutral-800 uppercase tracking-wider flex items-center gap-2">
+            <span>Select Page to Edit ({OFFICIAL_PAGE_DEFINITIONS.length} Pages Available)</span>
+            <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-normal normal-case">
+              Includes About Us, Contact Us, Returns, Shipping, Policies &amp; Guides
+            </span>
+          </div>
+          <span className="text-xs text-neutral-500 font-medium">
+            Active: <strong className="text-brand font-bold">{currentDef.name}</strong> (<code className="text-xs font-mono">/{currentDef.slug}</code>)
+          </span>
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <div className="flex flex-wrap gap-2">
           {OFFICIAL_PAGE_DEFINITIONS.map((def) => {
             const isActive = activeSlug === def.slug;
             const Icon = def.icon;
@@ -436,13 +795,13 @@ export function AdminPolicyPagesSettings() {
                 key={def.slug}
                 type="button"
                 onClick={() => setActiveSlug(def.slug)}
-                className={`shrink-0 px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
                   isActive
-                    ? "bg-brand text-white shadow-xs"
-                    : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                    ? "bg-brand text-white shadow-xs ring-2 ring-brand/30"
+                    : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 hover:text-neutral-900 border border-neutral-200/60"
                 }`}
               >
-                <Icon size={14} />
+                <Icon size={14} className={isActive ? "text-white" : "text-neutral-500"} />
                 <span>{def.name}</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
                   isActive ? "bg-white/20 text-white" : "bg-neutral-200 text-neutral-600"
@@ -530,7 +889,7 @@ export function AdminPolicyPagesSettings() {
                 type="text"
                 value={currentPage.badge || ""}
                 onChange={(e) => updateCurrentPage("badge", e.target.value)}
-                placeholder="e.g. 7-Day Fit Guarantee"
+                placeholder="e.g. Size & Fit Guarantee"
                 className="w-full text-xs p-2.5 bg-white border border-neutral-200 rounded-lg focus:outline-none focus:border-brand"
               />
             </div>

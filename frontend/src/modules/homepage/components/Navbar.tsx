@@ -31,7 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   navItems,
   onSearch,
   onAccountClick,
-  theme = "light",
+  theme = "dark-solid",
   hasTopBanner = true,
 }) => {
   const items = useCartStore((state) => state.items);
@@ -119,12 +119,63 @@ export const Navbar: React.FC<NavbarProps> = ({
   const totalItemCount = mounted ? items.reduce((sum, i) => sum + (i.quantity || 1), 0) : 0;
   const isLight = theme === "light" || (theme !== "dark-solid" && isScrolled);
   
-  const { data: dbBrands } = useBrands();
+  const { data: dbBrands } = useBrands(true);
   const { data: dbCategories } = useCategoryTree();
 
   // Preserves strict DEFAULT_NAV_ITEMS structure, overlaying dynamic subcategories, badges & visibility from DB
   const activeNavItems = useMemo(() => {
     const baseItems = navItems || DEFAULT_NAV_ITEMS;
+
+    // Helper to check if a menu link matches a database brand
+    const isMatchingBrand = (
+      subItem: { href: string; label: string },
+      b: { slug?: string; name?: string; aliases?: string[] }
+    ): boolean => {
+      const hrefSlug = (subItem.href || "").replace(/^\/brands\/?/, "").split("?")[0].toLowerCase().trim();
+      const labelLower = (subItem.label || "").toLowerCase().trim();
+
+      const bSlug = (b.slug || "").toLowerCase().trim();
+      const bName = (b.name || "").toLowerCase().trim();
+      const bAliases = Array.isArray(b.aliases)
+        ? b.aliases.map((a) => a.toLowerCase().trim())
+        : [];
+
+      if (bSlug && hrefSlug) {
+        if (bSlug === hrefSlug) return true;
+        if (hrefSlug === `${bSlug}-helmets` || hrefSlug === `${bSlug}-gear` || hrefSlug === `${bSlug}-gears`) return true;
+        if (bSlug === `${hrefSlug}-helmets` || bSlug === `${hrefSlug}-gear` || bSlug === `${hrefSlug}-gears`) return true;
+      }
+
+      if (hrefSlug && bAliases.includes(hrefSlug)) return true;
+
+      if (bName && labelLower) {
+        if (bName === labelLower) return true;
+        const cleanLabel = labelLower.replace(/\s+(helmets|gear|gears|boots|protection|protectors|parts|performance|air filter|spark plugs|chains|exhaust)\b/gi, "").trim();
+        const cleanName = bName.replace(/\s+(helmets|gear|gears|boots|protection|protectors|parts|performance|air filter|spark plugs|chains|exhaust)\b/gi, "").trim();
+        if (cleanLabel && cleanName && cleanLabel === cleanName) return true;
+        if (cleanLabel.length >= 3 && cleanName.length >= 3 && (cleanLabel.includes(cleanName) || cleanName.includes(cleanLabel))) return true;
+      }
+
+      return false;
+    };
+
+    // Helper to match a brand's menuGroup with a column group in shop-by-brand
+    const isGroupMatch = (brandGroup: string, targetGroup: string): boolean => {
+      const bg = brandGroup.toLowerCase().trim();
+      const tg = targetGroup.toLowerCase().trim();
+      if (bg === tg) return true;
+      if (bg.includes("helmet") && tg.includes("helmet")) return true;
+      if (bg.includes("gear") && tg.includes("gear")) return true;
+      if (bg.includes("boot") && tg.includes("boot")) return true;
+      if (bg.includes("protection") && tg.includes("protection")) return true;
+      if (bg.includes("luggage") && tg.includes("luggage")) return true;
+      if (bg.includes("accessor") && tg.includes("accessor")) return true;
+      if (bg.includes("part") && tg.includes("part")) return true;
+      if (bg.includes("performance") && tg.includes("performance")) return true;
+      if (bg.includes("maintenance") && tg.includes("performance")) return true;
+      if (bg.includes("care") && tg.includes("performance")) return true;
+      return false;
+    };
 
     // Flatten DB categories
     const flatDbCategories: any[] = [];
@@ -227,42 +278,87 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       const updatedMegaMenuItems = item.megaMenuItems.map((group) => {
         const groupKey = `${item.id.toLowerCase()}:${(group.group || "").toLowerCase().trim()}`;
+        const currentGroupLower = (group.group || "").toLowerCase().trim();
         const sectionCustomCategories = customBySection.get(groupKey) || [];
 
-        // 1. Filter out hidden items
+        // 1. Filter out hidden items (Categories + Brands)
         let visibleItems = group.items.filter((subItem) => {
           const leaf = subItem.href.split("?")[0].split("/").filter(Boolean).pop()?.toLowerCase() || "";
-          return !hiddenSlugs.has(leaf);
+          if (hiddenSlugs.has(leaf)) return false;
+
+          // For brand navigation: enforce showInMenu, isActive, and column placement
+          if (isBrandNav && Array.isArray(dbBrands)) {
+            const matchedDbBrand = dbBrands.find((b) => isMatchingBrand(subItem, b));
+            if (matchedDbBrand) {
+              // Unticked in Admin OR Inactive -> HIDE IMMEDIATELY
+              if (matchedDbBrand.showInMenu === false || matchedDbBrand.isActive === false) {
+                return false;
+              }
+
+              // If the brand is explicitly assigned to specific groups, check if it belongs to this column
+              const brandGroups = (
+                Array.isArray(matchedDbBrand.menuGroups) && matchedDbBrand.menuGroups.length > 0
+                  ? matchedDbBrand.menuGroups
+                  : matchedDbBrand.menuGroup
+                  ? [matchedDbBrand.menuGroup]
+                  : []
+              ).filter((g) => !g.toLowerCase().includes("popular"));
+
+              if (brandGroups.length > 0) {
+                const belongsHere = brandGroups.some((bg) => isGroupMatch(bg, currentGroupLower));
+                if (!belongsHere) {
+                  return false;
+                }
+              }
+            }
+          }
+
+          return true;
         });
 
-        // 2. Overlay brand popular badges if brand nav
-        if (isBrandNav && popularBrandsList.length > 0) {
+        // 2. Overlay brand popular badges, update logos/names, and append new brands
+        if (isBrandNav && Array.isArray(dbBrands)) {
+          // A. Update existing items in visibleItems with DB data (logo, name, popular badge)
           visibleItems = visibleItems.map((subItem) => {
-            const targetSlug = subItem.href.replace(/^\/brands\/?/, "").trim().toLowerCase();
-            const targetLabel = subItem.label.trim().toLowerCase();
-
-            const isPopular = popularBrandsList.some((pb) => {
-              const pbSlug = pb.slug?.trim().toLowerCase();
-              const pbName = pb.name?.trim().toLowerCase();
-              const aliases = Array.isArray(pb.aliases)
-                ? pb.aliases.map((a) => a.trim().toLowerCase())
-                : [];
-
-              if (pbSlug && (pbSlug === targetSlug || targetSlug.startsWith(pbSlug) || pbSlug.startsWith(targetSlug))) {
-                return true;
-              }
-              if (aliases.includes(targetSlug)) return true;
-              if (pbName && (pbName === targetLabel || targetLabel.includes(pbName) || pbName.includes(targetLabel))) {
-                return true;
-              }
-              return false;
-            });
+            const matchedDbBrand = dbBrands.find((b) => isMatchingBrand(subItem, b));
+            const isPopular = popularBrandsList.some((pb) => isMatchingBrand(subItem, pb));
 
             return {
               ...subItem,
-              badge: isPopular ? "Popular" : undefined,
-              badgeColor: isPopular ? "bg-brand" : undefined,
+              label: matchedDbBrand?.name || subItem.label,
+              href: matchedDbBrand?.slug ? `/brands/${matchedDbBrand.slug}` : subItem.href,
+              logoUrl: matchedDbBrand?.logo || subItem.logoUrl,
+              badge: isPopular ? "Popular" : subItem.badge,
+              badgeColor: isPopular ? "bg-brand" : subItem.badgeColor,
             };
+          });
+
+          // B. Append active brands assigned to this group in DB that aren't already in visibleItems
+          dbBrands.forEach((b) => {
+            if (b.isActive === false || b.showInMenu === false) return;
+
+            const brandGroups = (
+              Array.isArray(b.menuGroups) && b.menuGroups.length > 0
+                ? b.menuGroups
+                : b.menuGroup
+                ? [b.menuGroup]
+                : []
+            ).filter((g) => !g.toLowerCase().includes("popular"));
+
+            const belongsToThisGroup = brandGroups.some((bg) => isGroupMatch(bg, currentGroupLower));
+            if (!belongsToThisGroup) return;
+
+            const alreadyInGroup = visibleItems.some((sub) => isMatchingBrand(sub, b));
+            if (!alreadyInGroup) {
+              const isPopular = popularBrandsList.some((pb) => isMatchingBrand({ href: `/brands/${b.slug}`, label: b.name }, pb));
+              visibleItems.push({
+                label: b.name,
+                href: `/brands/${b.slug}`,
+                logoUrl: b.logo || undefined,
+                badge: isPopular ? "Popular" : undefined,
+                badgeColor: isPopular ? "bg-brand" : undefined,
+              });
+            }
           });
         }
 
@@ -337,7 +433,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             className={`shrink-0 items-center group transition-all duration-200 cursor-pointer ${isMobileSearchOpen ? "opacity-0 pointer-events-none sm:flex sm:opacity-100 sm:pointer-events-auto" : "flex opacity-100"
               }`}
           >
-            <div className="relative h-[31.74px] w-[119.6px] sm:h-[36.8px] sm:w-[138px] md:h-[41.4px] md:w-[155px] lg:h-[34px] lg:w-[128px] xl:h-[42px] xl:w-[158px] 2xl:h-[46px] 2xl:w-[175px] transition-transform duration-300 group-hover:scale-105 will-change-transform">
+            <div className="relative h-[31.74px] w-[119.6px] sm:h-[36.8px] sm:w-[138px] md:h-[41.4px] md:w-[155px] lg:h-[34px] lg:w-[128px] xl:h-[42px] xl:w-[158px] 2xl:h-[46px] 2xl:w-[175px] transition-transform duration-300 group-hover:scale-105 will-change-transform rounded-xs overflow-hidden">
               <Image
                 src="/Store4riders-Logo.jpg"
                 alt={logoText || "Store4Riders Logo"}
@@ -353,6 +449,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <NavDesktopLinks
             items={activeNavItems}
             isLight={isLight}
+            isDarkSolid={theme === "dark-solid"}
             hoveredNavId={hoveredNavId}
             hoveredMenuId={hoveredMenuId}
             onNavEnter={handleNavEnter}
@@ -386,7 +483,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Link
               href="/cart"
               aria-label="Shopping Cart"
-              className={`relative p-2 xl:p-2.5 rounded-full transition-all duration-200 cursor-pointer active:scale-95 ${isLight
+              className={`relative p-2 xl:p-2.5 rounded-full transition-all duration-200 cursor-pointer active:scale-95 ${theme === "dark-solid"
+                  ? "text-white hover:text-white hover:bg-neutral-800"
+                  : isLight
                   ? "text-neutral-700 hover:text-neutral-950 hover:bg-neutral-900/[0.06]"
                   : "text-white bg-black/45 backdrop-blur-md border border-white/20 hover:bg-black/70 shadow-md ring-1 ring-white/10"
                 }`}
@@ -404,7 +503,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               href={mounted && isAuthenticated ? "/account" : "/login"}
               aria-label="User Account"
               suppressHydrationWarning
-              className={`lg:hidden relative p-2 rounded-full transition-all duration-200 cursor-pointer active:scale-95 ${isLight
+              className={`lg:hidden relative p-2 rounded-full transition-all duration-200 cursor-pointer active:scale-95 ${theme === "dark-solid"
+                  ? "text-white hover:text-white hover:bg-neutral-800"
+                  : isLight
                   ? "text-neutral-700 hover:text-neutral-950 hover:bg-neutral-900/[0.06]"
                   : "text-white bg-black/45 backdrop-blur-md border border-white/20 hover:bg-black/70 shadow-md"
                 }`}
@@ -418,6 +519,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* User menu (desktop only) */}
             <NavUserMenu
               isLight={isLight}
+              isDarkSolid={theme === "dark-solid"}
               isOpen={isUserMenuOpen}
               mounted={mounted}
               isAuthenticated={isAuthenticated}
@@ -437,7 +539,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => setIsMobileMenuOpen(true)}
               aria-label="Open menu"
               suppressHydrationWarning
-              className={`lg:hidden p-2.5 rounded-full transition-all active:scale-95 ${isLight
+              className={`lg:hidden p-2.5 rounded-full transition-all active:scale-95 ${theme === "dark-solid"
+                  ? "text-white hover:bg-neutral-800"
+                  : isLight
                   ? "text-neutral-700 hover:bg-neutral-900/[0.06]"
                   : "text-white bg-black/55 backdrop-blur-xl border border-white/20 hover:bg-black/70 shadow-md"
                 }`}

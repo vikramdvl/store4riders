@@ -11,6 +11,8 @@ import {
   Compass,
   Wrench,
   HeartHandshake,
+  Cookie,
+  PhoneCall,
   LucideIcon,
 } from "lucide-react";
 
@@ -36,15 +38,15 @@ export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
     icon: ArrowLeftRight,
     defaultTitle: "Exchange & Replacement Policy",
     defaultSubtitle:
-      "Because motorcycle safety depends on a precise, secure fit, Store4Riders provides a dedicated 7-Day Size & Gear Exchange on all eligible riding essentials.",
-    defaultBadge: "7-Day Fit Guarantee",
+      "Because motorcycle safety depends on a precise, secure fit, Store4Riders provides a dedicated Size & Gear Exchange on all eligible riding essentials.",
+    defaultBadge: "Size & Fit Guarantee",
     defaultAlert: {
       type: "warning",
       title: "Strict Exchange-Only Policy",
       text: "Store4Riders operates on an Exchange & Replacement model for size adjustments or defective items. Direct cash or bank refunds are not provided once an order has been successfully delivered in accordance with store policy.",
     },
-    defaultHtml: `<h2>1. 7-Day Hassle-Free Size Exchange</h2>
-<p>Because motorcycle safety gear must fit securely to deliver full impact protection, Store4Riders offers a seamless <strong>7-Day Size &amp; Fit Exchange</strong> from the date of confirmed delivery. If your helmet, jacket, gloves, pants, or boots do not fit properly, we will happily exchange them for the correct size or alternative model.</p>
+    defaultHtml: `<h2>1. Hassle-Free Size Exchange</h2>
+<p>Because motorcycle safety gear must fit securely to deliver full impact protection, Store4Riders offers a seamless <strong>Size &amp; Fit Exchange</strong> from the date of confirmed delivery. If your helmet, jacket, gloves, pants, or boots do not fit properly, we will happily exchange them for the correct size or alternative model.</p>
 
 <h2>2. Eligibility Criteria for Exchange</h2>
 <p>To ensure high hygiene and safety standards for all riders, items submitted for exchange must strictly fulfill these requirements:</p>
@@ -52,7 +54,7 @@ export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
   <li><strong>Unused &amp; Unworn:</strong> The gear must not show any signs of outdoor road use, dirt, sweat, or scent.</li>
   <li><strong>Original Tags &amp; Packaging:</strong> All manufacturer tags, CE armor inserts, manuals, and original branded box must be intact.</li>
   <li><strong>Helmet Visor Peels:</strong> Protective protective film on helmet visors must remain completely unpeeled.</li>
-  <li><strong>Timely Notice:</strong> Exchange request must be submitted within 7 days of package delivery.</li>
+  <li><strong>Timely Notice:</strong> Exchange request must be submitted within the eligible exchange window of package delivery.</li>
 </ul>
 
 <h2>3. Reverse Pickup &amp; Replacement Process</h2>
@@ -158,7 +160,7 @@ export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
 <h2>3. Delivery &amp; Handover Guidelines</h2>
 <ul>
   <li>Please keep exact cash ready or use courier UPI QR codes provided by the delivery partner at the time of doorstep handover.</li>
-  <li>Open-box inspection prior to cash payment is not permitted under courier partner service agreements. Once paid and accepted, our 7-Day Size Exchange policy protects your purchase completely.</li>
+  <li>Open-box inspection prior to cash payment is not permitted under courier partner service agreements. Once paid and accepted, our Size Exchange policy protects your purchase completely.</li>
 </ul>`,
   },
   {
@@ -299,7 +301,7 @@ export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
   <li><strong>100% Genuine Products:</strong> Sourced directly from certified brand distributors.</li>
   <li><strong>Expert Sizing Guidance:</strong> Personalized size recommendations by certified gear specialists.</li>
   <li><strong>Fast Express Shipping:</strong> Secure transit insurance and express dispatch across 18,000+ pin codes.</li>
-  <li><strong>Hassle-Free Fit Exchange:</strong> Dedicated 7-day exchange window so your gear fits like a glove.</li>
+  <li><strong>Hassle-Free Fit Exchange:</strong> Dedicated size exchange policy so your gear fits like a glove.</li>
 </ul>`,
   },
   {
@@ -400,5 +402,52 @@ export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
 
 <h2>3. How to Apply</h2>
 <p>Reach out to our partnerships team at <strong>partners@store4riders.com</strong> with your club profile or social media handles.</p>`,
+  },
+  {
+    slug: "enable-cookies",
+    name: "Enable Cookies Guide",
+    icon: Cookie,
+    defaultTitle: "How to Enable Cookies",
+    defaultSubtitle:
+      "Follow these simple browser instructions to ensure your shopping cart, login session, and secure checkout operate smoothly on Store4Riders.",
+    defaultBadge: "Browser Settings Guide",
+    defaultAlert: {
+      type: "info",
+      title: "Why Cookies Are Essential on Store4Riders",
+      text: "Cookies are essential to keep track of items in your shopping bag, maintain secure encrypted sessions, prevent fraudulent bot activity, and ensure seamless RBI-compliant payment processing.",
+    },
+    defaultHtml: `<h2>1. What are Cookies?</h2>
+<p>&ldquo;Cookies&rdquo; are little pieces of data we send when you visit our store. Cookies help us get to know you better and personalize your experience. Plus, they help protect you and other shoppers from fraud.</p>
+<p>Set your browser to accept cookies so you can buy items, save items to your wishlist, preserve items in your shopping cart across sessions, and receive customized gear recommendations.</p>
+
+<h2>2. Browser-Specific Instructions to Enable Cookies</h2>
+<p>Select your browser and follow the simple steps to turn on cookies:</p>
+<ul>
+  <li><strong>Google Chrome:</strong> Settings &rarr; Privacy and security &rarr; Third-party cookies &rarr; Allow third-party cookies (or add [*.]store4riders.com).</li>
+  <li><strong>Apple Safari:</strong> Settings &rarr; Safari &rarr; Advanced &rarr; Turn OFF Block All Cookies.</li>
+  <li><strong>Mozilla Firefox:</strong> Settings &rarr; Privacy &amp; Security &rarr; Enhanced Tracking Protection &rarr; Select Standard.</li>
+  <li><strong>Microsoft Edge:</strong> Settings &rarr; Cookies and site permissions &rarr; Turn ON Allow sites to save and read cookie data.</li>
+</ul>`,
+  },
+  {
+    slug: "contact-us",
+    name: "Contact Us",
+    icon: PhoneCall,
+    defaultTitle: "How Can We Assist You Today?",
+    defaultSubtitle:
+      "Have a question regarding your order delivery, helmet sizing, payments, or exchanges? Our dedicated Customer Care team is here to assist every rider.",
+    defaultBadge: "Customer Support",
+    defaultAlert: {
+      type: "info",
+      title: "Fast Response Helpdesk",
+      text: "Our team operates Monday to Friday, 11:00 AM to 4:30 PM IST. For urgent courier delivery queries, WhatsApp support is the fastest channel.",
+    },
+    defaultHtml: `<h2>1. Reach Our Rider Support Team</h2>
+<p>Whether you need help selecting the right helmet size, tracking a delayed courier parcel, or initiating an exchange, our team is standing by.</p>
+<ul>
+  <li><strong>Email:</strong> support@store4riders.com</li>
+  <li><strong>Phone:</strong> +91 - 7263007788</li>
+  <li><strong>Warehouse Hub:</strong> Pune, Maharashtra, 411001, India</li>
+</ul>`,
   },
 ];

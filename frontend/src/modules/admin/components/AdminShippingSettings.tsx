@@ -22,14 +22,14 @@ import {
 } from "lucide-react";
 
 interface IShippingSettings {
-  freeShippingThreshold: number;
-  shippingCost: number;
+  freeShippingThreshold: number | string;
+  shippingCost: number | string;
   storeOriginPincode?: string;
   storeOriginCity?: string;
   storeOriginState?: string;
   storeOriginAddress?: string;
   storeOriginPhone?: string;
-  returnWindowDays?: number;
+  returnWindowDays?: number | string;
   packagePresets?: { _id?: string; name: string; length: number; breadth: number; height: number }[];
 }
 
@@ -63,14 +63,14 @@ export function AdminShippingSettings() {
       setSaving(true);
       // Send ONLY shipping-related fields — prevents overwriting other tabs' data
       const payload = {
-        freeShippingThreshold: settings.freeShippingThreshold,
-        shippingCost: settings.shippingCost,
+        freeShippingThreshold: Number(settings.freeShippingThreshold) >= 0 ? Number(settings.freeShippingThreshold) : 0,
+        shippingCost: Number(settings.shippingCost) >= 0 ? Number(settings.shippingCost) : 0,
         storeOriginPincode: settings.storeOriginPincode,
         storeOriginCity: settings.storeOriginCity,
         storeOriginState: settings.storeOriginState,
         storeOriginAddress: settings.storeOriginAddress,
         storeOriginPhone: settings.storeOriginPhone,
-        returnWindowDays: settings.returnWindowDays,
+        returnWindowDays: Number(settings.returnWindowDays) >= 0 ? Number(settings.returnWindowDays) : 7,
         packagePresets: settings.packagePresets?.map(({ _id, ...rest }: any) => rest),
       };
       await apiClient.put("/admin/settings", payload);
@@ -149,13 +149,19 @@ export function AdminShippingSettings() {
                   type="number"
                   min={0}
                   step={1}
-                  value={settings.shippingCost ?? 0}
-                  onChange={(e) =>
+                  value={settings.shippingCost ?? ""}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      setSettings({ ...settings, shippingCost: "" });
+                      return;
+                    }
+                    const num = Number(raw);
                     setSettings({
                       ...settings,
-                      shippingCost: Math.max(0, Number(e.target.value) || 0),
-                    })
-                  }
+                      shippingCost: isNaN(num) ? "" : Math.max(0, num),
+                    });
+                  }}
                   className="w-full bg-white border border-slate-300 rounded-md pl-7 pr-3 py-2 text-sm text-slate-900 font-semibold focus:outline-none focus:border-brand shadow-2xs"
                   placeholder="e.g. 49"
                 />
@@ -179,19 +185,25 @@ export function AdminShippingSettings() {
                   type="number"
                   min={0}
                   step={1}
-                  value={settings.freeShippingThreshold ?? 0}
-                  onChange={(e) =>
+                  value={settings.freeShippingThreshold ?? ""}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      setSettings({ ...settings, freeShippingThreshold: "" });
+                      return;
+                    }
+                    const num = Number(raw);
                     setSettings({
                       ...settings,
-                      freeShippingThreshold: Math.max(0, Number(e.target.value) || 0),
-                    })
-                  }
+                      freeShippingThreshold: isNaN(num) ? "" : Math.max(0, num),
+                    });
+                  }}
                   className="w-full bg-white border border-slate-300 rounded-md pl-7 pr-3 py-2 text-sm text-slate-900 font-semibold focus:outline-none focus:border-brand shadow-2xs"
                   placeholder="0 to disable"
                 />
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                {settings.freeShippingThreshold > 0
+                {Number(settings.freeShippingThreshold) > 0
                   ? `Orders with cart subtotal ≥ ₹${settings.freeShippingThreshold} get Free Delivery automatically.`
                   : "Free delivery by cart value is currently disabled (set > 0 to enable)."}
               </p>
@@ -329,18 +341,24 @@ export function AdminShippingSettings() {
               type="number"
               min={0}
               max={60}
-              value={settings.returnWindowDays ?? 7}
-              onChange={(e) =>
+              value={settings.returnWindowDays ?? ""}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === "") {
+                  setSettings({ ...settings, returnWindowDays: "" });
+                  return;
+                }
+                const num = Number(raw);
                 setSettings({
                   ...settings,
-                  returnWindowDays: Math.max(0, Number(e.target.value) || 0),
-                })
-              }
+                  returnWindowDays: isNaN(num) ? "" : Math.max(0, num),
+                });
+              }}
               className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-900 font-semibold focus:outline-none focus:border-brand shadow-2xs"
               placeholder="7"
             />
             <p className="text-[11px] text-slate-500 mt-1">
-              Store4Riders standard: 7 days after delivery date for size/fit exchanges.
+              Store4Riders standard window after delivery date for size/fit exchanges.
             </p>
           </div>
         </div>

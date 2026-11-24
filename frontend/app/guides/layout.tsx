@@ -16,8 +16,8 @@ export default function GuidesLayout({
           message="Discount 20% For New Member,"
           highlightText="ONLY FOR TODAY!!"
         />
-        <div className="bg-white border-b border-neutral-200 sticky top-0 z-40 shadow-xs">
-          <Navbar logoText="Store4Riders" theme="light" />
+        <div className="bg-[#161616] border-b border-[#2a2a2a] sticky top-0 z-40 shadow-xs">
+          <Navbar logoText="Store4Riders" theme="dark-solid" />
         </div>
       </header>
 

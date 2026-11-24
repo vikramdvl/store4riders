@@ -266,15 +266,15 @@ export function AdminContactSettings() {
           </div>
         </div>
 
-        {/* Card 2: Physical Store & Dispatch Address */}
+        {/* Card 2: Fulfillment & Dispatch Address (Online Only) */}
         <div className="bg-white rounded-xl border border-neutral-200 shadow-xs p-6 space-y-5">
           <div className="flex items-center gap-2.5 pb-4 border-b border-neutral-100">
             <div className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
               <MapPin className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-neutral-900">Origin & Dispatch Address</h2>
-              <p className="text-xs text-neutral-500">Warehouse location used in Shipping & Schema</p>
+              <h2 className="text-base font-bold text-neutral-900">Origin &amp; Dispatch Address</h2>
+              <p className="text-xs text-neutral-500">Fulfillment location used in Shipping &amp; Schema (Online Only Store)</p>
             </div>
           </div>
 
@@ -288,7 +288,7 @@ export function AdminContactSettings() {
                 type="text"
                 value={settings.storeOriginAddress || ""}
                 onChange={(e) => setSettings({ ...settings, storeOriginAddress: e.target.value })}
-                placeholder="Shop No. 12, Commercial Complex, MG Road"
+                placeholder="Store4Riders Logistics Hub, Pune"
                 className="w-full text-sm border border-neutral-300 rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
               />
             </div>

@@ -497,6 +497,12 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
                 <span>Shipping</span>
                 <span className="font-bold text-neutral-900">{formatPrice(order.pricing?.shipping || 0)}</span>
               </div>
+              {order.paymentMethod === "cod" && (order.pricing?.codHandlingFee || 0) > 0 && (
+                <div className="flex justify-between text-amber-800">
+                  <span>COD Handling Fee</span>
+                  <span className="font-bold text-amber-900">+{formatPrice(order.pricing?.codHandlingFee || 0)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>Tax ({order.pricing?.taxRate || 0}%)</span>
                 <span className="font-bold text-neutral-900">{formatPrice(order.pricing?.tax || 0)}</span>

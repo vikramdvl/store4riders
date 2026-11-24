@@ -227,7 +227,7 @@ export const WriteReviewModal: React.FC<WriteReviewModalProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Pune, Bengaluru, Mumbai"
+                    placeholder="Enter your city"
                     maxLength={80}
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
@@ -251,7 +251,6 @@ export const WriteReviewModal: React.FC<WriteReviewModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Vikram Sharma"
                   maxLength={100}
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
@@ -267,7 +266,7 @@ export const WriteReviewModal: React.FC<WriteReviewModalProps> = ({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Mumbai, Bengaluru"
+                    placeholder="Enter your city"
                     maxLength={80}
                     value={city}
                     onChange={(e) => setCity(e.target.value)}

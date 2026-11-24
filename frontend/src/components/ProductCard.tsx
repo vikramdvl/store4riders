@@ -295,7 +295,7 @@ const ProductCard = ({ product, showBuyNow = false, priority = false }: ProductC
         {/* Bottom Section: Text Content */}
         <div className="p-3 sm:p-4 flex flex-col flex-1">
           {/* Title */}
-          <h3 className="font-bold text-slate-800 text-xs sm:text-sm leading-snug line-clamp-2 group-hover:text-brand transition-colors mb-3">
+          <h3 className="font-bold text-slate-800 text-xs sm:text-sm leading-snug line-clamp-2 group-hover:text-brand transition-colors mb-3 no-underline">
             {product.name}
           </h3>
 
@@ -307,7 +307,7 @@ const ProductCard = ({ product, showBuyNow = false, priority = false }: ProductC
                   {formatPrice(originalPrice)}
                 </span>
               )}
-              <span className="text-sm sm:text-base font-black text-brand tracking-tight leading-none">
+              <span className="text-sm sm:text-base font-black text-neutral-900 tracking-tight leading-none">
                 {price > 0 ? formatPrice(price) : "Contact for Price"}
               </span>
             </div>

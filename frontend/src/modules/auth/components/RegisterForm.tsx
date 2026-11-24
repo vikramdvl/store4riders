@@ -72,7 +72,6 @@ export function RegisterForm() {
         </label>
         <input
           type="text"
-          placeholder="John Doe"
           className={`w-full border ${errors.fullName ? 'border-red-500 bg-red-50/20' : 'border-neutral-300'} p-2.5 text-base md:text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:border-banner rounded-xs transition-colors bg-neutral-50/50 focus:bg-white`}
           {...register("fullName")}
         />
@@ -88,7 +87,6 @@ export function RegisterForm() {
         </label>
         <input
           type="email"
-          placeholder="rider@example.com"
           className={`w-full border ${errors.email ? 'border-red-500 bg-red-50/20' : 'border-neutral-300'} p-2.5 text-base md:text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:border-banner rounded-xs transition-colors bg-neutral-50/50 focus:bg-white`}
           {...register("email")}
         />
@@ -105,8 +103,7 @@ export function RegisterForm() {
         <div className="relative">
           <input
             type={showPassword ? "text" : "password"}
-            placeholder="••••••••"
-            className={`w-full border ${errors.password ? 'border-red-500 bg-red-50/20' : 'border-neutral-300'} p-2.5 pr-11 text-base md:text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:border-banner rounded-xs transition-colors bg-neutral-50/50 focus:bg-white tracking-widest`}
+            className={`w-full border ${errors.password ? 'border-red-500 bg-red-50/20' : 'border-neutral-300'} p-2.5 pr-11 text-base md:text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:border-banner rounded-xs transition-colors bg-neutral-50/50 focus:bg-white`}
             {...register("password")}
           />
           <button

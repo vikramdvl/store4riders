@@ -73,7 +73,7 @@ export default function PrivacyPage() {
         <ul>
           <li>Processing, confirming, packaging, and delivering your motorcycle riding gear orders.</li>
           <li>Sending critical transactional alerts, shipment tracking links, and delivery status notifications via SMS, email, and WhatsApp.</li>
-          <li>Facilitating seamless 7-day size exchanges, warranty claims, and customer service inquiries.</li>
+          <li>Facilitating seamless size exchanges, warranty claims, and customer service inquiries.</li>
           <li>Preventing fraudulent transactions, verifying Cash on Delivery orders, and mitigating security threats.</li>
           <li>Complying with statutory accounting, GST reporting, and tax audit obligations under Indian law.</li>
           <li>Sending promotional newsletters and new gear arrival updates only when you have explicitly opted in (with one-click unsubscribe options).</li>

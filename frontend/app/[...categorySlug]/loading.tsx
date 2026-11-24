@@ -1,48 +1,70 @@
-/**
- * @file loading.tsx
- * @description Instantaneous loading skeleton for /[...categorySlug] (Product Detail Page & Category Page).
- * Eliminates click delay and provides 0ms perceived response time.
- */
+"use client";
+
+import { usePathname } from "next/navigation";
+import ProductsLoading from "../products/loading";
+import ProductDetailLoading from "../products/[slug]/loading";
+import { CATEGORY_SLUG_ALIASES, CORE_PRODUCT_PARENTS } from "@/core/utils/navCategories";
+import { DEFAULT_NAV_ITEMS } from "@/modules/homepage/components/navbar/nav.constants";
+
+// Fast lookup set of all known category slugs
+const ALL_CATEGORY_SLUGS = new Set<string>();
+
+// 1. Core category parents
+Object.values(CORE_PRODUCT_PARENTS).forEach((c) => {
+  ALL_CATEGORY_SLUGS.add(c.slug.toLowerCase());
+  const clean = c.linkUrl.replace(/^\//, "").toLowerCase();
+  if (clean) ALL_CATEGORY_SLUGS.add(clean);
+});
+
+// 2. Category aliases & taxonomy keys
+Object.entries(CATEGORY_SLUG_ALIASES).forEach(([key, aliases]) => {
+  ALL_CATEGORY_SLUGS.add(key.toLowerCase());
+  aliases.forEach((a) => ALL_CATEGORY_SLUGS.add(a.toLowerCase()));
+});
+
+// 3. Navbar item URLs & subcategory links
+DEFAULT_NAV_ITEMS.forEach((item) => {
+  const itemSlug = item.href.replace(/^\//, "").split("/").pop()?.toLowerCase();
+  if (itemSlug) ALL_CATEGORY_SLUGS.add(itemSlug);
+  item.megaMenuItems?.forEach((group) => {
+    if (group.groupHref) {
+      const gSlug = group.groupHref.replace(/^\//, "").split("/").pop()?.toLowerCase();
+      if (gSlug) ALL_CATEGORY_SLUGS.add(gSlug);
+    }
+    group.items?.forEach((sub) => {
+      const sSlug = sub.href.replace(/^\//, "").split("/").pop()?.toLowerCase();
+      if (sSlug) ALL_CATEGORY_SLUGS.add(sSlug);
+    });
+  });
+});
+
+function isCategoryRoute(pathname: string): boolean {
+  if (!pathname) return false;
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments.length === 0) return false;
+
+  // Check last segment (candidate category slug)
+  const lastSegment = segments[segments.length - 1].replace(/\.html$/i, "").toLowerCase().trim();
+  if (ALL_CATEGORY_SLUGS.has(lastSegment)) {
+    return true;
+  }
+
+  // Check full path without leading slash
+  const fullPath = segments.join("/").replace(/\.html$/i, "").toLowerCase().trim();
+  if (ALL_CATEGORY_SLUGS.has(fullPath)) {
+    return true;
+  }
+
+  return false;
+}
+
 export default function CategoryOrProductLoading() {
-  return (
-    <div className="w-full min-h-screen bg-white">
-      {/* Skeleton top navigation bar */}
-      <div className="h-10 bg-neutral-50 animate-pulse border-b border-neutral-100" />
-      <div className="h-14 bg-white border-b border-neutral-200" />
+  const pathname = usePathname() || (typeof window !== "undefined" ? window.location.pathname : "");
+  const isCategory = isCategoryRoute(pathname);
 
-      <div className="max-w-[1400px] mx-auto px-4 md:px-6 pt-6 pb-16">
-        {/* Breadcrumb skeleton */}
-        <div className="flex items-center gap-2 mb-6">
-          <div className="h-3 w-16 bg-neutral-200 rounded animate-pulse" />
-          <div className="h-3 w-3 bg-neutral-200 rounded animate-pulse" />
-          <div className="h-3 w-24 bg-neutral-200 rounded animate-pulse" />
-          <div className="h-3 w-3 bg-neutral-200 rounded animate-pulse" />
-          <div className="h-3 w-36 bg-neutral-200 rounded animate-pulse" />
-        </div>
+  if (isCategory) {
+    return <ProductsLoading />;
+  }
 
-        {/* Product / Category Dual layout skeleton */}
-        <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
-          {/* Left Gallery / Main Container skeleton */}
-          <div className="w-full lg:w-[45%]">
-            <div className="aspect-square w-full bg-neutral-100 rounded-xl animate-pulse" />
-            <div className="flex gap-3 mt-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="w-20 h-20 bg-neutral-100 rounded-lg animate-pulse" />
-              ))}
-            </div>
-          </div>
-
-          {/* Right Product Info skeleton */}
-          <div className="w-full lg:w-[55%] space-y-4 pt-2">
-            <div className="h-4 w-28 bg-neutral-100 rounded animate-pulse" />
-            <div className="h-8 w-4/5 bg-neutral-100 rounded animate-pulse" />
-            <div className="h-7 w-36 bg-neutral-100 rounded animate-pulse" />
-            <div className="h-12 w-full bg-neutral-100 rounded-lg animate-pulse mt-6" />
-            <div className="h-12 w-full bg-neutral-100 rounded-lg animate-pulse" />
-            <div className="h-28 w-full bg-neutral-100 rounded-lg animate-pulse mt-4" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <ProductDetailLoading />;
 }

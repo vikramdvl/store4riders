@@ -48,8 +48,8 @@ export const AccountLayoutModule = ({ children }: { children: React.ReactNode })
           />
         </header>
 
-        <div className="w-full bg-white relative z-40 border-b border-zinc-200 shadow-sm">
-          <Navbar theme="light" logoText="Store4Riders" />
+        <div className="w-full bg-[#161616] relative z-40 border-b border-[#2a2a2a] shadow-sm">
+          <Navbar theme="dark-solid" logoText="Store4Riders" />
         </div>
 
         <main className="flex-1 w-full flex flex-col items-center justify-center py-24 gap-3">
@@ -70,9 +70,9 @@ export const AccountLayoutModule = ({ children }: { children: React.ReactNode })
         />
       </header>
 
-      {/* 2. Standard Header Navigation (Light Theme) */}
-      <div className="w-full bg-white relative z-40 border-b border-zinc-200 shadow-sm">
-        <Navbar theme="light" logoText="Store4Riders" />
+      {/* 2. Standard Header Navigation (Dark Solid Theme) */}
+      <div className="w-full bg-[#161616] relative z-40 border-b border-[#2a2a2a] shadow-sm">
+        <Navbar theme="dark-solid" logoText="Store4Riders" />
       </div>
 
       <Breadcrumb items={breadcrumbItems} />

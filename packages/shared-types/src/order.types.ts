@@ -26,6 +26,7 @@ export interface IOrderPricing {
   taxRate: number;
   shipping: number;
   total: number;
+  codHandlingFee?: number;
   codAmountToCollect?: number;
   codPartialPaymentAmount?: number;
 }

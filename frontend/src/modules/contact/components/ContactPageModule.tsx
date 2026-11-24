@@ -20,10 +20,32 @@ import Link from "next/link";
 import { TopBanner } from "@/modules/homepage/components/TopBanner";
 import { Navbar } from "@/modules/homepage/components/Navbar";
 import { Footer } from "@/modules/homepage/components/Footer";
+import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
 
 export function ContactPageModule() {
+  const { data: settings } = usePublicSettings();
   const [submittedTicket, setSubmittedTicket] = useState<{ ticketId: string; email: string } | null>(null);
   const submitMutation = useSubmitContactIssue();
+
+  // Dynamic Contact & Policy Values from Admin Panel Settings
+  const returnsPolicy = settings?.policyPages?.find((p) => p.slug === "returns" || p.slug === "exchange");
+  const exchangePolicyTitle = returnsPolicy?.title || "Size & Gear Exchange Policy";
+
+  const contactPolicy = settings?.policyPages?.find((p) => p.slug === "contact-us" || p.slug === "contact");
+  const heroTitle = contactPolicy?.title || "How Can We Assist You Today?";
+  const heroSubtitle =
+    contactPolicy?.subtitle ||
+    "Have a question regarding your order delivery, helmet sizing, payments, or exchanges? Our dedicated Customer Care team is here to assist every rider.";
+
+  const supportPhone = settings?.supportPhone || "07795688316";
+  const supportEmail = settings?.supportEmail || "support@store4riders.com";
+  const rawWhatsapp = settings?.whatsappNumber || "+91 - 7263007788";
+  const cleanWhatsappNumber = rawWhatsapp.replace(/\D/g, "") || "917263007788";
+  const storeAddress = settings?.storeOriginAddress
+    ? [settings.storeOriginAddress, settings.storeOriginCity, settings.storeOriginState, settings.storeOriginPincode]
+        .filter(Boolean)
+        .join(", ")
+    : "Store4Riders Logistics Hub, Pune, Maharashtra, 411001, India";
 
   const {
     register,
@@ -68,8 +90,8 @@ export function ContactPageModule() {
       {/* Top Announcement Bar & Sticky Header */}
       <header className="w-full">
         <TopBanner />
-        <div className="w-full bg-white relative z-40 border-b border-zinc-200 shadow-2xs sticky top-0">
-          <Navbar logoText="Store4Riders" theme="light" />
+        <div className="w-full bg-[#161616] relative z-40 border-b border-[#2a2a2a] shadow-2xs sticky top-0">
+          <Navbar logoText="Store4Riders" theme="dark-solid" />
         </div>
       </header>
 
@@ -84,11 +106,10 @@ export function ContactPageModule() {
             <span>Store4Riders Support</span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-slate-900 mb-3">
-            How Can We Assist You Today?
+            {heroTitle}
           </h1>
           <p className="text-slate-600 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
-            Have a question regarding your order delivery, helmet sizing, payments, or exchanges?
-            Our dedicated Customer Care team is here to assist every rider.
+            {heroSubtitle}
           </p>
         </div>
 
@@ -112,8 +133,8 @@ export function ContactPageModule() {
                   </div>
                   <div>
                     <span className="font-bold text-slate-900 block text-sm">Call Support</span>
-                    <a href="tel:07795688316" className="text-brand font-semibold hover:underline block mt-0.5">
-                      07795688316
+                    <a href={`tel:${supportPhone.replace(/\s+/g, "")}`} className="text-brand font-semibold hover:underline block mt-0.5">
+                      {supportPhone}
                     </a>
                     <span className="text-[11px] text-slate-500 block mt-0.5">Mon - Fri: 11:00 AM to 4:30 PM IST</span>
                   </div>
@@ -126,8 +147,8 @@ export function ContactPageModule() {
                   </div>
                   <div>
                     <span className="font-bold text-slate-900 block text-sm">Email Helpdesk</span>
-                    <a href="mailto:support@store4riders.com" className="text-brand font-semibold hover:underline block mt-0.5">
-                      support@store4riders.com
+                    <a href={`mailto:${supportEmail}`} className="text-brand font-semibold hover:underline block mt-0.5">
+                      {supportEmail}
                     </a>
                     <span className="text-[11px] text-slate-500 block mt-0.5">24/7 ticket logging &amp; assistance</span>
                   </div>
@@ -141,7 +162,7 @@ export function ContactPageModule() {
                   <div>
                     <span className="font-bold text-emerald-950 block text-sm">Official WhatsApp Support</span>
                     <a
-                      href="https://wa.me/917795688316?text=Hi%20Store4Riders%20Support%2C%20I%20need%20assistance%20with%20an%20inquiry."
+                      href={`https://wa.me/${cleanWhatsappNumber}?text=Hi%20Store4Riders%20Support%2C%20I%20need%20assistance%20with%20an%20inquiry.`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-emerald-700 font-bold hover:underline block mt-0.5 text-xs"
@@ -158,10 +179,18 @@ export function ContactPageModule() {
                     <MapPinIcon className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="font-bold text-slate-900 block text-sm">Store &amp; Fulfillment Warehouse</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-slate-900 block text-sm">Fulfillment &amp; Logistics Hub</span>
+                      <span className="text-[10px] font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">
+                        Online Store Only
+                      </span>
+                    </div>
                     <p className="text-slate-600 text-xs mt-0.5 leading-relaxed">
-                      Store4Riders Logistics Hub, Pune, Maharashtra, 411001, India
+                      {storeAddress}
                     </p>
+                    <span className="text-[11px] text-slate-500 block mt-1">
+                      100% online store with doorstep pan-India delivery. No walk-in retail counter.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -172,8 +201,8 @@ export function ContactPageModule() {
               <span className="font-bold text-slate-900 uppercase tracking-wider block text-[11px]">Helpful Resources</span>
               <ul className="space-y-2 text-slate-600">
                 <li>
-                  <Link href="/returns-replacements-store4riders" className="text-slate-800 hover:text-brand font-semibold flex items-center justify-between">
-                    <span>7-Day Size &amp; Gear Exchange Policy</span>
+                  <Link href="/returns" className="text-slate-800 hover:text-brand font-semibold flex items-center justify-between">
+                    <span>{exchangePolicyTitle}</span>
                     <span>&rarr;</span>
                   </Link>
                 </li>
@@ -281,7 +310,6 @@ export function ContactPageModule() {
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. Vikram Sharma"
                         {...register("name")}
                         className="w-full px-4 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-brand"
                       />
@@ -296,7 +324,6 @@ export function ContactPageModule() {
                       </label>
                       <input
                         type="email"
-                        placeholder="e.g. rider@example.com"
                         {...register("email")}
                         className="w-full px-4 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-brand"
                       />
@@ -314,7 +341,6 @@ export function ContactPageModule() {
                       </label>
                       <input
                         type="tel"
-                        placeholder="e.g. 9876543210"
                         {...register("phone")}
                         className="w-full px-4 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-brand"
                       />
@@ -329,7 +355,6 @@ export function ContactPageModule() {
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. #10023 or 20261024-..."
                         {...register("orderNumber")}
                         className="w-full px-4 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-brand"
                       />
@@ -346,7 +371,6 @@ export function ContactPageModule() {
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Need to change delivery address or check size chart for Axor helmet"
                       {...register("subject")}
                       className="w-full px-4 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-brand"
                     />
@@ -362,7 +386,7 @@ export function ContactPageModule() {
                     </label>
                     <textarea
                       rows={5}
-                      placeholder="Please describe your issue or inquiry in detail so our support team can assist you as quickly as possible..."
+                      placeholder="How can we help you?"
                       {...register("message")}
                       className="w-full px-4 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-brand"
                     />

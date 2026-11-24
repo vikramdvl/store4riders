@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { Plus, Edit2, Trash2, Upload, X, Check, Image as ImageIcon, ExternalLink, Globe, Download, HelpCircle, Search } from "lucide-react";
+import { Plus, Edit2, Trash2, Upload, X, Check, Image as ImageIcon, ExternalLink, Globe, Download, HelpCircle, Search, EyeOff } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
@@ -16,6 +16,7 @@ import { downloadBrandProductCsv } from "@/core/utils/exportCsv";
 import { apiClient } from "@/core/api/client";
 import { toast } from "sonner";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import { DEFAULT_NAV_ITEMS } from "@/modules/homepage/components/navbar/nav.constants";
 
 const PRESET_MENU_GROUPS = [
   "Helmet Brands",
@@ -26,6 +27,32 @@ const PRESET_MENU_GROUPS = [
   "Care & Maintenance",
   "Popular Brands"
 ];
+
+const detectBrandGroup = (brandName: string, brandSlug: string): string[] => {
+  const brandNav = DEFAULT_NAV_ITEMS.find((n) => n.id === "shop-by-brand");
+  if (brandNav?.megaMenuItems) {
+    for (const grp of brandNav.megaMenuItems) {
+      const match = grp.items.some((item) => {
+        const leaf = item.href.replace(/^\/brands\/?/, "").split("?")[0].toLowerCase().trim();
+        const label = item.label.toLowerCase().trim();
+        const bSlug = (brandSlug || "").toLowerCase().trim();
+        const bName = (brandName || "").toLowerCase().trim();
+        return (
+          (leaf && bSlug && (leaf === bSlug || leaf.includes(bSlug) || bSlug.includes(leaf))) ||
+          (label && bName && (label === bName || label.includes(bName) || bName.includes(label)))
+        );
+      });
+      if (match && grp.group) return [grp.group];
+    }
+  }
+
+  const lower = `${brandName} ${brandSlug}`.toLowerCase();
+  if (lower.includes("helmet")) return ["Helmet Brands"];
+  if (lower.includes("boot") || lower.includes("protect")) return ["Boots & Protection"];
+  if (lower.includes("exhaust") || lower.includes("filter") || lower.includes("spark") || lower.includes("chain") || lower.includes("oil") || lower.includes("part")) return ["Parts & Performance"];
+  if (lower.includes("luggage") || lower.includes("bag") || lower.includes("phone") || lower.includes("mount")) return ["Luggage & Accessories"];
+  return ["Riding Gear"];
+};
 
 type BrandFormValues = {
   name: string;
@@ -141,8 +168,8 @@ export function AdminBrands() {
       description: "", 
       isActive: true, 
       showInMenu: true, 
-      menuGroup: "",
-      menuGroups: [],
+      menuGroup: "Helmet Brands",
+      menuGroups: ["Helmet Brands"],
       metaTitle: "",
       metaDescription: "",
       metaKeywords: "",
@@ -157,11 +184,15 @@ export function AdminBrands() {
         ? brand.faqs.map((f) => ({ question: f.question, answer: f.answer }))
         : []
     );
-    const initialGroups = brand.menuGroups && brand.menuGroups.length > 0
+    const rawGroups = brand.menuGroups && brand.menuGroups.length > 0
       ? brand.menuGroups
       : brand.menuGroup
       ? [brand.menuGroup]
       : [];
+
+    const initialGroups = rawGroups.length > 0
+      ? rawGroups
+      : detectBrandGroup(brand.name, brand.slug);
 
     reset({
       name: brand.name,
@@ -170,13 +201,31 @@ export function AdminBrands() {
       description: brand.description || "",
       isActive: brand.isActive,
       showInMenu: brand.showInMenu !== false,
-      menuGroup: brand.menuGroup || initialGroups[0] || "",
+      menuGroup: initialGroups[0] || brand.menuGroup || "",
       menuGroups: initialGroups,
       metaTitle: brand.metaTitle || "",
       metaDescription: brand.metaDescription || "",
       metaKeywords: brand.metaKeywords || "",
     });
     setIsModalOpen(true);
+  };
+
+  const handleToggleShowInMenu = (brand: IBrand) => {
+    const nextShowInMenu = brand.showInMenu === false ? true : false;
+    const existingGroups = (brand.menuGroups && brand.menuGroups.length > 0)
+      ? brand.menuGroups
+      : brand.menuGroup
+      ? [brand.menuGroup]
+      : detectBrandGroup(brand.name, brand.slug);
+
+    updateBrand.mutate({
+      id: brand._id,
+      data: {
+        showInMenu: nextShowInMenu,
+        menuGroups: existingGroups,
+        menuGroup: existingGroups[0] || "",
+      },
+    });
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -437,26 +486,34 @@ export function AdminBrands() {
                   </td>
                   <td className="px-6 py-4 text-slate-500 font-mono text-xs">{brand.slug}</td>
                   <td className="px-6 py-4">
-                    {brand.showInMenu !== false ? (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                          <Globe size={11} />
-                          In Submenu
-                        </span>
-                        {(brand.menuGroups && brand.menuGroups.length > 0
-                          ? brand.menuGroups
-                          : (brand.menuGroup ? [brand.menuGroup] : [])
-                        ).map((g) => (
-                          <span key={g} className="text-[11px] text-slate-700 bg-slate-100 font-medium px-2 py-0.5 rounded border border-slate-200">
-                            {g}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleShowInMenu(brand)}
+                      className="group flex flex-wrap items-center gap-1.5 text-left cursor-pointer focus:outline-none"
+                      title={`Click to ${brand.showInMenu !== false ? "hide from" : "show in"} storefront menu`}
+                    >
+                      {brand.showInMenu !== false ? (
+                        <>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0 group-hover:bg-emerald-100 transition-colors">
+                            <Globe size={11} />
+                            In Submenu
                           </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
-                        Hidden from Submenu
-                      </span>
-                    )}
+                          {(brand.menuGroups && brand.menuGroups.length > 0
+                            ? brand.menuGroups
+                            : (brand.menuGroup ? [brand.menuGroup] : [])
+                          ).map((g) => (
+                            <span key={g} className="text-[11px] text-slate-700 bg-slate-100 font-medium px-2 py-0.5 rounded border border-slate-200">
+                              {g}
+                            </span>
+                          ))}
+                        </>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200 group-hover:bg-slate-200 transition-colors">
+                          <EyeOff size={11} />
+                          Hidden from Submenu
+                        </span>
+                      )}
+                    </button>
                   </td>
                   <td className="px-6 py-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${

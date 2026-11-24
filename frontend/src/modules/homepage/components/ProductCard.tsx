@@ -44,10 +44,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
       {/* Content Area */}
       <div className="flex-1 py-1">
-        <h3 className="font-sans font-bold text-sm md:text-[15px] text-neutral-900 leading-tight line-clamp-2">
+        <h3 className="font-sans font-bold text-sm md:text-[15px] text-neutral-900 leading-tight line-clamp-2 group-hover:text-brand transition-colors no-underline">
           {product.title}
         </h3>
-        <p className="text-banner font-extrabold text-xs md:text-sm mt-1.5">
+        <p className="text-neutral-900 font-extrabold text-xs md:text-sm mt-1.5">
           {product.priceFormatted}
         </p>
         

@@ -120,14 +120,14 @@ export default function TermsPage() {
       <section>
         <h2>7. Exchange and Replacement Policy</h2>
         <p>
-          To ensure every rider gets the right protective fit, Store4Riders provides a dedicated <strong>7-Day Size and Gear Exchange Policy</strong> for eligible riding jackets, helmets, pants, boots, and gloves from the date of confirmed delivery.
+          To ensure every rider gets the right protective fit, Store4Riders provides a dedicated <strong>Size and Gear Exchange Policy</strong> for eligible riding jackets, helmets, pants, boots, and gloves from the date of confirmed delivery.
         </p>
         <blockquote>
           <strong>Important Note:</strong> Store4Riders operates on an exchange and replacement model. We do not provide monetary cash refunds for non-defective merchandise. In the event that your requested replacement size or color variant is out of stock, store credit with lifetime validity will be credited to your account.
         </blockquote>
         <p>
           For full conditions, qualified product categories, and reverse pickup instructions, please refer to our dedicated{" "}
-          <Link href="/returns-replacements-store4riders" className="text-brand hover:underline font-bold">
+          <Link href="/returns" className="text-brand hover:underline font-bold">
             Exchange Policy
           </Link>
           .

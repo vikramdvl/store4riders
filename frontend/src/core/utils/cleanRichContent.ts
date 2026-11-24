@@ -59,12 +59,21 @@ export function cleanRichContent(rawHtml: string): string {
   clean = clean.replace(/\snowrap\b/gi, "");
 
   // 4. Rewrite old store4riders absolute URLs and .html relative URLs to clean internal Next.js paths
-  clean = clean.replace(/href=["']https?:\/\/(?:www\.)?store4riders\.com\/?([^"']*)["']/gi, (_match, path) => {
+  clean = clean.replace(/href=["'](?:https?:)?\/\/(?:www\.)?store4riders\.com\/?([^"']*)["']/gi, (_match, path) => {
     const cleanPath = path ? `/${path.replace(/\.html(\?.*)?$/i, "$1")}` : "/";
     return `href="${cleanPath}"`;
   });
   clean = clean.replace(/href=["']\/([^"']+)\.html(\?[^"']*)?(#[^"']*)?["']/gi, 'href="/$1$2$3"');
   clean = clean.replace(/href=["']([^"'\/][^"']+)\.html(\?[^"']*)?(#[^"']*)?["']/gi, 'href="/$1$2$3"');
+
+  // 4a. Strip target="_blank" from internal links so they navigate smoothly within Next.js App Router
+  clean = clean.replace(/<a\b([^>]*?)href=["'](\/[^"']*)["']([^>]*?)>/gi, (_match, before, href, after) => {
+    const cleanBefore = before.replace(/\s*target=["'][^"']*["']/gi, "").replace(/\s*rel=["'][^"']*["']/gi, "").trim();
+    const cleanAfter = after.replace(/\s*target=["'][^"']*["']/gi, "").replace(/\s*rel=["'][^"']*["']/gi, "").trim();
+    const beforePart = cleanBefore ? ` ${cleanBefore}` : "";
+    const afterPart = cleanAfter ? ` ${cleanAfter}` : "";
+    return `<a${beforePart} href="${href}"${afterPart}>`;
+  });
 
   // Rewrite legacy Magento price bracket category links to active query params
   clean = clean

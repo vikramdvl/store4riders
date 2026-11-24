@@ -482,6 +482,43 @@ export class InvoiceGenerator {
           doc.moveTo(startX, currentY).lineTo(startX + fullWidth, currentY).strokeColor("#e2e8f0").stroke();
         }
 
+        // Cash on Delivery (COD) Handling Charges Row if > 0
+        if (order.pricing?.codHandlingFee && order.pricing.codHandlingFee > 0) {
+          const codFeeRowHeight = 20;
+          const rate = order.pricing.codHandlingFee;
+          const taxVal = rate;
+          const totalAmt = taxVal;
+          totalTaxable += taxVal;
+
+          drawVerticalLines(currentY, currentY + codFeeRowHeight);
+
+          doc.fillColor(textColor).font("Helvetica").fontSize(7.5);
+          const itemIndex = order.items.length + (order.pricing?.shipping && order.pricing.shipping > 0 ? 2 : 1);
+          doc.text(`${itemIndex}`, cols.sr, currentY + 5, { width: cols.desc - cols.sr, align: "center" });
+          
+          doc.font("Helvetica-Bold").text(`Cash on Delivery (COD) Handling Charges`, cols.desc + 4, currentY + 3);
+          doc.font("Helvetica").fontSize(6.5).fillColor(mutedTextColor).text(`HSN/SAC: 9968`, cols.desc + 4, currentY + 11);
+
+          const numY = currentY + 5;
+          doc.font("Helvetica").fontSize(7.5).fillColor(textColor);
+          doc.text(`1 NOS`, cols.qty, numY, { width: cols.rate - cols.qty, align: "center" });
+          doc.text(pdfPrice(rate), cols.rate, numY, { width: cols.disc - cols.rate - 4, align: "right" });
+          doc.text(pdfPrice(0), cols.disc, numY, { width: cols.taxVal - cols.disc - 4, align: "right" });
+          doc.text(pdfPrice(taxVal), cols.taxVal, numY, { width: cols.cgst - cols.taxVal - 4, align: "right" });
+
+          if (isInterState) {
+            doc.text(pdfPrice(0), cols.cgst, numY, { width: cols.total - cols.cgst - 4, align: "right" });
+            doc.text(pdfPrice(totalAmt), cols.total, numY, { width: startX + fullWidth - cols.total - 4, align: "right" });
+          } else {
+            doc.text(pdfPrice(0), cols.cgst, numY, { width: cols.sgst - cols.cgst - 4, align: "right" });
+            doc.text(pdfPrice(0), cols.sgst, numY, { width: cols.total - cols.sgst - 4, align: "right" });
+            doc.text(pdfPrice(totalAmt), cols.total, numY, { width: startX + fullWidth - cols.total - 4, align: "right" });
+          }
+
+          currentY += codFeeRowHeight;
+          doc.moveTo(startX, currentY).lineTo(startX + fullWidth, currentY).strokeColor("#e2e8f0").stroke();
+        }
+
         // --- 5. TOTALS SECTION ---
         const totalsHeight = 36;
         doc.rect(startX, currentY, fullWidth, totalsHeight).fillAndStroke(tableHeaderBg, borderColor);

@@ -72,7 +72,7 @@ export default function AdminSettingsDashboard() {
               : "text-neutral-500 border-transparent hover:text-neutral-800"
           }`}
         >
-          <span>Policy Pages Content</span>
+          <span>CMS &amp; Policy Pages</span>
           <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded uppercase">
             CMS
           </span>

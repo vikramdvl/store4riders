@@ -30,11 +30,11 @@ const handleRequest = async (
   try {
     await connectToDatabase();
     
-    const resolvedParams = await props.params;
-    let routePath = resolvedParams?.route || [];
+    const resolvedParams = props?.params ? await props.params : undefined;
+    let routePath = (resolvedParams?.route || []).filter(Boolean);
     
-    // API Versioning Support (/api/v1/...)
-    if (routePath[0] === "v1") {
+    // Normalize path by stripping any leading 'api' or version prefixes ('v1', 'v2')
+    while (routePath.length > 0 && (routePath[0] === "api" || /^v\d+$/i.test(routePath[0]))) {
       routePath = routePath.slice(1);
     }
     
@@ -53,6 +53,7 @@ const handleRequest = async (
     let res = await centralRouter(req, routePath);
     
     if (!res) {
+      logger.warn(`[404] Route not found: ${req.method} ${req.nextUrl.pathname} (routePath: ${routePath.join('/')})`);
       res = NextResponse.json({ error: "Route not found" }, { status: 404 });
     }
 

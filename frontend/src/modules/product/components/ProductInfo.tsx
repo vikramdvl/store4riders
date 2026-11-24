@@ -36,7 +36,7 @@ export function ProductInfo({ product }: ProductInfoProps) {
           </div>
           <span className="text-sm text-zinc-500">(128 Reviews)</span>
         </div>
-        <p className="text-2xl font-bold text-brand">{formatPrice(product.basePrice)}</p>
+        <p className="text-2xl font-bold text-neutral-900">{formatPrice(product.basePrice)}</p>
       </div>
 
       <div className="prose dark:prose-invert text-zinc-600 dark:text-zinc-300">

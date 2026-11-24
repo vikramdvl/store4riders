@@ -39,8 +39,8 @@ export const GooglePayPhonePeModule: React.FC = () => {
       {/* Header */}
       <header className="w-full">
         <TopBanner />
-        <div className="w-full bg-white relative z-40 border-b border-neutral-200 shadow-2xs sticky top-0">
-          <Navbar logoText="Store4Riders" theme="light" />
+        <div className="w-full bg-[#161616] relative z-40 border-b border-[#2a2a2a] shadow-2xs sticky top-0">
+          <Navbar logoText="Store4Riders" theme="dark-solid" />
         </div>
       </header>
 

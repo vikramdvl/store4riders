@@ -136,7 +136,7 @@ export const CategoryShowcaseSection: React.FC<CategoryShowcaseSectionProps> = (
               {/* Card Details with Store Theme */}
               <div className="flex flex-col space-y-0.5 md:space-y-1 mt-1">
                 <Link href={card.linkUrl} className="block">
-                  <h3 className="font-sans font-bold text-[12px] md:text-[14px] text-neutral-900 line-clamp-1 leading-tight group-hover:text-banner transition-colors uppercase">
+                  <h3 className="font-sans font-bold text-[12px] md:text-[14px] text-neutral-900 line-clamp-1 leading-tight group-hover:text-brand transition-colors uppercase no-underline">
                     {card.title}
                   </h3>
                 </Link>

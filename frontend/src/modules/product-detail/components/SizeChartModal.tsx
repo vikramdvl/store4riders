@@ -143,7 +143,7 @@ export const SizeChartModal: React.FC<SizeChartModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-neutral-100 bg-neutral-50/90 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="16"
@@ -154,7 +154,7 @@ export const SizeChartModal: React.FC<SizeChartModalProps> = ({
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="text-brand"
+                className="text-blue-700"
               >
                 <rect x="2" y="8" width="20" height="8" rx="1" />
                 <line x1="6" y1="16" x2="6" y2="12" />

@@ -421,9 +421,9 @@ export const CheckoutPageModule = () => {
   if (!mounted) {
     return (
       <div className="w-full min-h-screen bg-white flex flex-col font-sans">
-        <TopBanner message="Discount 20% For New Member," highlightText="ONLY FOR TODAY!!" />
-        <div className="bg-white border-b border-neutral-200">
-          <Navbar logoText="Store4Riders" theme="light"  />
+        <TopBanner message="Helmets, jackets, gloves: 100% genuine, EMI and COD available." />
+        <div className="bg-[#161616] border-b border-[#2a2a2a]">
+          <Navbar logoText="Store4Riders" theme="dark-solid" />
         </div>
         <div className="max-w-[1400px] w-full mx-auto px-4 py-16 animate-pulse">
           <div className="h-12 w-64 bg-neutral-100 rounded mb-8" />
@@ -462,7 +462,21 @@ export const CheckoutPageModule = () => {
   const estimatedTax = isGstExclusive
     ? Math.round((taxableSubtotal * defaultTaxRate) / 100)
     : Math.round(taxableSubtotal - (taxableSubtotal / (1 + defaultTaxRate / 100)));
-  const total = Math.max(0, taxableSubtotal + shippingCost + (isGstExclusive ? estimatedTax : 0));
+
+  // COD Cash Handling Charges (Tiered based on order value, dynamic from Admin Settings)
+  const codHandlingFee = paymentOption === "cod" && settings?.codHandlingFeeEnabled !== false
+    ? (taxableSubtotal <= (settings?.codHandlingFeeThreshold ?? 5000)
+        ? (settings?.codHandlingFeeTier1Amount ?? 100)
+        : (settings?.codHandlingFeeTier2Amount ?? 200))
+    : 0;
+
+  const total = Math.max(0, taxableSubtotal + shippingCost + codHandlingFee + (isGstExclusive ? estimatedTax : 0));
+
+  const isCodWithAdvance = paymentOption === "cod" && Boolean(settings?.codPartialPaymentEnabled) && (settings?.codPartialPaymentValue || 0) > 0;
+  const codAdvanceValue = Number(settings?.codPartialPaymentValue) || 10;
+  const advanceAmount = isCodWithAdvance
+    ? (settings?.codPartialPaymentType === "fixed" ? Math.min(codAdvanceValue, total) : Math.round((total * codAdvanceValue) / 100))
+    : 0;
 
   const handleApplyCoupon = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -951,16 +965,14 @@ export const CheckoutPageModule = () => {
       
       {/* Top Banner */}
       <TopBanner
-        message="Discount 20% For New Member,"
-        highlightText="ONLY FOR TODAY!!"
+        message="Helmets, jackets, gloves: 100% genuine, EMI and COD available."
       />
 
       {/* Navbar with Brand Logo */}
-      <div className="bg-white border-b border-neutral-200 relative z-40">
+      <div className="bg-[#161616] border-b border-[#2a2a2a] relative z-40">
         <Navbar
           logoText="Store4Riders"
-          theme="light"
-          
+          theme="dark-solid"
         />
       </div>
 
@@ -972,7 +984,7 @@ export const CheckoutPageModule = () => {
       ]} />
 
       {/* Main Content */}
-      <main className="max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-24 md:pt-3 md:pb-12 flex-1">
+      <main className="max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-1.5 pb-20 md:pt-2 md:pb-8 flex-1">
         
         {/* ========================================================================= */}
         {/* SCREEN 3: SUCCESS */}
@@ -1031,7 +1043,7 @@ export const CheckoutPageModule = () => {
           /* ========================================================================= */
           <>
             {/* Two Column Layout */}
-            <div className="flex flex-col lg:flex-row gap-8 lg:gap-16 items-start">
+            <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 items-start">
               
               {/* Left Column: Form Steps */}
               <div className="w-full lg:w-[62%]">
@@ -1106,55 +1118,53 @@ export const CheckoutPageModule = () => {
               </div>
 
               {/* Right Column: ORDER SUMMARY (Sticky on desktop) */}
-              <div className="w-full lg:w-[38%] lg:sticky lg:top-4 z-20">
-                <div className="flex flex-col bg-white border border-slate-100/90 ring-1 ring-slate-900/[0.03] shadow-[0_16px_40px_-6px_rgba(15,23,42,0.06),0_4px_16px_-2px_rgba(15,23,42,0.02),inset_0_1.5px_0_rgba(255,255,255,1),inset_0_-2px_4px_rgba(0,0,0,0.015)] rounded-3xl p-6 sm:p-7">
+              <div className="w-full lg:w-[38%] lg:sticky lg:top-3 z-20">
+                <div className="flex flex-col bg-white border border-slate-100/90 ring-1 ring-slate-900/[0.03] shadow-[0_16px_40px_-6px_rgba(15,23,42,0.06),0_4px_16px_-2px_rgba(15,23,42,0.02),inset_0_1.5px_0_rgba(255,255,255,1),inset_0_-2px_4px_rgba(0,0,0,0.015)] rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 lg:max-h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
                   
                   {/* Heading */}
-                  <h2 className="font-sans font-bold text-lg text-neutral-900 tracking-tight mb-4">
-                    Order Summary
-                  </h2>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="font-sans font-bold text-sm sm:text-base text-neutral-900 tracking-tight">
+                      Order Summary
+                    </h2>
+                    <span className="text-[11px] font-semibold text-neutral-500">
+                      {items.reduce((s, it) => s + it.quantity, 0)} {items.reduce((s, it) => s + it.quantity, 0) === 1 ? "item" : "items"}
+                    </span>
+                  </div>
 
                   {/* Promo Coupon Input / Applied Box */}
-                  <div className="mb-4">
+                  <div className="mb-2">
                     {!user ? (
-                      <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs transition-all shadow-[inset_0_1px_2px_rgba(245,158,11,0.04)]">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="p-2 rounded-xl bg-amber-100/90 text-amber-700 shrink-0 shadow-2xs">
-                            <TagIcon className="w-4 h-4" />
+                      <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2 text-xs transition-all shadow-[inset_0_1px_2px_rgba(245,158,11,0.04)]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <TagIcon className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                          <span className="text-[11px] text-neutral-700 font-medium truncate">
+                            Have promo? <strong className="font-semibold text-neutral-900">Sign in for discounts</strong>
                           </span>
-                          <div className="min-w-0">
-                            <span className="font-bold text-neutral-900 block leading-tight truncate">
-                              Have a promo code?
-                            </span>
-                            <span className="text-[11px] text-neutral-600 block leading-tight truncate mt-0.5">
-                              Sign in or register to unlock discounts
-                            </span>
-                          </div>
                         </div>
                         <Link
                           href="/login?redirect=/checkout"
-                          className="shrink-0 px-3.5 py-2 bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs rounded-xl shadow-[0_2px_6px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.25)] transition-all active:translate-y-0.5 whitespace-nowrap"
+                          className="shrink-0 px-2.5 py-1 bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-[10px] rounded-lg shadow-xs transition-all whitespace-nowrap"
                         >
-                          Sign In / Register →
+                          Sign In →
                         </Link>
                       </div>
                     ) : appliedCoupon ? (
-                      <div className="bg-emerald-50/90 border border-emerald-200/90 text-emerald-800 px-3.5 py-3 rounded-2xl text-xs font-semibold flex items-center justify-between shadow-[inset_0_1px_2px_rgba(16,185,129,0.04)]">
-                        <div className="flex items-center gap-2">
-                          <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>Coupon <strong>{appliedCoupon.code}</strong> applied!</span>
+                      <div className="bg-emerald-50/90 border border-emerald-200/90 text-emerald-800 px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-between shadow-[inset_0_1px_2px_rgba(16,185,129,0.04)]">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span className="truncate">Coupon <strong>{appliedCoupon.code}</strong> applied!</span>
                         </div>
                         <button
                           type="button"
                           onClick={handleRemoveCoupon}
-                          className="text-emerald-700 hover:text-emerald-900 font-bold text-xs ml-2 underline cursor-pointer"
+                          className="text-emerald-700 hover:text-emerald-900 font-bold text-xs ml-2 underline cursor-pointer shrink-0"
                         >
                           Remove
                         </button>
                       </div>
                     ) : (
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-1.5">
                           <input
                             type="text"
                             placeholder="Promo coupon code"
@@ -1166,21 +1176,21 @@ export const CheckoutPageModule = () => {
                                 handleApplyCoupon();
                               }
                             }}
-                            className="flex-1 px-3.5 py-2.5 text-xs border border-slate-200/90 rounded-xl font-mono uppercase bg-slate-50/80 hover:bg-white focus:bg-white focus:outline-none focus:border-banner focus:ring-4 focus:ring-banner/10 shadow-[inset_0_2px_4px_rgba(15,23,42,0.03)] transition-all"
+                            className="flex-1 px-2.5 py-1.5 text-xs border border-slate-200/90 rounded-xl font-mono uppercase bg-slate-50/80 hover:bg-white focus:bg-white focus:outline-none focus:border-banner focus:ring-2 focus:ring-banner/10 shadow-[inset_0_2px_4px_rgba(15,23,42,0.03)] transition-all"
                           />
                           <button
                             type="button"
                             onClick={() => handleApplyCoupon()}
                             disabled={validateCouponMutation.isPending || !couponInput.trim()}
-                            className="px-4 py-2.5 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-[0_4px_12px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.25)] active:translate-y-0.5 cursor-pointer shrink-0"
+                            className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-xs active:translate-y-0.5 cursor-pointer shrink-0"
                           >
-                            {validateCouponMutation.isPending ? "Checking..." : "Apply"}
+                            {validateCouponMutation.isPending ? "..." : "Apply"}
                           </button>
                         </div>
 
                         {/* Quick-apply active offers */}
                         {publicCoupons.length > 0 && (
-                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          <div className="flex flex-wrap items-center gap-1 pt-0.5">
                             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Offers:</span>
                             {publicCoupons.slice(0, 3).map((pc) => (
                               <button
@@ -1209,9 +1219,9 @@ export const CheckoutPageModule = () => {
                                   });
                                 }}
                                 disabled={validateCouponMutation.isPending}
-                                className="text-[10px] bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-mono font-bold px-2.5 py-1 rounded-full border border-slate-200/80 shadow-2xs flex items-center gap-1 transition-all active:translate-y-0.5 cursor-pointer"
+                                className="text-[9.5px] bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-mono font-bold px-2 py-0.5 rounded-full border border-slate-200/80 shadow-2xs flex items-center gap-1 transition-all cursor-pointer"
                               >
-                                <TagIcon className="w-3 h-3 text-banner" />
+                                <TagIcon className="w-2.5 h-2.5 text-banner" />
                                 <span>{pc.code}</span>
                                 <span className="text-slate-500 font-sans font-normal">
                                   ({pc.discountType === "percent" ? `${pc.discountValue}%` : `₹${pc.discountValue}`})
@@ -1225,7 +1235,7 @@ export const CheckoutPageModule = () => {
                   </div>
 
                   {/* Items Mini List */}
-                  <div className="flex flex-col gap-3 mb-5 max-h-[190px] overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="flex flex-col gap-2 mb-2.5 max-h-[145px] overflow-y-auto pr-1.5 custom-scrollbar">
                     {items.map((item) => {
                       const product = item.product || {};
                       const name = product.name || "Riding Gear";
@@ -1233,27 +1243,27 @@ export const CheckoutPageModule = () => {
                       const rawImg = getCartItemImage(item, FALLBACK_IMAGE);
 
                       return (
-                        <div key={`${item.productId}-${item.variantId}`} className="flex items-center gap-3 group">
-                          <div className="relative w-12 h-12 bg-slate-50 rounded-xl overflow-hidden shrink-0 border border-slate-200/70 shadow-[inset_0_1px_2px_rgba(15,23,42,0.04)] group-hover:border-slate-300 transition-colors">
+                        <div key={`${item.productId}-${item.variantId}`} className="flex items-center gap-2.5 group py-0.5">
+                          <div className="relative w-9 h-9 bg-slate-50 rounded-lg overflow-hidden shrink-0 border border-slate-200/70 shadow-[inset_0_1px_2px_rgba(15,23,42,0.04)] group-hover:border-slate-300 transition-colors">
                             <Image
                               src={rawImg}
                               alt={name}
                               fill
-                              className="object-contain p-1"
-                              sizes="48px"
+                              className="object-contain p-0.5"
+                              sizes="36px"
                             />
                           </div>
 
                           <div className="flex flex-col flex-1 min-w-0">
-                            <span className="font-bold text-[11px] text-neutral-900 uppercase line-clamp-1 leading-tight">
+                            <span className="font-bold text-[11px] text-neutral-900 uppercase line-clamp-1 leading-snug">
                               {name}
                             </span>
-                            <span className="text-[11px] text-neutral-500 font-medium mt-0.5">
+                            <span className="text-[10px] text-neutral-500 font-medium">
                               Qty: {item.quantity}
                             </span>
                           </div>
                           
-                          <div className="text-[13px] font-bold text-neutral-900">
+                          <div className="text-xs font-bold text-neutral-900 shrink-0">
                             {formatPrice(price * item.quantity)}
                           </div>
                         </div>
@@ -1262,14 +1272,14 @@ export const CheckoutPageModule = () => {
                   </div>
 
                   {/* Cost Breakdown (Inset Clay Box) */}
-                  <div className="flex flex-col gap-2.5 p-4 bg-slate-50/70 border border-slate-200/70 rounded-2xl shadow-[inset_0_2px_4px_rgba(15,23,42,0.02)]">
-                    <div className="flex items-center justify-between text-sm text-neutral-500 font-medium">
+                  <div className="flex flex-col gap-1.5 p-3 bg-slate-50/70 border border-slate-200/70 rounded-xl shadow-[inset_0_2px_4px_rgba(15,23,42,0.02)]">
+                    <div className="flex items-center justify-between text-xs text-neutral-500 font-medium">
                       <span>Subtotal</span>
                       <span className="text-neutral-900 font-semibold">{formatPrice(subtotal)}</span>
                     </div>
 
                     {couponDiscount > 0 && appliedCoupon && (
-                      <div className="flex items-center justify-between text-sm font-medium">
+                      <div className="flex items-center justify-between text-xs font-medium">
                         <span className="text-emerald-600 flex items-center gap-1">
                           Coupon ({appliedCoupon.code})
                         </span>
@@ -1277,50 +1287,51 @@ export const CheckoutPageModule = () => {
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between text-sm font-medium text-neutral-500">
+                    <div className="flex items-center justify-between text-xs font-medium text-neutral-500">
                       <span>Shipping</span>
                       <span className={shippingCost === 0 ? 'text-emerald-600 font-bold uppercase' : 'text-neutral-900 font-semibold'}>
                         {shippingCost === 0 ? "Free" : formatPrice(shippingCost)}
                       </span>
                     </div>
 
+                    {paymentOption === "cod" && codHandlingFee > 0 && (
+                      <div className="flex items-center justify-between text-xs font-medium text-amber-900">
+                        <span className="flex items-center gap-1 text-amber-800">
+                          COD Handling Fee
+                        </span>
+                        <span className="text-amber-900 font-bold">+{formatPrice(codHandlingFee)}</span>
+                      </div>
+                    )}
+
                     {isGstExclusive ? (
-                      <div className="flex items-center justify-between text-sm font-medium text-neutral-600">
+                      <div className="flex items-center justify-between text-xs font-medium text-neutral-600">
                         <span>GST ({defaultTaxRate === 0 ? "0% - Exempt" : `${defaultTaxRate}%`})</span>
                         <span className="text-neutral-900 font-bold">+{formatPrice(estimatedTax)}</span>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-between text-xs font-medium text-neutral-400">
-                        <span>GST (Included in price)</span>
-                        <span>{formatPrice(estimatedTax)}</span>
+                      <div className="text-xs font-medium text-neutral-500">
+                        GST (Included in price)
                       </div>
                     )}
                   </div>
 
                   {/* Total */}
-                  <div className="flex items-center justify-between pt-4 mt-2">
-                    <span className="text-base font-bold text-neutral-900">Total</span>
-                    <span className="text-2xl font-black text-banner tracking-tight">
+                  <div className="flex items-center justify-between pt-2 mt-0.5">
+                    <span className="text-sm font-bold text-neutral-900">Total</span>
+                    <span className="text-lg sm:text-xl font-black text-banner tracking-tight">
                       {formatPrice(total)}
                     </span>
                   </div>
 
                   {/* Desktop Step 2 Place Order Button - positioned directly below Total in Order Summary */}
                   {currentStep === 2 && (
-                    <div className="hidden lg:flex flex-col gap-2.5 mt-5">
-                      {paymentOption === "cod" && Boolean(settings?.codPartialPaymentEnabled) && (settings?.codPartialPaymentValue || 0) > 0 && (
-                        <div className="p-3.5 bg-[#F0F5FF] border border-[#D0E1FD] rounded-2xl text-xs leading-relaxed text-[#172337] flex items-center justify-between gap-2.5 shadow-2xs">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <svg className="w-4 h-4 text-[#2874F0] shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
-                            </svg>
-                            <div className="text-[11.5px] leading-snug text-[#1E293B]">
-                              for <strong className="font-bold text-[#2874F0]">{settings?.codPartialPaymentType === "fixed" ? `₹${Number(settings?.codPartialPaymentValue || 0).toLocaleString("en-IN")}` : `${settings?.codPartialPaymentValue ?? 10}%`} advance payment</strong> you will be directed to <strong className="font-bold text-neutral-900">Payu Payment Gateway</strong>
-                            </div>
-                          </div>
-                          <div className="shrink-0 hidden sm:flex items-center bg-white px-2 py-0.5 border border-[#D0E1FD] rounded shadow-2xs h-5">
-                            <Image src="/icons/payment/payu.svg" alt="PayU" width={30} height={14} className="object-contain h-3.5 w-auto" priority loading="eager" unoptimized />
-                          </div>
+                    <div className="hidden lg:flex flex-col gap-1.5 mt-2">
+                      {isCodWithAdvance && (
+                        <div className="px-2.5 py-1.5 bg-[#F0F5FF] border border-[#D0E1FD] rounded-lg text-[10.5px] leading-tight text-[#172337] flex items-center justify-between gap-1 shadow-2xs">
+                          <span className="text-[#1E293B] truncate">
+                            Requires <strong className="font-bold text-[#2874F0]">{settings?.codPartialPaymentType === "fixed" ? `₹${Number(settings?.codPartialPaymentValue || 0).toLocaleString("en-IN")}` : `${settings?.codPartialPaymentValue ?? 10}%`} advance</strong> via PayU
+                          </span>
+                          <span className="text-[10px] text-[#2874F0] font-bold uppercase shrink-0">PayU</span>
                         </div>
                       )}
 
@@ -1328,26 +1339,28 @@ export const CheckoutPageModule = () => {
                         type="button"
                         onClick={handleAgreeToPay}
                         disabled={isProcessing || isPlacingOrder || !paymentOption}
-                        className="w-full bg-gradient-to-r from-banner to-[#ea4719] hover:from-[#f04f25] hover:to-[#d83c12] text-white font-black tracking-wider text-xs uppercase py-4 px-6 rounded-2xl shadow-[0_10px_24px_-4px_rgba(255,84,41,0.45),inset_0_1.5px_1px_rgba(255,255,255,0.4),inset_0_-2px_4px_rgba(0,0,0,0.15)] transition-all active:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                        className="w-full bg-gradient-to-r from-banner to-[#ea4719] hover:from-[#f04f25] hover:to-[#d83c12] text-white font-black tracking-wider text-xs uppercase py-3 px-5 rounded-xl shadow-[0_6px_16px_-4px_rgba(255,84,41,0.4),inset_0_1.5px_1px_rgba(255,255,255,0.4),inset_0_-2px_4px_rgba(0,0,0,0.15)] transition-all active:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                       >
                         {isProcessing || isPlacingOrder ? (
                           <>
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                             <span>PROCESSING...</span>
                           </>
+                        ) : isCodWithAdvance && advanceAmount > 0 ? (
+                          `PAY ₹${advanceAmount.toLocaleString("en-IN")} ADVANCE`
                         ) : (
                           "PLACE ORDER"
                         )}
                       </button>
 
-                      <p className="text-[11px] text-slate-400 text-center font-medium mt-1">
+                      <p className="text-[9.5px] text-slate-400 text-center font-medium">
                         By placing your order, you agree to Store4Riders Terms & Conditions.
                       </p>
                     </div>
                   )}
 
                   {/* Trust Badges */}
-                  <div className="flex items-center justify-center gap-3 mt-6 py-2 px-4 rounded-full bg-slate-50/80 border border-slate-200/60 shadow-[inset_0_1px_2px_rgba(15,23,42,0.02)] text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                  <div className="flex items-center justify-center gap-2.5 mt-2.5 py-1 px-3 rounded-full bg-slate-50/80 border border-slate-200/60 shadow-[inset_0_1px_2px_rgba(15,23,42,0.02)] text-[9px] text-slate-500 font-bold uppercase tracking-wider">
                     <span className="flex items-center gap-1.5"><ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-600"/> Secure Checkout</span>
                     <span>•</span>
                     <span className="flex items-center gap-1.5"><LockClosedIcon className="w-3.5 h-3.5 text-slate-600"/> 256-Bit Encrypted</span>

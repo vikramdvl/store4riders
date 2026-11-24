@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { handleRichTextClick } from "@/core/utils/cleanRichContent";
+import { cleanRichContent, handleRichTextClick } from "@/core/utils/cleanRichContent";
 import { resolveMagentoMediaUrls } from "@/core/utils/mediaUrlHelper";
 import { ReviewData } from "../types/product-detail.types";
 import { WriteReviewModal } from "./WriteReviewModal";
@@ -66,30 +66,7 @@ interface DescriptionSection {
 
 const cleanHtml = (html: string): string => {
   if (!html) return "";
-  let clean = resolveMagentoMediaUrls(html);
-
-  clean = clean
-    .replace(/(<p>\s*(&nbsp;|\s)*<\/p>\s*){2,}/gi, "<p>&nbsp;</p>")
-    .replace(/(<br\s*\/?>\s*){3,}/gi, "<br/><br/>")
-    .replace(/(<p>\s*(&nbsp;|\s)*<\/p>\s*)+$/gi, "")
-    .trim();
-
-  // Rewrite legacy URLs to Next.js routes
-  clean = clean.replace(/href=["']https?:\/\/(?:www\.)?store4riders\.com\/?([^"']*)["']/gi, (_match, path) => {
-    const cleanPath = path ? `/${path.replace(/\.html(\?.*)?$/i, "$1")}` : "/";
-    return `href="${cleanPath}"`;
-  });
-  clean = clean.replace(/href=["']\/([^"']+)\.html(\?[^"']*)?(#[^"']*)?["']/gi, 'href="/$1$2$3"');
-  clean = clean.replace(/href=["']([^"'\/][^"']+)\.html(\?[^"']*)?(#[^"']*)?["']/gi, 'href="/$1$2$3"');
-
-  // Ensure hyperlinks are styled blue instead of red brand color
-  clean = clean.replace(/<a\b[^>]*>/gi, (aTag) => {
-    return aTag
-      .replace(/\bhover:text-brand(?:\/\d+)?\b/gi, 'hover:text-blue-800')
-      .replace(/\btext-brand(?:\/\d+)?\b/gi, 'text-blue-600');
-  });
-
-  return clean;
+  return cleanRichContent(html);
 };
 
 const formatFeatureTitle = (rawText: string): string => {
@@ -359,7 +336,7 @@ export const DetailAndReviews: React.FC<{
         <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-8 lg:gap-12 items-start">
 
           {/* ─── LEFT: Product Details Card ─── */}
-          <div id="product-description-card" className="bg-white border border-[#e6e1da] rounded-xl p-4 sm:p-7 shadow-xs scroll-mt-20">
+          <div id="product-description-card" className="bg-white border border-neutral-200 rounded-xl p-4 sm:p-7 shadow-xs scroll-mt-20">
             {/* Inner Header - Hidden on mobile to prevent duplicate heading */}
             <div className="hidden md:flex items-center gap-3 pb-4 mb-6 border-b border-neutral-100">
               <span className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-100/80 flex items-center justify-center text-[#d9480f]">
@@ -377,9 +354,9 @@ export const DetailAndReviews: React.FC<{
 
             {/* Brand Banner with direct link to Brand Page */}
             {brand && (
-              <div className="mb-5 p-3 sm:p-3.5 rounded-xl bg-[#f7f4ef] border border-[#e6e1da] flex flex-wrap items-center justify-between gap-3">
+              <div className="mb-5 p-3 sm:p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-white border border-[#e6e1da] flex items-center justify-center text-[#111111] font-black text-xs shrink-0 shadow-2xs">
+                  <div className="w-9 h-9 rounded-lg bg-white border border-neutral-200 flex items-center justify-center text-[#111111] font-black text-xs shrink-0 shadow-2xs">
                     {brand.slice(0, 2).toUpperCase()}
                   </div>
                   <div>
@@ -547,7 +524,7 @@ export const CustomerReviews: React.FC<{
   return (
     <div className="flex flex-col gap-5">
       {/* Rating Summary Card */}
-      <div className="bg-white border border-[#e6e1da] rounded-xl p-5 shadow-2xs">
+      <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-2xs">
         <div className="flex items-center gap-4">
           <div className="text-center">
             <p className="text-4xl font-extrabold text-[#111111]">{reviews?.length > 0 ? averageRating : "–"}</p>

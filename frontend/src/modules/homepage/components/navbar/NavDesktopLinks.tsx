@@ -9,6 +9,7 @@ import { NavItem } from "../../types/homepage.types";
 interface NavDesktopLinksProps {
   items: NavItem[];
   isLight: boolean;
+  isDarkSolid?: boolean;
   hoveredNavId: string | null;
   hoveredMenuId: string | null;
   onNavEnter: (id: string, hasMega: boolean) => void;
@@ -23,6 +24,7 @@ interface NavDesktopLinksProps {
 export const NavDesktopLinks: React.FC<NavDesktopLinksProps> = ({
   items,
   isLight,
+  isDarkSolid = false,
   hoveredNavId,
   hoveredMenuId,
   onNavEnter,
@@ -35,7 +37,9 @@ export const NavDesktopLinks: React.FC<NavDesktopLinksProps> = ({
     >
       <div
         className={`relative flex items-center gap-0 xl:gap-0.5 2xl:gap-1 transition-all duration-300 ${
-          isLight
+          isDarkSolid
+            ? ""
+            : isLight
             ? ""
             : "bg-black/45 backdrop-blur-md border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.3)] rounded-full px-1 lg:px-1.5 xl:px-2 py-0.5 xl:py-1 ring-1 ring-white/10"
         }`}
@@ -54,8 +58,12 @@ export const NavDesktopLinks: React.FC<NavDesktopLinksProps> = ({
             >
               <Link
                 href={item.href}
-                className={`relative flex items-center gap-0.5 text-[9px] lg:text-[9.5px] xl:text-[10px] 2xl:text-[11px] font-sans font-semibold xl:font-bold leading-none tracking-tight xl:tracking-normal 2xl:tracking-wide uppercase px-1 lg:px-1 xl:px-1.5 2xl:px-2 py-1.5 rounded-full transition-all duration-150 z-10 cursor-pointer select-none active:scale-95 antialiased ${
-                  isLight
+                className={`relative flex items-center gap-0.5 text-[9px] lg:text-[9.5px] xl:text-[10px] 2xl:text-[11px] font-sans font-semibold xl:font-bold leading-none tracking-tight xl:tracking-normal 2xl:tracking-wide uppercase px-1.5 lg:px-2 xl:px-2.5 py-1.5 rounded-md transition-all duration-150 z-10 cursor-pointer select-none active:scale-95 antialiased ${
+                  isDarkSolid
+                    ? isHovered
+                      ? "text-white bg-white/20 shadow-xs"
+                      : "text-white/90 hover:text-white hover:bg-white/10"
+                    : isLight
                     ? isHovered
                       ? "text-neutral-950 bg-neutral-900/[0.08]"
                       : "text-neutral-700 hover:text-neutral-950 hover:bg-neutral-900/[0.05]"
@@ -69,7 +77,9 @@ export const NavDesktopLinks: React.FC<NavDesktopLinksProps> = ({
                   <ChevronDownIcon
                     className={`hidden 2xl:inline-block w-2.5 h-2.5 transition-transform duration-200 stroke-[2] pointer-events-none ${
                       isMenuOpen
-                        ? `rotate-180 ${isLight ? "text-neutral-950" : "text-white"}`
+                        ? `rotate-180 ${isDarkSolid ? "text-white" : isLight ? "text-neutral-950" : "text-white"}`
+                        : isDarkSolid
+                        ? "text-white/70 group-hover:text-white"
                         : isLight
                         ? "text-neutral-400 group-hover:text-neutral-700"
                         : "text-white/70 group-hover:text-white"
@@ -287,7 +297,7 @@ export const NavDesktopLinks: React.FC<NavDesktopLinksProps> = ({
                                         {feat.name}
                                       </span>
                                       {feat.priceFormatted && (
-                                        <span className="text-xs font-bold text-banner mt-1">
+                                        <span className="text-xs font-bold text-neutral-900 mt-1">
                                           {feat.priceFormatted}
                                         </span>
                                       )}

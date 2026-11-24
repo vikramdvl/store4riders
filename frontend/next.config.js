@@ -5,13 +5,53 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        source: '/returns',
-        destination: '/returns-replacements-store4riders',
+        source: '/exchange',
+        destination: '/returns',
         permanent: true,
       },
       {
-        source: '/exchange',
-        destination: '/returns-replacements-store4riders',
+        source: '/shipping-policy',
+        destination: '/shipping',
+        permanent: true,
+      },
+      {
+        source: '/terms-and-conditions',
+        destination: '/terms',
+        permanent: true,
+      },
+      {
+        source: '/privacy-policy-cookie-restriction-mode',
+        destination: '/privacy',
+        permanent: true,
+      },
+      {
+        source: '/customer-service',
+        destination: '/support',
+        permanent: true,
+      },
+      {
+        source: '/customer/account/login',
+        destination: '/login',
+        permanent: true,
+      },
+      {
+        source: '/customer/account/create',
+        destination: '/register',
+        permanent: true,
+      },
+      {
+        source: '/customer/account',
+        destination: '/account',
+        permanent: true,
+      },
+      {
+        source: '/sales/order/history',
+        destination: '/account/orders',
+        permanent: true,
+      },
+      {
+        source: '/checkout/cart',
+        destination: '/cart',
         permanent: true,
       },
     ];

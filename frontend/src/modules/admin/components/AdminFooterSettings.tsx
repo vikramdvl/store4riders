@@ -22,13 +22,16 @@ import {
 import { IFooterConfig, IFooterLink } from "@store4riders/shared-types";
 
 export const STORE_ROUTE_PRESETS = [
+  { label: "Exchange & Returns", url: "/returns" },
   { label: "Exchange & Replacements", url: "/returns-replacements-store4riders" },
   { label: "Warranty", url: "/warranty" },
-  { label: "Conditions of Sale & Use", url: "/terms" },
+  { label: "Conditions of Sale & Use", url: "/store4riders-conditions-of-use-and-sale" },
+  { label: "Conditions of Sale & Use (Short)", url: "/terms" },
   { label: "Privacy and Cookie Policy", url: "/privacy" },
   { label: "Legal Information", url: "/legal" },
   { label: "Shipping Policies", url: "/shipping" },
-  { label: "Store Policies", url: "/store-policies" },
+  { label: "Store Policies", url: "/store4riders-store-policies" },
+  { label: "Store Policies (Short)", url: "/store-policies" },
   { label: "About us", url: "/about-us" },
   { label: "Contact Us", url: "/contact-us" },
   { label: "Your Account", url: "/account" },
@@ -50,7 +53,7 @@ const INITIAL_DEFAULTS: IFooterConfig = {
   showSocialLinks: true,
   column1Title: "EXCHANGE & REPLACEMENTS",
   column1Links: [
-    { label: "Exchange & Replacements", url: "/returns-replacements-store4riders", openInNewTab: false },
+    { label: "Exchange & Replacements", url: "/returns", openInNewTab: false },
     { label: "Warranty", url: "/warranty", openInNewTab: false },
     { label: "Shipping Policies", url: "/shipping", openInNewTab: false },
   ],
@@ -65,10 +68,10 @@ const INITIAL_DEFAULTS: IFooterConfig = {
   ],
   column3Title: "POLICIES & LEGAL",
   column3Links: [
-    { label: "Conditions of Sale & Use", url: "/terms", openInNewTab: false },
+    { label: "Conditions of Sale & Use", url: "/store4riders-conditions-of-use-and-sale", openInNewTab: false },
     { label: "Privacy and Cookie Policy", url: "/privacy", openInNewTab: false },
     { label: "Legal", url: "/legal", openInNewTab: false },
-    { label: "Store Policies", url: "/store-policies", openInNewTab: false },
+    { label: "Store Policies", url: "/store4riders-store-policies", openInNewTab: false },
   ],
   column4Title: "ABOUT US",
   column4Links: [
@@ -81,8 +84,8 @@ const INITIAL_DEFAULTS: IFooterConfig = {
   copyrightText: "© {year} MotoHive Media Pvt. Ltd. (Store4Riders). All rights reserved.",
   bottomLinks: [
     { label: "Privacy Policy", url: "/privacy", openInNewTab: false },
-    { label: "Terms of Service", url: "/terms", openInNewTab: false },
-    { label: "Exchange Policy", url: "/returns-replacements-store4riders", openInNewTab: false },
+    { label: "Terms of Service", url: "/store4riders-conditions-of-use-and-sale", openInNewTab: false },
+    { label: "Exchange Policy", url: "/returns", openInNewTab: false },
   ],
 };
 

@@ -41,7 +41,10 @@ export const CheckoutPaymentStep = ({
     ? settings.enabledGateways
     : ["payu", "ccavenue", "snapmint", "cod"];
     
-  const availableGateways = baseGateways.filter(g => (g !== "cod" || isCodAvailable) && g !== "upi" && g !== "gpay");
+  // Filter available gateways and strictly ensure COD is always placed at the very bottom
+  const filteredGateways = baseGateways.filter(g => (g !== "cod" || isCodAvailable) && g !== "upi" && g !== "gpay");
+  const onlineGateways = filteredGateways.filter(g => g !== "cod");
+  const availableGateways = filteredGateways.includes("cod") ? [...onlineGateways, "cod"] : onlineGateways;
 
   const isSnapmintIneligible = snapmintMin > 0 && total !== undefined && total < snapmintMin;
 
@@ -92,6 +95,12 @@ export const CheckoutPaymentStep = ({
   };
 
   const isCodWithAdvance = Boolean(settings?.codPartialPaymentEnabled) && (settings?.codPartialPaymentValue || 0) > 0;
+  const isCodHandlingFeeEnabled = settings?.codHandlingFeeEnabled !== false;
+  const codHandlingFee = isCodHandlingFeeEnabled
+    ? ((total || 0) <= (settings?.codHandlingFeeThreshold ?? 5000)
+        ? (settings?.codHandlingFeeTier1Amount ?? 100)
+        : (settings?.codHandlingFeeTier2Amount ?? 200))
+    : 0;
 
   const codAdvanceText = settings?.codPartialPaymentType === "fixed"
     ? `₹${Number(settings?.codPartialPaymentValue || 0).toLocaleString("en-IN")}`
@@ -424,6 +433,11 @@ export const CheckoutPaymentStep = ({
                                 {codAdvanceText} Advance
                               </span>
                             )}
+                            {isCodHandlingFeeEnabled && (
+                              <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-full tracking-wide shadow-2xs">
+                                +₹{codHandlingFee} Cash Handling Fee
+                              </span>
+                            )}
                           </div>
                           <div className="shrink-0 scale-95 origin-right">
                             <div className="flex items-center gap-1.5 shrink-0">
@@ -440,7 +454,7 @@ export const CheckoutPaymentStep = ({
                           </div>
                         </div>
                         <span className="text-[11px] text-neutral-500 mt-0.5 pr-2">
-                          Pay in cash or UPI when package is delivered at your doorstep
+                          Pay in cash or UPI when package is delivered at your doorstep{isCodHandlingFeeEnabled ? ` (includes ₹${codHandlingFee} courier cash handling charge)` : ""}
                         </span>
 
                         {/* Advance Payment Banner */}
@@ -506,14 +520,23 @@ export const CheckoutPaymentStep = ({
           )}
         </div>
 
-        {/* Desktop Back Navigation */}
-        <div className="hidden lg:flex items-center justify-start pt-2">
+        {/* Desktop Navigation & Place Order */}
+        <div className="hidden lg:flex items-center justify-between gap-4 pt-4 mt-2 border-t border-slate-100">
           <button
             type="button"
             onClick={() => setCurrentStep(1)}
-            className="border border-slate-200 hover:border-slate-800 bg-white text-slate-700 hover:text-slate-900 text-xs uppercase font-bold px-6 py-3.5 rounded-xl transition-all flex items-center gap-2 shadow-[0_2px_6px_rgba(0,0,0,0.03),inset_0_1px_0_rgba(255,255,255,1)] active:translate-y-0.5 cursor-pointer"
+            className="border border-slate-200 hover:border-slate-800 bg-white text-slate-700 hover:text-slate-900 text-xs uppercase font-bold px-5 py-3 rounded-xl transition-all flex items-center gap-2 shadow-[0_2px_6px_rgba(0,0,0,0.03),inset_0_1px_0_rgba(255,255,255,1)] active:translate-y-0.5 cursor-pointer"
           >
             ← Back to Shipping Details
+          </button>
+
+          <button
+            type="button"
+            onClick={handleAgreeToPay}
+            disabled={isProcessing || !paymentOption}
+            className="bg-gradient-to-r from-banner to-[#ea4719] hover:from-[#f04f25] hover:to-[#d83c12] text-white font-black tracking-wider text-xs uppercase py-3.5 px-8 rounded-xl shadow-[0_8px_20px_-4px_rgba(255,84,41,0.45),inset_0_1.5px_1px_rgba(255,255,255,0.4),inset_0_-2px_4px_rgba(0,0,0,0.15)] transition-all active:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+          >
+            {isProcessing ? "PROCESSING..." : "PLACE ORDER"}
           </button>
         </div>
       </div>

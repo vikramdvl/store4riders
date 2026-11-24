@@ -6,7 +6,7 @@ import { PolicyPageLayout } from "@/components/layout/PolicyPageLayout";
 export const metadata: Metadata = {
   title: "Store Policies & Customer Guide | Store4Riders",
   description:
-    "Master directory and comprehensive guide to Store4Riders purchasing policies, 7-day exchanges, shipping rules, and customer support.",
+    "Master directory and comprehensive guide to Store4Riders purchasing policies, exchanges, shipping rules, and customer support.",
   alternates: {
     canonical: "https://store4riders.com/store-policies",
   },
@@ -55,9 +55,9 @@ export default function StorePoliciesPage() {
             </thead>
             <tbody>
               <tr>
-                <td><strong>Size & Gear Exchange</strong></td>
-                <td>7 Days from delivery date</td>
-                <td>Hassle-free size replacement; see <Link href="/returns-replacements-store4riders" className="text-brand font-bold hover:underline">Exchange Policy</Link></td>
+                <td><strong>Size &amp; Gear Exchange</strong></td>
+                <td>Standard exchange window</td>
+                <td>Hassle-free size replacement; see <Link href="/returns" className="text-brand font-bold hover:underline">Exchange Policy</Link></td>
               </tr>
               <tr>
                 <td><strong>Order Dispatch SLA</strong></td>
@@ -142,7 +142,7 @@ export default function StorePoliciesPage() {
                 Exchange &amp; Replacement Policy
               </h4>
               <p className="text-xs text-slate-500 mt-1">
-                7-day size swap rules, return QC parameters, and reverse pickup steps.
+                Size swap rules, return QC parameters, and reverse pickup steps.
               </p>
             </div>
           </Link>

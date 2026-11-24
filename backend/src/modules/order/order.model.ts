@@ -24,6 +24,7 @@ const pricingSchema = new Schema<IOrderPricing>(
     tax: { type: Number, required: true },
     taxRate: { type: Number, required: true },
     shipping: { type: Number, required: true },
+    codHandlingFee: { type: Number, required: false, default: 0 },
     total: { type: Number, required: true },
     codAmountToCollect: { type: Number, required: false },
     codPartialPaymentAmount: { type: Number, required: false },

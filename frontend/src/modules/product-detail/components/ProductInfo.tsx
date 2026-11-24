@@ -102,18 +102,18 @@ export const ProductInfo: React.FC<ProductInfoProps> = ({
             brandSlug ? (
               <Link
                 href={`/brands/${brandSlug}`}
-                className="inline-flex items-center gap-1.5 group text-[11px] md:text-xs font-black uppercase tracking-wider text-neutral-500 hover:text-brand transition-colors"
+                className="inline-flex items-center gap-1.5 group text-[11px] md:text-xs font-black uppercase tracking-wider text-neutral-500 hover:text-blue-700 transition-colors"
                 title={`Explore ${brand} collection`}
               >
                 <span className="text-[10px] font-semibold text-neutral-400 normal-case tracking-normal">Brand:</span>
-                <span className="text-[#ab1509] group-hover:underline underline-offset-2 font-black">
+                <span className="text-blue-700 group-hover:underline underline-offset-2 font-black">
                   {brand}
                 </span>
               </Link>
             ) : (
               <div className="inline-flex items-center gap-1.5 text-[11px] md:text-xs font-black uppercase tracking-wider text-neutral-500">
                 <span className="text-[10px] font-semibold text-neutral-400 normal-case tracking-normal">Brand:</span>
-                <span className="text-neutral-900 font-black">{brand}</span>
+                <span className="text-blue-700 font-black">{brand}</span>
               </div>
             )
           ) : (
@@ -137,7 +137,7 @@ export const ProductInfo: React.FC<ProductInfoProps> = ({
                 const el = document.getElementById("customer-reviews") || document.getElementById("customer-reviews-section");
                 el?.scrollIntoView({ behavior: "smooth", block: "center" });
               }}
-              className="flex items-center gap-1.5 text-[9px] font-bold text-neutral-400 uppercase tracking-widest cursor-pointer hover:text-brand transition-colors group"
+              className="flex items-center gap-1.5 text-[9px] font-bold text-neutral-400 uppercase tracking-widest cursor-pointer hover:text-blue-700 transition-colors group"
               title="Click to write the first review"
             >
               <StarIcon className="w-3 h-3 text-neutral-300 group-hover:text-amber-400 transition-colors" />
@@ -157,7 +157,7 @@ export const ProductInfo: React.FC<ProductInfoProps> = ({
         {/* Pricing (Side by Side) */}
         <div className="flex items-center justify-between w-full mt-0.5">
           <div className="flex items-baseline gap-2">
-            <span className="font-sans font-extrabold text-brand text-lg md:text-xl">
+            <span className="font-sans font-extrabold text-neutral-900 text-lg md:text-xl">
               {priceFormatted}
             </span>
             {originalPriceFormatted && discountBadge && (
@@ -313,7 +313,7 @@ export const ProductInfo: React.FC<ProductInfoProps> = ({
                   type="button"
                   suppressHydrationWarning
                   onClick={() => setIsDescExpanded(!isDescExpanded)}
-                  className="text-[10px] font-extrabold text-[#ab1509] hover:text-[#8a1107] uppercase tracking-wider hover:underline transition-all flex items-center gap-1 py-0.5 cursor-pointer text-left"
+                  className="text-[10px] font-extrabold text-blue-700 hover:text-blue-900 uppercase tracking-wider hover:underline transition-all flex items-center gap-1 py-0.5 cursor-pointer text-left"
                 >
                   {isDescExpanded ? "READ LESS" : "READ MORE"}
                 </button>
@@ -324,7 +324,7 @@ export const ProductInfo: React.FC<ProductInfoProps> = ({
                 type="button"
                 suppressHydrationWarning
                 onClick={handleScrollToDetailedDescription}
-                className="text-[10px] font-extrabold text-[#ab1509] hover:text-[#8a1107] uppercase tracking-wider hover:underline transition-all flex items-center gap-1 py-0.5 cursor-pointer text-right ml-auto"
+                className="text-[10px] font-extrabold text-blue-700 hover:text-blue-900 uppercase tracking-wider hover:underline transition-all flex items-center gap-1 py-0.5 cursor-pointer text-right ml-auto"
               >
                 Detailed Description
               </button>

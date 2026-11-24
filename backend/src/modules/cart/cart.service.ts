@@ -219,6 +219,8 @@ export class CartService {
           slug: product.slug,
           taxClassName: product.taxClassName,
           allowBackorders: product.allowBackorders,
+          weight: product.weight,
+          weightUnit: (product as any).weightUnit || "kg",
           ...(item.product || {}),
         };
         // Pass the calculated tax back up

@@ -319,9 +319,19 @@ export class OrderService {
     const shipping = qualifiesForFreeShipping
       ? (maxItemShippingSurcharge > 0 ? maxItemShippingSurcharge : 0)
       : (discountedSubtotal > 0 ? applicableStandardShipping : 0);
+
+    // COD Cash Handling Charges (Tiered couriers fee configurable via Admin Settings)
+    let codHandlingFee = 0;
+    if (paymentMethod === "cod" && settings.codHandlingFeeEnabled !== false) {
+      const threshold = typeof settings.codHandlingFeeThreshold === "number" ? settings.codHandlingFeeThreshold : 5000;
+      const tier1 = typeof settings.codHandlingFeeTier1Amount === "number" ? settings.codHandlingFeeTier1Amount : 100;
+      const tier2 = typeof settings.codHandlingFeeTier2Amount === "number" ? settings.codHandlingFeeTier2Amount : 200;
+      codHandlingFee = discountedSubtotal <= threshold ? tier1 : tier2;
+    }
+
     const totalAmount = Math.round((isInclusive
-      ? discountedSubtotal + shipping
-      : discountedSubtotal + totalTax + shipping) * 100) / 100;
+      ? discountedSubtotal + shipping + codHandlingFee
+      : discountedSubtotal + totalTax + shipping + codHandlingFee) * 100) / 100;
 
     const pricing: any = {
       subtotal,
@@ -331,6 +341,7 @@ export class OrderService {
       tax: totalTax,
       taxRate: defaultTaxRate, // Keep for backward compatibility or display
       shipping,
+      codHandlingFee,
       total: totalAmount
     };
 

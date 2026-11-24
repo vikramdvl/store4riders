@@ -368,7 +368,7 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
   };
 
   return (
-    <div className="w-full min-h-screen flex flex-col font-sans bg-[#faf8f5] text-[#111111] relative">
+    <div className="w-full min-h-screen flex flex-col font-sans bg-white text-neutral-900 relative">
       
       {/* 1. Header Global Area */}
       <TopBanner
@@ -383,7 +383,7 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
 
       {/* Authoritative breadcrumbs matching storefront category taxonomy strictly */}
       <Breadcrumb 
-        className="bg-[#faf8f5] border-b border-[#e6e1da]"
+        className="bg-white border-b border-neutral-100"
         items={resolveProductBreadcrumbs(product)} 
       />
 

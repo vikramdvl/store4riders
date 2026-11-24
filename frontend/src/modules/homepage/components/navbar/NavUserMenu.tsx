@@ -12,6 +12,7 @@ import {
 
 interface NavUserMenuProps {
   isLight: boolean;
+  isDarkSolid?: boolean;
   isOpen: boolean;
   mounted: boolean;
   isAuthenticated: boolean;
@@ -28,6 +29,7 @@ interface NavUserMenuProps {
  */
 export const NavUserMenu: React.FC<NavUserMenuProps> = ({
   isLight,
+  isDarkSolid = false,
   isOpen,
   mounted,
   isAuthenticated,
@@ -45,7 +47,9 @@ export const NavUserMenu: React.FC<NavUserMenuProps> = ({
         aria-label="User Account"
         suppressHydrationWarning
         className={`p-2 xl:p-2.5 rounded-full transition-all duration-200 cursor-pointer flex items-center gap-1 active:scale-95 ${
-          isLight
+          isDarkSolid
+            ? "text-white hover:text-white hover:bg-neutral-800"
+            : isLight
             ? "text-neutral-700 hover:text-neutral-950 hover:bg-neutral-900/[0.06]"
             : "text-white bg-black/45 backdrop-blur-md border border-white/20 hover:bg-black/70 shadow-md ring-1 ring-white/10"
         }`}

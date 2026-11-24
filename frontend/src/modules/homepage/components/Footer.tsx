@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Mail, ArrowRight, Instagram, Facebook, Youtube, ChevronDown } from "lucide-react";
+import { Mail, Phone, MapPin, ArrowRight, Instagram, Facebook, Youtube, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -15,16 +15,16 @@ const DEFAULT_ABOUT_LINKS: IFooterLink[] = [
 ];
 
 const DEFAULT_EXCHANGE_LINKS: IFooterLink[] = [
-  { label: "Exchange & Replacements", url: "/returns-replacements-store4riders", openInNewTab: false },
+  { label: "Exchange & Replacements", url: "/returns", openInNewTab: false },
   { label: "Warranty", url: "/warranty", openInNewTab: false },
   { label: "Shipping Policies", url: "/shipping", openInNewTab: false },
 ];
 
 const DEFAULT_POLICIES_LINKS: IFooterLink[] = [
-  { label: "Conditions of Sale & Use", url: "/terms", openInNewTab: false },
+  { label: "Conditions of Sale & Use", url: "/store4riders-conditions-of-use-and-sale", openInNewTab: false },
   { label: "Privacy and Cookie Policy", url: "/privacy", openInNewTab: false },
   { label: "Legal", url: "/legal", openInNewTab: false },
-  { label: "Store Policies", url: "/store-policies", openInNewTab: false },
+  { label: "Store Policies", url: "/store4riders-store-policies", openInNewTab: false },
 ];
 
 const DEFAULT_SUPPORT_LINKS: IFooterLink[] = [
@@ -38,8 +38,8 @@ const DEFAULT_SUPPORT_LINKS: IFooterLink[] = [
 
 const DEFAULT_BOTTOM_LINKS: IFooterLink[] = [
   { label: "Privacy Policy", url: "/privacy", openInNewTab: false },
-  { label: "Terms of Service", url: "/terms", openInNewTab: false },
-  { label: "Exchange Policy", url: "/returns-replacements-store4riders", openInNewTab: false },
+  { label: "Terms of Service", url: "/store4riders-conditions-of-use-and-sale", openInNewTab: false },
+  { label: "Exchange Policy", url: "/returns", openInNewTab: false },
 ];
 
 /**
@@ -85,7 +85,14 @@ export const Footer: React.FC = () => {
   const youtubeUrl = settings?.youtubeUrl || "https://www.youtube.com/channel/UCfXjs09-TOC1WJnutHUjphg";
 
   // Strict URL sets to guarantee About Us and Policies are separated from Support and Exchange
-  const policyUrls = new Set(["/terms", "/privacy", "/legal", "/store-policies"]);
+  const policyUrls = new Set([
+    "/terms",
+    "/privacy",
+    "/legal",
+    "/store-policies",
+    "/store4riders-conditions-of-use-and-sale",
+    "/store4riders-store-policies",
+  ]);
   const aboutUrls = new Set(["/about-us", "/contact-us"]);
 
   // Tab 1: ABOUT US
@@ -125,7 +132,11 @@ export const Footer: React.FC = () => {
   // Newsletter
   const newsletterTitle = footer?.newsletterTitle?.trim() || "SUBSCRIBE US";
   const newsletterSubtitle = footer?.newsletterSubtitle?.trim() || "Get updates on new riding gear arrivals, exclusive discount coupons, and offers.";
-  const newsletterPlaceholder = footer?.newsletterPlaceholder?.trim() || "Enter your email address";
+  let rawPlaceholder = footer?.newsletterPlaceholder?.trim() || "";
+  if (!rawPlaceholder || rawPlaceholder.toLowerCase() === "enter your email address") {
+    rawPlaceholder = "Enter your email";
+  }
+  const newsletterPlaceholder = rawPlaceholder;
 
   // Sub-Footer Copyright & Bottom Links
   const currentYear = new Date().getFullYear().toString();
@@ -150,17 +161,17 @@ export const Footer: React.FC = () => {
   return (
     <footer className="w-full bg-black text-white pt-10 md:pt-16 pb-12 border-t border-neutral-900">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 md:px-12">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 lg:gap-6 xl:gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-[minmax(280px,1.5fr)_1fr_1.1fr_1.1fr_1.1fr_minmax(240px,1.4fr)] gap-6 lg:gap-6 xl:gap-8">
           
           {/* Column 1: Brand Logo, About, Contact info & Social Media */}
-          <div className="flex flex-col gap-4 sm:gap-6 sm:col-span-2 md:col-span-1 pb-4 border-b border-neutral-900 lg:border-none lg:pb-0">
+          <div className="flex flex-col gap-4 sm:gap-6 sm:col-span-2 md:col-span-3 lg:col-span-1 pb-4 border-b border-neutral-900 lg:border-none lg:pb-0">
             <div className="relative h-[46px] w-[184px] md:h-12 md:w-48 -ml-1 sm:-ml-2 mb-1 overflow-hidden rounded-sm">
               <Image 
                 src="/Store4riders-Logo.jpg" 
                 alt="Store4Riders Logo" 
                 fill 
                 sizes="(max-width: 768px) 184px, 192px"
-                className="object-contain object-left" 
+                className="object-contain object-left mix-blend-screen" 
               />
             </div>
 
@@ -172,16 +183,17 @@ export const Footer: React.FC = () => {
             
             {showContact && (
               <div 
-                className="flex flex-col gap-2 sm:gap-2.5 text-xs sm:text-sm font-sans text-neutral-300"
+                className="flex flex-col gap-2.5 text-xs sm:text-sm font-sans text-neutral-300"
                 suppressHydrationWarning
               >
                 {phone && (
                   <a
                     href={`tel:${phone.replace(/[^\d+]/g, "")}`}
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-neutral-300 hover:text-white transition-colors group"
+                    className="inline-flex items-center gap-2 whitespace-nowrap text-neutral-300 hover:text-white transition-colors group"
                     title={`Call Store4Riders at ${phone}`}
                     suppressHydrationWarning
                   >
+                    <Phone className="w-3.5 h-3.5 text-banner shrink-0" />
                     <span className="font-medium text-white group-hover:text-banner transition-colors shrink-0">
                       Contact Us:
                     </span>
@@ -193,26 +205,30 @@ export const Footer: React.FC = () => {
                 {emailAddress && (
                   <a
                     href={`mailto:${emailAddress}`}
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap text-neutral-300 hover:text-white transition-colors group"
+                    className="inline-flex items-center gap-2 whitespace-nowrap text-neutral-300 hover:text-white transition-colors group"
                     title={`Email Store4Riders at ${emailAddress}`}
                     suppressHydrationWarning
                   >
+                    <Mail className="w-3.5 h-3.5 text-banner shrink-0" />
                     <span className="font-medium text-white group-hover:text-banner transition-colors shrink-0">
                       Email:
                     </span>
-                    <span className="truncate group-hover:underline">
+                    <span className="group-hover:underline">
                       {emailAddress}
                     </span>
                   </a>
                 )}
                 {address && (
-                  <div className="flex items-start gap-1.5 text-neutral-300">
-                    <span className="font-medium text-white shrink-0">
-                      Address:
-                    </span>
-                    <span className="leading-relaxed">
-                      {address}
-                    </span>
+                  <div className="flex items-start gap-2 text-neutral-300">
+                    <MapPin className="w-3.5 h-3.5 text-banner shrink-0 mt-0.5" />
+                    <div className="flex flex-col">
+                      <span className="font-medium text-white">
+                        Address:
+                      </span>
+                      <span className="leading-relaxed">
+                        {address}
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -404,7 +420,7 @@ export const Footer: React.FC = () => {
           </div>
 
           {/* Column 6: Subscribe Us */}
-          <div className="flex flex-col sm:col-span-2 md:col-span-1 pt-2 lg:pt-0">
+          <div className="flex flex-col sm:col-span-2 md:col-span-3 lg:col-span-1 pt-2 lg:pt-0">
             <h3 className="text-xs sm:text-sm font-semibold tracking-wider text-white uppercase mb-4 sm:mb-6">
               {newsletterTitle}
             </h3>
@@ -413,14 +429,14 @@ export const Footer: React.FC = () => {
                 {newsletterSubtitle}
               </p>
             )}
-            <form onSubmit={handleSubscribe} className="relative flex items-center w-full max-w-md bg-[#4E5866] rounded-xs px-3.5 py-2.5 shadow-xs">
-              <Mail className="w-5 h-5 text-neutral-200 shrink-0 mr-3" />
+            <form onSubmit={handleSubscribe} className="relative flex items-center w-full max-w-md bg-[#4E5866] rounded-xs px-3 py-2.5 shadow-xs">
+              <Mail className="w-4 h-4 text-neutral-200 shrink-0 mr-2" />
               <input
                 type="email"
                 suppressHydrationWarning
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder={newsletterPlaceholder}
+                placeholder={newsletterPlaceholder || "Enter your email"}
                 className="w-full bg-transparent text-white placeholder-neutral-300 text-xs sm:text-sm outline-none pr-8 font-sans"
                 required
               />

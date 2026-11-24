@@ -193,9 +193,9 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
               <button 
                 type="button"
                 onClick={() => setShowSizeChart(true)}
-                className="inline-flex items-center gap-1.5 text-brand hover:underline cursor-pointer select-none whitespace-nowrap active:opacity-75"
+                className="inline-flex items-center gap-1.5 text-blue-700 hover:text-blue-900 hover:underline cursor-pointer select-none whitespace-nowrap active:opacity-75"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-700 shrink-0">
                   <rect x="2" y="8" width="20" height="8" rx="1" />
                   <line x1="6" y1="16" x2="6" y2="12" />
                   <line x1="10" y1="16" x2="10" y2="12" />
@@ -234,7 +234,7 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
                       </h4>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-xs text-neutral-500 font-medium line-clamp-1 max-w-[200px]">{productName}</span>
-                        <span className="text-xs font-bold text-brand shrink-0">{priceFormatted}</span>
+                        <span className="text-xs font-bold text-neutral-900 shrink-0">{priceFormatted}</span>
                       </div>
                     </div>
                     <button 
@@ -301,9 +301,9 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
                               setOpenDropdown(null);
                               setShowSizeChart(true);
                             }}
-                            className="inline-flex items-center gap-1 text-brand font-bold uppercase tracking-wider cursor-pointer hover:underline text-[10px] whitespace-nowrap active:opacity-75"
+                            className="inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 font-bold uppercase tracking-wider cursor-pointer hover:underline text-[10px] whitespace-nowrap active:opacity-75"
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-700 shrink-0">
                               <rect x="2" y="8" width="20" height="8" rx="1" />
                               <line x1="6" y1="16" x2="6" y2="12" />
                               <line x1="10" y1="16" x2="10" y2="12" />
@@ -481,16 +481,16 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
                       type="button"
                       suppressHydrationWarning
                       onClick={() => setShowSizeChart(true)}
-                      className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+                      className="flex items-center gap-1 text-blue-700 hover:text-blue-900 group transition-colors"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-500">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-700 shrink-0">
                         <rect x="2" y="8" width="20" height="8" rx="1" />
                         <line x1="6" y1="16" x2="6" y2="12" />
                         <line x1="10" y1="16" x2="10" y2="12" />
                         <line x1="14" y1="16" x2="14" y2="12" />
                         <line x1="18" y1="16" x2="18" y2="12" />
                       </svg>
-                      <span className="text-[9px] font-black uppercase text-neutral-900 underline underline-offset-2 tracking-wider">SIZE CHART</span>
+                      <span className="text-[9px] font-black uppercase text-blue-700 group-hover:text-blue-900 underline underline-offset-2 tracking-wider">SIZE CHART</span>
                     </button>
                   )}
                 </div>

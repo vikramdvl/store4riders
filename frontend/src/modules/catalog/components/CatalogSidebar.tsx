@@ -64,7 +64,7 @@ export const CatalogSidebar: React.FC = () => {
             <div className="px-8 pb-3 flex flex-col gap-3">
               <label className="flex items-center justify-between cursor-pointer group">
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" className="w-3.5 h-3.5 border-neutral-300 rounded-sm text-banner focus:ring-banner" />
+                  <input type="checkbox" className="w-3.5 h-3.5 border-neutral-300 rounded-sm text-banner focus:ring-banner accent-banner shrink-0 cursor-pointer" />
                   <span className="text-xs text-neutral-500 group-hover:text-neutral-800 transition-colors">Dress</span>
                 </div>
                 <span className="text-[9px] bg-neutral-100 text-neutral-500 px-1.5 py-0.5 rounded-sm">59+</span>
@@ -72,7 +72,7 @@ export const CatalogSidebar: React.FC = () => {
               
               <label className="flex items-center justify-between cursor-pointer group">
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" className="w-3.5 h-3.5 border-neutral-300 rounded-sm text-banner focus:ring-banner" />
+                  <input type="checkbox" className="w-3.5 h-3.5 border-neutral-300 rounded-sm text-banner focus:ring-banner accent-banner shrink-0 cursor-pointer" />
                   <span className="text-xs text-neutral-500 group-hover:text-neutral-800 transition-colors">Shirt</span>
                 </div>
                 <span className="text-[9px] bg-neutral-100 text-neutral-500 px-1.5 py-0.5 rounded-sm">27</span>

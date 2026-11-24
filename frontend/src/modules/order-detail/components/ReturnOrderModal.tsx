@@ -97,7 +97,7 @@ export const ReturnOrderModal: React.FC<ReturnOrderModalProps> = ({ order, onClo
                     {...register(`items.${index}.reason` as const)}
                     className="w-full border rounded p-2 text-sm focus:ring-brand focus:border-brand"
                     rows={2}
-                    placeholder="e.g., Size too small / requesting size M exchange..."
+                    placeholder="Describe the reason for exchange or return..."
                   />
                   {errors.items?.[index]?.reason && (
                     <p className="text-brand text-xs mt-1">{errors.items[index]?.reason?.message}</p>
@@ -140,7 +140,7 @@ export const ReturnOrderModal: React.FC<ReturnOrderModalProps> = ({ order, onClo
                     <input 
                       type="text" 
                       {...register("upiId")}
-                      placeholder="e.g., rahul@okhdfcbank"
+                      placeholder="username@bank or mobile@upi"
                       className="w-full border rounded p-2 text-sm"
                     />
                     {errors.upiId && <p className="text-brand text-xs mt-1">{errors.upiId.message}</p>}

@@ -138,7 +138,7 @@ export const RidersFavouritesSection: React.FC<RidersFavouritesSectionProps> = (
                   </span>
                 )}
                 <h3
-                  className={`font-sans font-bold text-[12px] md:text-[14px] text-neutral-900 line-clamp-1 leading-tight group-hover:text-banner transition-colors ${
+                  className={`font-sans font-bold text-[12px] md:text-[14px] text-neutral-900 line-clamp-1 leading-tight group-hover:text-brand transition-colors no-underline ${
                     isPlaceholder ? "tracking-widest" : ""
                   }`}
                 >

@@ -32,6 +32,8 @@ import {
   Receipt,
   Star,
   Ticket,
+  Info,
+  Phone,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useLogout } from "@/core/hooks/useAuth";
@@ -173,8 +175,10 @@ const navItems: NavItem[] = [
     allowedRoles: ["super_admin", "admin"],
     subItems: [
       { name: "Store Contact & SEO", href: "/admin/settings?tab=contact", icon: Globe },
-      { name: "Footer Navigation", href: "/admin/settings?tab=footer", icon: Layers },
+      { name: "About Us Content", href: "/admin/settings?tab=policies&page=about-us", icon: Info },
+      { name: "Contact Us Content", href: "/admin/settings?tab=policies&page=contact-us", icon: Phone },
       { name: "Policy & Page Content", href: "/admin/settings?tab=policies", icon: FileText },
+      { name: "Footer Navigation", href: "/admin/settings?tab=footer", icon: Layers },
       { name: "Shipping & Delivery", href: "/admin/settings?tab=shipping", icon: Truck },
       { name: "Payment & COD", href: "/admin/settings?tab=payments", icon: CreditCard },
       { name: "Tax & GST", href: "/admin/settings?tab=gst", icon: Receipt },

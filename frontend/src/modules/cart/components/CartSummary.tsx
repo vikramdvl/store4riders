@@ -27,7 +27,7 @@ export function CartSummary({ totalItems, totalPrice }: CartSummaryProps) {
         </div>
         <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4 flex justify-between font-bold text-lg">
           <span>Total</span>
-          <span className="text-brand">{formatPrice(totalPrice)}</span>
+          <span className="text-neutral-900">{formatPrice(totalPrice)}</span>
         </div>
       </div>
 
