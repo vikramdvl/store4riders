@@ -622,4 +622,225 @@ export class AdminService {
     }).exec();
     return { success: true };
   }
+
+  /**
+   * Real-time diagnostics for Database, Redis, Meilisearch, API runtime,
+   * Payment Gateways (config + 24h transaction health), and Shipping Providers.
+   */
+  static async getSystemHealth() {
+    const { ENV } = await import("../../core/config/env");
+    const { redisClient, isRedisConnected } = await import("../../core/cache/redis");
+    const { PaymentModel } = await import("../payment/payment.model");
+    const { SettingService } = await import("../settings/setting.service");
+    const { AuditLogModel } = await import("../audit-log/audit-log.model");
+
+    // 1. MongoDB Ping
+    let dbStatus: "healthy" | "degraded" | "down" = "down";
+    let dbLatencyMs: number | null = null;
+    try {
+      const start = Date.now();
+      if (mongoose.connection.readyState === 1 && mongoose.connection.db) {
+        await mongoose.connection.db.admin().ping();
+        dbLatencyMs = Date.now() - start;
+        dbStatus = dbLatencyMs > 1500 ? "degraded" : "healthy";
+      }
+    } catch {
+      dbStatus = "down";
+    }
+
+    // 2. Redis Ping
+    const redisConfigured = Boolean(process.env.REDIS_URL);
+    let redisStatus: "healthy" | "fallback_memory" | "down" = redisConfigured ? "down" : "fallback_memory";
+    let redisLatencyMs: number | null = null;
+    if (redisClient && isRedisConnected) {
+      try {
+        const start = Date.now();
+        await redisClient.ping();
+        redisLatencyMs = Date.now() - start;
+        redisStatus = "healthy";
+      } catch {
+        redisStatus = "fallback_memory";
+      }
+    } else if (redisConfigured) {
+      redisStatus = "fallback_memory";
+    }
+
+    // 3. Meilisearch Ping
+    const meiliHost = (process.env.MEILISEARCH_HOST || "").trim();
+    let meiliStatus: "healthy" | "degraded" | "down" | "not_configured" = meiliHost ? "down" : "not_configured";
+    let meiliLatencyMs: number | null = null;
+    if (meiliHost) {
+      try {
+        const start = Date.now();
+        const res = await fetch(`${meiliHost.replace(/\/+$/, "")}/health`, {
+          signal: AbortSignal.timeout(1500),
+        });
+        meiliLatencyMs = Date.now() - start;
+        meiliStatus = res.ok ? "healthy" : "degraded";
+      } catch {
+        meiliStatus = "down";
+      }
+    }
+
+    // 4. Payment Gateways (Configuration + 24h Transaction Health)
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [settings, paymentAgg, recentSystemErrors24h] = await Promise.all([
+      SettingService.getSettings().catch(() => null),
+      PaymentModel.aggregate([
+        { $match: { createdAt: { $gte: since24h } } },
+        {
+          $group: {
+            _id: { gateway: "$gateway", status: "$status" },
+            count: { $sum: 1 },
+            lastEventAt: { $max: "$createdAt" },
+          },
+        },
+      ]).catch(() => []),
+      AuditLogModel.countDocuments({
+        createdAt: { $gte: since24h },
+        category: "SYSTEM",
+        status: "failure",
+      }).catch(() => 0),
+    ]);
+
+    const enabledSet = new Set<string>(
+      Array.isArray(settings?.enabledGateways) ? settings.enabledGateways : []
+    );
+
+    const gatewayDefinitions: Array<{
+      gateway: "payu" | "ccavenue" | "snapmint" | "upi";
+      label: string;
+      configured: boolean;
+      mode: string | null;
+    }> = [
+      {
+        gateway: "payu",
+        label: "PayU",
+        configured: Boolean(ENV.PAYU_MERCHANT_KEY && ENV.PAYU_SALT),
+        mode: ENV.PAYU_MODE || (ENV.NODE_ENV === "production" ? "live" : "test"),
+      },
+      {
+        gateway: "ccavenue",
+        label: "CCAvenue",
+        configured: Boolean(ENV.CCAVENUE_MERCHANT_ID && ENV.CCAVENUE_ACCESS_CODE && ENV.CCAVENUE_WORKING_KEY),
+        mode: ENV.CCAVENUE_MODE || (ENV.NODE_ENV === "production" ? "live" : "test"),
+      },
+      {
+        gateway: "snapmint",
+        label: "Snapmint EMI",
+        configured: Boolean((ENV.SNAPMINT_MID || ENV.SNAPMINT_MERCHANT_ID) && ENV.SNAPMINT_SECRET),
+        mode: ENV.SNAPMINT_MODE || (ENV.NODE_ENV === "production" ? "live" : "test"),
+      },
+      {
+        gateway: "upi",
+        label: "Direct UPI / GPay",
+        configured: Boolean(settings?.upiMerchantVpa || ENV.GOOGLE_PAY_MERCHANT_VPA),
+        mode: settings?.googlePayEnvironment || ENV.GOOGLE_PAY_ENVIRONMENT || null,
+      },
+    ];
+
+    const paymentGateways = gatewayDefinitions.map((def) => {
+      const enabled = enabledSet.has(def.gateway);
+      let captured = 0;
+      let failed = 0;
+      let pending = 0;
+      let total = 0;
+      let lastEventAt: string | null = null;
+
+      for (const row of paymentAgg as any[]) {
+        if (row?._id?.gateway !== def.gateway) continue;
+        const count = Number(row.count || 0);
+        total += count;
+        const st = row?._id?.status;
+        if (st === "captured") captured += count;
+        else if (st === "failed") failed += count;
+        else pending += count;
+
+        if (row.lastEventAt) {
+          const iso = new Date(row.lastEventAt).toISOString();
+          if (!lastEventAt || iso > lastEventAt) lastEventAt = iso;
+        }
+      }
+
+      let health: "operational" | "degraded" | "misconfigured" | "disabled" = "disabled";
+      if (!enabled) {
+        health = "disabled";
+      } else if (!def.configured) {
+        health = "misconfigured";
+      } else if (failed >= 3 && captured === 0) {
+        health = "degraded";
+      } else {
+        health = "operational";
+      }
+
+      return {
+        gateway: def.gateway,
+        label: def.label,
+        enabled,
+        configured: def.configured,
+        mode: def.mode,
+        health,
+        last24h: { total, captured, failed, pending },
+        lastEventAt,
+      };
+    });
+
+    const shippingProviders = [
+      {
+        provider: "shiprocket" as const,
+        label: "Shiprocket",
+        configured: Boolean(ENV.SHIPROCKET_EMAIL && ENV.SHIPROCKET_PASSWORD),
+      },
+      {
+        provider: "delhivery" as const,
+        label: "Delhivery",
+        configured: Boolean(ENV.DELHIVERY_API_KEY),
+      },
+      {
+        provider: "xpressbees" as const,
+        label: "Xpressbees",
+        configured: Boolean(ENV.XPRESSBEES_API_KEY),
+      },
+    ];
+
+    const hasMisconfiguredGateway = paymentGateways.some(
+      (g) => g.health === "misconfigured" || g.health === "degraded"
+    );
+
+    const overallStatus: "healthy" | "degraded" | "critical" =
+      dbStatus === "down"
+        ? "critical"
+        : dbStatus === "degraded" || meiliStatus === "down" || hasMisconfiguredGateway || recentSystemErrors24h > 0
+          ? "degraded"
+          : "healthy";
+
+    return {
+      checkedAt: new Date().toISOString(),
+      overallStatus,
+      api: {
+        status: "healthy" as const,
+        uptimeSeconds: Math.round(process.uptime()),
+        memoryUsedMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+        nodeVersion: process.version,
+        environment: ENV.NODE_ENV,
+      },
+      database: {
+        status: dbStatus,
+        readyState: mongoose.connection.readyState,
+        latencyMs: dbLatencyMs,
+      },
+      redis: {
+        status: redisStatus,
+        configured: redisConfigured,
+        latencyMs: redisLatencyMs,
+      },
+      meilisearch: {
+        status: meiliStatus,
+        latencyMs: meiliLatencyMs,
+      },
+      paymentGateways,
+      shippingProviders,
+      recentSystemErrors24h,
+    };
+  }
 }

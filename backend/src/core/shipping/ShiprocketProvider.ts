@@ -207,6 +207,152 @@ export class ShiprocketProvider implements ShippingProvider {
     }
   }
 
+  /**
+   * Creates a Reverse Pickup order in Shiprocket (Customer Address -> Warehouse Hub)
+   */
+  async createReverseShipment(input: CreateShipmentInput): Promise<CreateShipmentResult> {
+    const token = await this.getAuthToken();
+    const warehouse = input.warehouseId
+      ? await WarehouseRepository.findById(input.warehouseId)
+      : await WarehouseRepository.findDefault();
+
+    const targetWarehouse = !warehouse?.addressLine1 ? await WarehouseRepository.findDefault() : warehouse;
+    if (!targetWarehouse || !targetWarehouse.pincode || !targetWarehouse.city || !targetWarehouse.state || !targetWarehouse.addressLine1) {
+      throw new AppError(
+        "Warehouse shipping address is incomplete. Please configure Warehouse address, city, state, and pincode in Admin -> Warehouses.",
+        400
+      );
+    }
+
+    const cleanCustomerPhone = (input.shippingAddress.phone || "").replace(/\D/g, "").slice(-10);
+    if (!cleanCustomerPhone || cleanCustomerPhone.length !== 10) {
+      throw new AppError("Customer phone number must contain a valid 10-digit mobile number for reverse pickup.", 400);
+    }
+    if (/^(\d)\1{9}$/.test(cleanCustomerPhone) || cleanCustomerPhone === "1234567890" || cleanCustomerPhone === "0123456789") {
+      throw new AppError(`Customer phone number '${cleanCustomerPhone}' is rejected by Shiprocket. Please update customer phone.`, 400);
+    }
+
+    const cleanCustomerPin = (input.shippingAddress.pincode || "").replace(/\D/g, "").slice(0, 6);
+    if (!cleanCustomerPin || cleanCustomerPin.length !== 6) {
+      throw new AppError("Customer pickup pincode must be a valid 6-digit postal code.", 400);
+    }
+
+    const cleanWarehousePhone = (targetWarehouse.phone || "").replace(/\D/g, "").slice(-10);
+    if (!cleanWarehousePhone || cleanWarehousePhone.length !== 10) {
+      throw new AppError("Warehouse contact phone must be a valid 10-digit mobile number for Shiprocket reverse return.", 400);
+    }
+
+    const rawCustomerName = (input.shippingAddress.fullName || "Customer").trim();
+    const custParts = rawCustomerName.split(/\s+/);
+    const pickupFirstName = custParts[0] || "Customer";
+    const pickupLastName = custParts.length > 1 ? custParts.slice(1).join(" ") : "";
+
+    const rawWhName = (targetWarehouse.contactPerson || targetWarehouse.name || "Store4Riders Warehouse").trim();
+    const whParts = rawWhName.split(/\s+/);
+    const shipFirstName = whParts[0] || "Store4Riders";
+    const shipLastName = whParts.length > 1 ? whParts.slice(1).join(" ") : "";
+
+    const custStreet = input.shippingAddress.addressLine1 || (input.shippingAddress as any)?.street || "";
+    const custLine2 = input.shippingAddress.addressLine2 || "";
+    let fullPickupAddress = [custStreet, custLine2].filter(Boolean).join(", ").trim();
+    if (fullPickupAddress.length < 10) {
+      fullPickupAddress = `${fullPickupAddress}, ${input.shippingAddress.city}, ${input.shippingAddress.state} - ${cleanCustomerPin}`;
+    }
+
+    try {
+      const payload = {
+        order_id: input.orderNumber,
+        order_date: new Date().toISOString().split("T")[0],
+        pickup_customer_name: pickupFirstName,
+        pickup_last_name: pickupLastName,
+        pickup_address: fullPickupAddress,
+        pickup_address_2: custLine2,
+        pickup_city: input.shippingAddress.city,
+        pickup_state: input.shippingAddress.state,
+        pickup_country: input.shippingAddress.country || "India",
+        pickup_pincode: cleanCustomerPin,
+        pickup_email: input.email || "customer@store4riders.com",
+        pickup_phone: cleanCustomerPhone,
+        pickup_isd_code: "91",
+        shipping_customer_name: shipFirstName,
+        shipping_last_name: shipLastName,
+        shipping_address: [targetWarehouse.addressLine1, targetWarehouse.addressLine2].filter(Boolean).join(", "),
+        shipping_address_2: targetWarehouse.addressLine2 || "",
+        shipping_city: targetWarehouse.city,
+        shipping_state: targetWarehouse.state,
+        shipping_country: targetWarehouse.country || "India",
+        shipping_pincode: String(targetWarehouse.pincode).replace(/\D/g, "").slice(0, 6),
+        shipping_email: targetWarehouse.email || "support@store4riders.com",
+        shipping_phone: cleanWarehousePhone,
+        order_items: input.items.map((item) => ({
+          name: item.name,
+          sku: item.sku || "SKU-DEFAULT",
+          units: item.quantity,
+          selling_price: Math.max(1, Number(item.unitPrice) || 1),
+          qc_enable: true,
+        })),
+        payment_method: "Prepaid",
+        sub_total: Math.max(1, Number(input.totalAmount) || 1),
+        length: Math.max(0.5, Number(input.length) || 15),
+        breadth: Math.max(0.5, Number(input.breadth) || 15),
+        height: Math.max(0.5, Number(input.height) || 10),
+        weight: Math.max(0.05, Number(input.weight) || 0.5),
+      };
+
+      const response = await shippingPost(`${this.baseUrl}/orders/create/return`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const shipmentId = String(response.data?.shipment_id || response.data?.data?.shipment_id || "");
+      const providerOrderId = response.data?.order_id ? String(response.data.order_id) : undefined;
+      let awb = response.data?.awb_code;
+      let courierName = response.data?.courier_name;
+
+      if (input.autoAssignAwb && !awb && shipmentId) {
+        try {
+          const awbRes = await shippingPost(
+            `${this.baseUrl}/courier/assign/awb`,
+            { shipment_id: Number(shipmentId), is_return: 1 },
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          const awbData = awbRes.data?.response?.data;
+          if (awbData?.awb_code) {
+            awb = awbData.awb_code;
+            courierName = awbData.courier_name || courierName;
+          }
+        } catch (awbError: any) {
+          logger.warn(`Shiprocket Reverse Auto AWB deferred: ${awbError.response?.data?.message || awbError.message}`);
+        }
+      }
+
+      return {
+        success: true,
+        shipmentId,
+        providerOrderId,
+        awb: awb || undefined,
+        courierName: courierName || "Shiprocket Reverse",
+        message: awb
+          ? `Reverse pickup AWB ${awb} scheduled via ${courierName || "Shiprocket"}`
+          : "Reverse pickup order created in Shiprocket Dashboard.",
+      };
+    } catch (error: any) {
+      const resData = error.response?.data;
+      let errorMsg = "Failed to create Shiprocket reverse pickup";
+      if (typeof resData?.message === "string" && resData.message.trim()) {
+        errorMsg = resData.message.trim();
+      } else if (resData?.errors && typeof resData.errors === "object") {
+        errorMsg =
+          Object.entries(resData.errors)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`)
+            .join(" | ") || errorMsg;
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
+      logger.error(`Shiprocket Reverse Shipment Error: ${errorMsg}`);
+      throw new AppError(errorMsg, 400);
+    }
+  }
+
   async requestPickup(shipmentId: string, providerOrderId?: string): Promise<PickupResult> {
     const token = await this.getAuthToken();
     try {
@@ -309,7 +455,17 @@ export class ShiprocketProvider implements ShippingProvider {
       const warehouse = input.warehouseId 
         ? await WarehouseRepository.findById(input.warehouseId) 
         : await WarehouseRepository.findDefault();
-      const originPincode = warehouse?.pincode || "411030";
+      
+      let originPincode = warehouse?.pincode;
+      if (!originPincode) {
+        const { SettingRepository } = await import("../../modules/settings/setting.repository");
+        const settings = await SettingRepository.getSettings();
+        originPincode = settings?.storeOriginPincode;
+      }
+
+      if (!originPincode) {
+        throw new AppError("No warehouse origin pincode configured for courier rate calculation", 400);
+      }
       
       const response = await shippingGet(`${this.baseUrl}/courier/serviceability/`, {
         params: {

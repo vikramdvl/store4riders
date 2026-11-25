@@ -346,5 +346,79 @@ describe("ShipmentService - Deep Edge Case & Robustness Suite", () => {
       await expect(ShipmentService.syncTracking("ship_no_awb")).rejects.toThrow(AppError);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // EDGE CASE 8: SCOPED ITEM-LEVEL EXCHANGE REVERSE & REPLACEMENT SHIPMENTS
+  // ---------------------------------------------------------------------------
+  describe("Edge Case 8: Item-Level Scoped Exchange Shipments", () => {
+    it("sends only the exchanged item (not all 4 order items) to courier for reverse pickup", async () => {
+      const mockOrder = {
+        _id: "order_multi_items",
+        orderNumber: "OD-S4R-MULTI",
+        paymentMethod: "prepaid",
+        pricing: { total: 12000 },
+        shippingAddress: {
+          fullName: "Rider Multi",
+          phone: "9876543210",
+          addressLine1: "12 MG Road",
+          city: "Pune",
+          state: "Maharashtra",
+          pincode: "411001",
+          country: "India",
+        },
+        items: [
+          { _id: "i1", productId: "p1", name: "Axor Helmet", sku: "AXR-L", quantity: 1, unitPrice: 5000 },
+          { _id: "i2", productId: "p2", name: "Rynox Jacket", sku: "RYN-XL", quantity: 1, unitPrice: 5500 },
+          { _id: "i3", productId: "p3", name: "Viaterra Gloves", sku: "VIA-M", quantity: 1, unitPrice: 1500 },
+        ],
+      };
+
+      (OrderModel.findById as any).mockResolvedValue(mockOrder);
+      (ProductModel.find as any).mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          lean: vi.fn().mockReturnValue({
+            exec: vi.fn().mockResolvedValue([{ _id: "p3", weight: 0.3 }]),
+          }),
+        }),
+      });
+      (WarehouseRepository.findDefault as any).mockResolvedValue({
+        _id: "wh_1",
+        name: "Pune Hub",
+        shiprocketLocationId: "Pune_Hub",
+        pincode: "411001",
+      });
+
+      const mockProvider = {
+        createReverseShipment: vi.fn().mockResolvedValue({
+          success: true,
+          shipmentId: "sr_rev_1",
+          awb: "REV-VIA-1",
+          courierName: "Shiprocket Reverse",
+        }),
+      };
+      (ShippingProviderFactory.create as any).mockReturnValue(mockProvider);
+      (ShipmentModel as any).mockImplementation(() => ({ save: vi.fn().mockResolvedValue(true) }));
+
+      await ShipmentService.createExchangeReverseShipment({
+        orderId: "order_multi_items",
+        provider: "shiprocket",
+        exchangeItems: [{ orderItemId: "i3", productId: "p3", sku: "VIA-M", name: "Viaterra Gloves", quantity: 1 }],
+      });
+
+      expect(mockProvider.createReverseShipment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          items: [
+            expect.objectContaining({
+              name: "Viaterra Gloves",
+              sku: "VIA-M",
+              quantity: 1,
+              unitPrice: 1500,
+            }),
+          ],
+          weight: 0.3,
+        })
+      );
+    });
+  });
 });
 

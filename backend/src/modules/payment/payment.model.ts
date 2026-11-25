@@ -34,6 +34,12 @@ const paymentSchema = new Schema<PaymentDocument>(
       enum: ["payu", "ccavenue", "snapmint", "upi"],
       required: true,
     },
+    paymentPurpose: {
+      type: String,
+      enum: ["order", "exchange_fee"],
+      default: "order",
+      index: true,
+    },
     refunds: { type: [refundSchema], default: [] },
     webhookEvents: { type: [String], default: [] },
     idempotencyKey: { type: String, required: false },
@@ -49,5 +55,20 @@ paymentSchema.index({ gatewayOrderId: 1 });
 paymentSchema.index({ orderId: 1 });
 paymentSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });
 
+// Patch cached Mongoose model during Next.js dev hot-reloads
+const cachedPaymentModel = (mongoose.models as Record<string, mongoose.Model<PaymentDocument>> | undefined)?.Payment;
+if ((cachedPaymentModel as any)?.schema && typeof (cachedPaymentModel as any).schema.path === "function") {
+  if (!(cachedPaymentModel as any).schema.path("paymentPurpose")) {
+    (cachedPaymentModel as any).schema.add({
+      paymentPurpose: {
+        type: String,
+        enum: ["order", "exchange_fee"],
+        default: "order",
+        index: true,
+      },
+    });
+  }
+}
+
 export const PaymentModel =
-  mongoose.models.Payment || mongoose.model<PaymentDocument>("Payment", paymentSchema);
+  cachedPaymentModel || mongoose.model<PaymentDocument>("Payment", paymentSchema);

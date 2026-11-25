@@ -4,8 +4,9 @@ import React, { useState, useEffect } from "react";
 import { StarIcon } from "@heroicons/react/24/solid";
 import { FunnelIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { SidebarFilters } from "./SidebarFilters";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useUIStore } from "@/stores/useUIStore";
+import { updateQueryUrlShallow } from "@/core/utils/shallowUrl";
 
 interface FloatingCatalogBarProps {
   totalCount?: number;
@@ -19,7 +20,7 @@ interface FloatingCatalogBarProps {
 export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
   totalCount,
   reviewCount,
-  averageRating = 4.8,
+  averageRating,
   isFetching = false,
   sizeChart,
   onOpenSizeChart,
@@ -30,10 +31,9 @@ export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
   }, []);
 
   const displayReviewCount = mounted ? reviewCount : undefined;
-  const displayRating = mounted ? averageRating : 4.8;
+  const displayRating = mounted ? averageRating : undefined;
 
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
-  const router = useRouter();
   const searchParams = useSearchParams();
   const sortParam = searchParams.get("sort") || "";
 
@@ -51,7 +51,7 @@ export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
     }
     current.set("page", "1");
     const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-    router.push(`${pathname}?${current.toString()}`, { scroll: false });
+    updateQueryUrlShallow(`${pathname}?${current.toString()}`, { replace: true });
   };
 
   const isMobileMenuOpen = useUIStore((state) => state.isMobileMenuOpen);
@@ -85,7 +85,8 @@ export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
       {/* FLOATING STACKED CONTAINER (Mobile Only) */}
       <div className="fixed bottom-0 inset-x-0 z-40 lg:hidden flex flex-col pointer-events-none shadow-[0_-4px_20px_rgba(0,0,0,0.15)]">
         
-        {/* 1. REVIEWS FLOATING BUTTON (Top) */}
+        {/* 1. REVIEWS FLOATING BUTTON (Top, only shown when rating exists) */}
+        {displayRating && displayRating > 0 ? (
         <a
           href="https://www.google.com/maps/search/?api=1&query=Store4Riders"
           target="_blank"
@@ -128,6 +129,7 @@ export const FloatingCatalogBar: React.FC<FloatingCatalogBarProps> = ({
             </svg>
           </div>
         </a>
+        ) : null}
 
         {/* 2. CATEGORY FILTER FLOATING BUTTON (Bottom) */}
         <button

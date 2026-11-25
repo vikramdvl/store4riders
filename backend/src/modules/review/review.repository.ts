@@ -71,7 +71,7 @@ export class ReviewRepository {
   static async calculateStoreRatingStats(): Promise<{ avgRating: number; reviewCount: number }> {
     const reviews = await StoreReviewModel.find({ isActive: true }).select("rating").lean().exec();
     if (!reviews || reviews.length === 0) {
-      return { avgRating: 4.8, reviewCount: 0 };
+      return { avgRating: 0, reviewCount: 0 };
     }
     const total = reviews.reduce((sum, r: any) => sum + (r.rating || 0), 0);
     const avgRating = Number((total / reviews.length).toFixed(1));

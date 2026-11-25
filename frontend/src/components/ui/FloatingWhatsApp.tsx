@@ -88,8 +88,8 @@ export const FloatingWhatsApp: React.FC = () => {
     return null;
   }
 
-  // Do not render on Admin or API routes
-  if (!pathname || pathname.startsWith("/admin") || pathname.startsWith("/api")) {
+  // Do not render on Admin, API, or Checkout routes (keep checkout distraction-free on mobile)
+  if (!pathname || pathname.startsWith("/admin") || pathname.startsWith("/api") || pathname.startsWith("/checkout")) {
     return null;
   }
 

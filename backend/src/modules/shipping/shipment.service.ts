@@ -441,6 +441,7 @@ export class ShipmentService {
     await shipment.save();
 
     order.status = "shipped";
+    if (!order.notes) order.notes = [];
     order.notes.push({
       text: `Manually dispatched via ${courierName} (AWB: ${awb})`,
       author: "admin",
@@ -452,6 +453,442 @@ export class ShipmentService {
       success: true,
       shipment,
       message: "Manual shipment recorded and order marked as shipped",
+    };
+  }
+
+  private static async resolveOrderPackageDimensions(
+    order: any,
+    overrides?: { weightKg?: number; length?: number; breadth?: number; height?: number }
+  ) {
+    let totalWeight = 0;
+    let computedMaxL = 0;
+    let computedMaxB = 0;
+    let computedTotalH = 0;
+
+    try {
+      const productIds = (order.items || []).map((i: any) => i.productId).filter(Boolean);
+      const products = await ProductModel.find({ _id: { $in: productIds } })
+        .select("weight weightUnit length breadth height variants")
+        .lean()
+        .exec();
+
+      const productMap = new Map(products.map((p: any) => [String(p._id), p]));
+
+      for (const item of order.items || []) {
+        const p: any = productMap.get(String(item.productId));
+        const rawW = Number((item as any).weight || p?.weight || 0.5);
+        const u = String((item as any).weightUnit || p?.weightUnit || "kg").toLowerCase();
+        const inKg = u === "g" || u === "ml" ? rawW / 1000 : rawW;
+        totalWeight += Math.max(0.05, inKg) * (item.quantity || 1);
+
+        const variant = (p?.variants || []).find(
+          (v: any) => v.id === item.variantId || v.sku === item.sku
+        );
+        const l = Number(variant?.length || p?.length || (item as any).length || 0);
+        const b = Number(variant?.breadth || p?.breadth || (item as any).breadth || (item as any).width || 0);
+        const h = Number(variant?.height || p?.height || (item as any).height || 0);
+
+        if (l > 0) computedMaxL = Math.max(computedMaxL, l);
+        if (b > 0) computedMaxB = Math.max(computedMaxB, b);
+        if (h > 0) computedTotalH += h * (item.quantity || 1);
+      }
+    } catch {
+      totalWeight = (order.items?.length || 1) * 0.5;
+    }
+
+    if (overrides?.weightKg !== undefined && Number(overrides.weightKg) > 0) {
+      totalWeight = Number(overrides.weightKg);
+    }
+    if (totalWeight <= 0) totalWeight = 0.5;
+
+    return {
+      weight: Number(totalWeight.toFixed(2)),
+      length:
+        overrides?.length && Number(overrides.length) > 0
+          ? Number(overrides.length)
+          : computedMaxL > 0
+          ? Math.round(computedMaxL)
+          : 15,
+      breadth:
+        overrides?.breadth && Number(overrides.breadth) > 0
+          ? Number(overrides.breadth)
+          : computedMaxB > 0
+          ? Math.round(computedMaxB)
+          : 15,
+      height:
+        overrides?.height && Number(overrides.height) > 0
+          ? Number(overrides.height)
+          : computedTotalH > 0
+          ? Math.round(computedTotalH)
+          : 10,
+    };
+  }
+
+  private static resolveProviderTrackingUrl(provider: string, awb?: string): string | undefined {
+    if (!awb) return undefined;
+    if (provider === "shiprocket") return `https://shiprocket.co/tracking/${awb}`;
+    if (provider === "delhivery") return `https://www.delhivery.com/track/package/${awb}`;
+    if (provider === "xpressbees") return `https://www.xpressbees.com/track?awb=${awb}`;
+    return undefined;
+  }
+
+  private static resolveScopedExchangeItems(order: any, exchangeItems?: any[]) {
+    const orderItems = Array.isArray(order?.items) ? order.items : [];
+    if (!Array.isArray(exchangeItems) || exchangeItems.length === 0) {
+      return orderItems;
+    }
+
+    const matched: any[] = [];
+    for (const exItem of exchangeItems) {
+      const exOrderItemId = exItem.orderItemId ? String(exItem.orderItemId) : "";
+      const exProductId = exItem.productId ? String(exItem.productId) : "";
+      const exVariantId = exItem.variantId ? String(exItem.variantId) : "";
+      const exSku = exItem.sku ? String(exItem.sku).toLowerCase() : "";
+
+      const orderItem = orderItems.find((oi: any) => {
+        if (exOrderItemId && String(oi._id || oi.id || "") === exOrderItemId) return true;
+        const sameProduct = exProductId && String(oi.productId || "") === exProductId;
+        if (sameProduct) {
+          if (exVariantId) return String(oi.variantId || "") === exVariantId;
+          if (exSku) return String(oi.sku || "").toLowerCase() === exSku;
+          return true;
+        }
+        return exSku && String(oi.sku || "").toLowerCase() === exSku;
+      });
+
+      if (orderItem) {
+        matched.push({
+          ...orderItem,
+          quantity: exItem.quantity || orderItem.quantity || 1,
+          unitPrice: exItem.unitPrice ?? orderItem.unitPrice,
+        });
+      } else if (exItem.name || exItem.sku) {
+        matched.push({
+          productId: exItem.productId,
+          variantId: exItem.variantId,
+          name: exItem.name || "Exchange Gear",
+          sku: exItem.sku || "EXCHANGE",
+          quantity: exItem.quantity || 1,
+          unitPrice: exItem.unitPrice || 1,
+        });
+      }
+    }
+
+    return matched.length > 0 ? matched : orderItems;
+  }
+
+  /**
+   * Creates a Reverse Pickup Shipment (Customer Doorstep -> Warehouse Hub) for an Exchange.
+   * Supports Shiprocket, Delhivery, Xpressbees, or Manual courier entry without touching forward checkout shipments.
+   */
+  static async createExchangeReverseShipment(params: {
+    orderId: string;
+    provider: "shiprocket" | "delhivery" | "xpressbees" | "manual";
+    warehouseId?: string;
+    courierName?: string;
+    awb?: string;
+    trackingUrl?: string;
+    exchangeItems?: any[];
+    weightKg?: number;
+    length?: number;
+    breadth?: number;
+    height?: number;
+  }): Promise<any> {
+    const { orderId, provider, warehouseId, courierName, awb, trackingUrl, exchangeItems } = params;
+    const order = await OrderModel.findById(orderId);
+    if (!order) {
+      throw new NotFoundError("Order");
+    }
+
+    if (provider === "manual") {
+      if (!courierName?.trim() || !awb?.trim()) {
+        throw new ValidationError("Reverse courier name and AWB number are required for manual entry");
+      }
+      const shipment = new ShipmentModel({
+        orderId: String(order._id),
+        warehouseId: warehouseId || order.warehouseId,
+        provider: "manual",
+        shipmentType: "reverse",
+        status: "AWB_ASSIGNED",
+        awb: awb.trim(),
+        courierName: courierName.trim(),
+        trackingUrl: trackingUrl?.trim() || undefined,
+        pickupStatus: "SCHEDULED",
+        providerStatus: `Exchange Reverse Pickup scheduled via ${courierName.trim()}`,
+        idempotencyKey: `exchange_rev_manual_${order._id}_${Date.now()}`,
+      });
+      await shipment.save();
+      return {
+        shipment,
+        awb: shipment.awb,
+        courierName: shipment.courierName,
+        trackingUrl: shipment.trackingUrl,
+        message: `Reverse pickup recorded (${shipment.courierName}: ${shipment.awb})`,
+      };
+    }
+
+    let targetWarehouse: any = null;
+    if (warehouseId) {
+      targetWarehouse = await WarehouseRepository.findById(warehouseId);
+    } else if (order.warehouseId) {
+      targetWarehouse = await WarehouseRepository.findById(order.warehouseId);
+    }
+    if (!targetWarehouse) {
+      targetWarehouse = await WarehouseRepository.findDefault();
+    }
+
+    if ((provider === "delhivery" || provider === "xpressbees") && !targetWarehouse) {
+      throw new AppError(`Please select a return warehouse before scheduling a ${provider} reverse pickup`, 400);
+    }
+
+    const scopedItems = this.resolveScopedExchangeItems(order, exchangeItems);
+    const dims = await this.resolveOrderPackageDimensions({ ...order, items: scopedItems }, params);
+    const reverseOrderRef = `${order.orderNumber}-REV-${Date.now().toString().slice(-4)}`;
+
+    const providerInstance = ShippingProviderFactory.create(provider);
+    if (!providerInstance.createReverseShipment) {
+      throw new AppError(`Selected shipping provider (${provider}) does not support reverse pickup creation`, 400);
+    }
+
+    const scopedTotal = scopedItems.reduce(
+      (sum: number, i: any) => sum + Math.max(1, Number(i.unitPrice) || 0) * (i.quantity || 1),
+      0
+    );
+
+    const input: CreateShipmentInput = {
+      orderId: String(order._id),
+      orderNumber: reverseOrderRef,
+      paymentMethod: "prepaid",
+      totalAmount: Math.max(1, scopedTotal || order.pricing?.total || 1),
+      shippingAddress: {
+        fullName: order.shippingAddress.fullName,
+        phone: order.shippingAddress.phone,
+        addressLine1: order.shippingAddress.addressLine1 || order.shippingAddress.street || "",
+        addressLine2: order.shippingAddress.addressLine2 || "",
+        city: order.shippingAddress.city,
+        state: order.shippingAddress.state,
+        pincode: order.shippingAddress.pincode,
+        country: order.shippingAddress.country || "India",
+      },
+      email: order.guestEmail || order.customerEmail || "customer@store4riders.com",
+      items: scopedItems.map((i: any) => ({
+        name: i.name,
+        sku: i.sku,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+      })),
+      ...dims,
+      warehouseId: targetWarehouse ? String(targetWarehouse._id) : undefined,
+      autoAssignAwb: true,
+    };
+
+    const result = await providerInstance.createReverseShipment(input);
+    const resolvedTrackingUrl = this.resolveProviderTrackingUrl(provider, result.awb);
+    const providerDisplayName =
+      provider === "shiprocket"
+        ? "Shiprocket Reverse"
+        : provider === "delhivery"
+        ? "Delhivery Reverse"
+        : "Xpressbees Reverse";
+
+    const shipment = new ShipmentModel({
+      orderId: String(order._id),
+      warehouseId: targetWarehouse ? String(targetWarehouse._id) : undefined,
+      provider,
+      shipmentType: "reverse",
+      status: result.awb ? "AWB_ASSIGNED" : "SHIPMENT_CREATED",
+      providerOrderId: result.providerOrderId || reverseOrderRef,
+      providerShipmentId: result.shipmentId,
+      shipmentId: result.shipmentId,
+      awb: result.awb,
+      courierName: result.courierName || providerDisplayName,
+      trackingUrl: resolvedTrackingUrl,
+      pickupStatus: "SCHEDULED",
+      providerStatus: result.message || `Reverse pickup created in ${provider.toUpperCase()}`,
+      totalWeight: dims.weight,
+      idempotencyKey: `exchange_rev_${provider}_${order._id}_${Date.now()}`,
+    });
+    await shipment.save();
+
+    return {
+      shipment,
+      awb: result.awb,
+      courierName: shipment.courierName,
+      trackingUrl: resolvedTrackingUrl,
+      message: result.message || `Reverse pickup pushed via ${provider.toUpperCase()}`,
+    };
+  }
+
+  /**
+   * Creates the Forward Replacement Dispatch Shipment after QC passes & shipping fee is settled/COD-marked.
+   */
+  static async createExchangeReplacementShipment(params: {
+    orderId: string;
+    provider: "shiprocket" | "delhivery" | "xpressbees" | "manual";
+    warehouseId?: string;
+    courierName?: string;
+    awb?: string;
+    trackingUrl?: string;
+    replacementVariant?: string;
+    exchangeItems?: any[];
+    isCodFee?: boolean;
+    codFeeAmount?: number;
+    weightKg?: number;
+    length?: number;
+    breadth?: number;
+    height?: number;
+    autoAssignAwb?: boolean;
+  }): Promise<any> {
+    const {
+      orderId,
+      provider,
+      warehouseId,
+      courierName,
+      awb,
+      trackingUrl,
+      replacementVariant,
+      exchangeItems,
+      isCodFee = false,
+      codFeeAmount = 0,
+      autoAssignAwb = true,
+    } = params;
+
+    const order = await OrderModel.findById(orderId);
+    if (!order) {
+      throw new NotFoundError("Order");
+    }
+
+    const effectiveCodAmount = isCodFee && codFeeAmount > 0 ? Number(codFeeAmount) : 0;
+
+    if (provider === "manual") {
+      if (!courierName?.trim() || !awb?.trim()) {
+        throw new ValidationError("Replacement courier name and AWB number are required for manual dispatch");
+      }
+      const shipment = new ShipmentModel({
+        orderId: String(order._id),
+        warehouseId: warehouseId || order.warehouseId,
+        provider: "manual",
+        shipmentType: "forward",
+        status: "AWB_ASSIGNED",
+        awb: awb.trim(),
+        courierName: courierName.trim(),
+        trackingUrl: trackingUrl?.trim() || undefined,
+        providerStatus: `Exchange Replacement dispatched via ${courierName.trim()}`,
+        codFee: effectiveCodAmount,
+        customerShippingCharge: effectiveCodAmount,
+        idempotencyKey: `exchange_fwd_manual_${order._id}_${Date.now()}`,
+      });
+      await shipment.save();
+
+      return {
+        shipment,
+        awb: shipment.awb,
+        courierName: shipment.courierName,
+        trackingUrl: shipment.trackingUrl,
+        message: `Replacement dispatched via ${shipment.courierName} (AWB: ${shipment.awb})`,
+      };
+    }
+
+    let targetWarehouse: any = null;
+    if (warehouseId) {
+      targetWarehouse = await WarehouseRepository.findById(warehouseId);
+    } else if (order.warehouseId) {
+      targetWarehouse = await WarehouseRepository.findById(order.warehouseId);
+    }
+    if (!targetWarehouse) {
+      targetWarehouse = await WarehouseRepository.findDefault();
+    }
+
+    if ((provider === "delhivery" || provider === "xpressbees") && !targetWarehouse) {
+      throw new AppError("Please select a dispatch warehouse for direct carrier replacement dispatch", 400);
+    }
+
+    const scopedItems = this.resolveScopedExchangeItems(order, exchangeItems);
+    const dims = await this.resolveOrderPackageDimensions({ ...order, items: scopedItems }, params);
+    const replacementOrderRef = `${order.orderNumber}-EX-${Date.now().toString().slice(-4)}`;
+
+    // When collecting ONLY the 2-way exchange shipping fee as COD (e.g. Rs. 299),
+    // lock courier manifest COD + sub_total strictly to effectiveCodAmount so the
+    // rider does not accidentally charge the original item price again at doorstep.
+    const primaryExItem = scopedItems[0];
+    const shipmentItems = effectiveCodAmount > 0
+      ? [
+          {
+            name: `${primaryExItem?.name || "Exchange Gear"} (${replacementVariant || "Replacement"}) - Exchange Fee COD`,
+            sku: `${primaryExItem?.sku || "EXCHANGE"}-EX`,
+            quantity: 1,
+            unitPrice: effectiveCodAmount,
+          },
+        ]
+      : scopedItems.map((i: any) => ({
+          name: replacementVariant ? `${i.name} [${replacementVariant}]` : i.name,
+          sku: i.sku,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+        }));
+
+    const scopedTotal = scopedItems.reduce(
+      (sum: number, i: any) => sum + Math.max(1, Number(i.unitPrice) || 0) * (i.quantity || 1),
+      0
+    );
+    const shipmentTotalAmount = effectiveCodAmount > 0
+      ? effectiveCodAmount
+      : Math.max(1, scopedTotal || order.pricing?.total || 1);
+
+    const input: CreateShipmentInput = {
+      warehouseId: targetWarehouse ? String(targetWarehouse._id) : undefined,
+      orderId: String(order._id),
+      orderNumber: replacementOrderRef,
+      paymentMethod: effectiveCodAmount > 0 ? "cod" : "prepaid",
+      totalAmount: shipmentTotalAmount,
+      shippingAddress: {
+        fullName: order.shippingAddress.fullName,
+        phone: order.shippingAddress.phone,
+        addressLine1: order.shippingAddress.addressLine1 || order.shippingAddress.street || "",
+        addressLine2: order.shippingAddress.addressLine2 || "",
+        city: order.shippingAddress.city,
+        state: order.shippingAddress.state,
+        pincode: order.shippingAddress.pincode,
+        country: order.shippingAddress.country || "India",
+      },
+      email: order.guestEmail || order.customerEmail || "customer@store4riders.com",
+      items: shipmentItems,
+      ...dims,
+      autoAssignAwb: Boolean(autoAssignAwb),
+    };
+
+    const providerInstance = ShippingProviderFactory.create(provider);
+    const result = await providerInstance.createShipment(input);
+
+    const defaultTrackingUrl = this.resolveProviderTrackingUrl(provider, result.awb);
+
+    const shipment = new ShipmentModel({
+      orderId: String(order._id),
+      warehouseId: targetWarehouse ? String(targetWarehouse._id) : undefined,
+      provider,
+      shipmentType: "forward",
+      status: result.awb ? "AWB_ASSIGNED" : "SHIPMENT_CREATED",
+      providerOrderId: result.providerOrderId || replacementOrderRef,
+      providerShipmentId: result.shipmentId,
+      shipmentId: result.shipmentId,
+      awb: result.awb,
+      courierName: result.courierName || provider,
+      labelUrl: result.labelUrl,
+      trackingUrl: defaultTrackingUrl,
+      providerStatus: `Replacement dispatched via ${provider.toUpperCase()}`,
+      totalWeight: dims.weight,
+      customerShippingCharge: effectiveCodAmount,
+      codFee: effectiveCodAmount,
+      idempotencyKey: `exchange_fwd_${provider}_${order._id}_${Date.now()}`,
+    });
+    await shipment.save();
+
+    return {
+      shipment,
+      awb: result.awb,
+      courierName: shipment.courierName,
+      trackingUrl: defaultTrackingUrl,
+      message: result.message || `Replacement pushed via ${provider.toUpperCase()}`,
     };
   }
 
@@ -510,7 +947,19 @@ export class ShipmentService {
 
             const order = await OrderModel.findById(shipment.orderId);
             if (order) {
-              order.status = "packed";
+              const isReverse = shipment.shipmentType === "reverse";
+              const isExchangeFwd = Boolean(shipment.idempotencyKey?.startsWith("exchange_fwd_"));
+              if (isReverse) {
+                order.set("exchangeDetails.reverseAwb", foundAwb);
+                order.set("exchangeDetails.reverseCourier", shipment.courierName);
+                order.set("exchangeDetails.reverseTrackingUrl", shipment.trackingUrl);
+              } else if (isExchangeFwd) {
+                order.set("exchangeDetails.replacementAwb", foundAwb);
+                order.set("exchangeDetails.replacementCourier", shipment.courierName);
+                order.set("exchangeDetails.replacementTrackingUrl", shipment.trackingUrl);
+              } else {
+                order.status = "packed";
+              }
               if (!order.notes) order.notes = [];
               order.notes.push({
                 text: `AWB ${foundAwb} synced from Shiprocket (${shipment.courierName})`,
@@ -565,13 +1014,59 @@ export class ShipmentService {
       shipment.providerStatus = trackingInfo.currentStatus;
 
       const normalized = trackingInfo.currentStatus.toLowerCase();
+      const isReverse = shipment.shipmentType === "reverse";
+      let linkedOrder: any = null;
+      if (isReverse || !shipment.idempotencyKey) {
+        const orderQuery: any = OrderModel.findById(shipment.orderId);
+        linkedOrder =
+          orderQuery && typeof orderQuery.lean === "function"
+            ? await orderQuery.lean().exec()
+            : await orderQuery;
+      }
+      const isExchangeFwd = Boolean(
+        shipment.idempotencyKey?.startsWith("exchange_fwd_") ||
+        (linkedOrder?.exchangeDetails?.replacementShipmentId &&
+          String(linkedOrder.exchangeDetails.replacementShipmentId) === String(shipment._id))
+      );
+
       if (normalized.includes("delivered")) {
         shipment.status = "DELIVERED";
-        await OrderModel.findByIdAndUpdate(shipment.orderId, { status: "delivered", $unset: { invoiceUrl: 1 } });
+        if (isReverse) {
+          await OrderModel.findByIdAndUpdate(shipment.orderId, {
+            $set: {
+              ...(linkedOrder?.status === "returned" ? {} : { status: "return_picked" }),
+              "exchangeDetails.reverseStatus": "delivered_to_hub",
+              ...(linkedOrder?.exchangeDetails?.stage === "approved"
+                ? { "exchangeDetails.stage": "picked_up", "exchangeDetails.pickedUpAt": new Date() }
+                : {}),
+            },
+          });
+        } else if (isExchangeFwd) {
+          await OrderModel.findByIdAndUpdate(shipment.orderId, {
+            $set: {
+              status: "returned",
+              "exchangeDetails.stage": "completed",
+              "exchangeDetails.replacementCompletedAt": new Date(),
+            },
+          });
+        } else {
+          await OrderModel.findByIdAndUpdate(shipment.orderId, { status: "delivered", deliveredAt: new Date(), $unset: { invoiceUrl: 1 } });
+        }
       } else if (normalized.includes("out for delivery")) {
         shipment.status = "OUT_FOR_DELIVERY";
-      } else if (normalized.includes("transit") || normalized.includes("shipped")) {
+      } else if (normalized.includes("transit") || normalized.includes("shipped") || normalized.includes("picked")) {
         shipment.status = "IN_TRANSIT";
+        if (isReverse) {
+          await OrderModel.findByIdAndUpdate(shipment.orderId, {
+            $set: {
+              ...(linkedOrder?.status === "returned" ? {} : { status: "return_picked" }),
+              "exchangeDetails.reverseStatus": "in_transit",
+              ...(linkedOrder?.exchangeDetails?.stage === "approved"
+                ? { "exchangeDetails.stage": "picked_up", "exchangeDetails.pickedUpAt": new Date() }
+                : {}),
+            },
+          });
+        }
       }
 
       await shipment.save();
@@ -812,12 +1307,14 @@ export class ShipmentService {
       pickupCity = payload.origin_city;
     }
 
-    // Resolve Order in DB
+    // Resolve Order in DB (strip optional -REV-xxxx or -EX-xxxx suffix for exchange shipments)
     let order: any = null;
     if (orderRef) {
+      const baseOrderRef = String(orderRef).replace(/-(REV|EX)(-\d+)?$/i, "");
       order = await OrderModel.findOne({
         $or: [
           { orderNumber: orderRef },
+          { orderNumber: baseOrderRef },
           ...(mongoose.Types.ObjectId.isValid(orderRef) ? [{ _id: orderRef }] : []),
         ],
       });
@@ -827,11 +1324,14 @@ export class ShipmentService {
     let shipment: any = null;
     const shipmentQuery: any[] = [];
     if (awb) shipmentQuery.push({ awb });
-    if (order) shipmentQuery.push({ orderId: String(order._id) });
-    if (orderRef) shipmentQuery.push({ orderId: orderRef });
+    if (orderRef) shipmentQuery.push({ providerOrderId: orderRef });
+    if (order && shipmentQuery.length === 0) shipmentQuery.push({ orderId: String(order._id) });
+    if (orderRef && shipmentQuery.length === 0) shipmentQuery.push({ orderId: orderRef });
 
     if (shipmentQuery.length > 0) {
-      shipment = await ShipmentModel.findOne({ $or: shipmentQuery });
+      shipment = await ShipmentModel.findOne({ $or: shipmentQuery }, undefined, {
+        sort: { createdAt: -1 },
+      });
     }
 
     if (!order && shipment?.orderId) {
@@ -898,18 +1398,74 @@ export class ShipmentService {
         shipment.warehouseId = String(matchedWarehouse._id);
       }
 
-      if (currentStatusRaw.includes("delivered")) {
-        shipment.status = "DELIVERED";
-        if (order) await OrderModel.findByIdAndUpdate(order._id, { status: "delivered", $unset: { invoiceUrl: 1 } });
-      } else if (currentStatusRaw.includes("out for delivery")) {
-        shipment.status = "OUT_FOR_DELIVERY";
-      } else if (currentStatusRaw.includes("transit") || currentStatusRaw.includes("shipped")) {
-        shipment.status = "IN_TRANSIT";
-        if (order && order.status !== "shipped" && order.status !== "delivered") {
-          await OrderModel.findByIdAndUpdate(order._id, { status: "shipped" });
+      const isReverseShipment = shipment.shipmentType === "reverse";
+      const isExchangeForwardShipment = Boolean(
+        shipment.idempotencyKey?.startsWith("exchange_fwd_") ||
+        (order?.exchangeDetails?.replacementShipmentId &&
+          String(order.exchangeDetails.replacementShipmentId) === String(shipment._id))
+      );
+
+      if (isReverseShipment) {
+        if (currentStatusRaw.includes("delivered")) {
+          shipment.status = "DELIVERED";
+          shipment.pickupStatus = "PICKED";
+          if (order?.exchangeDetails) {
+            await OrderModel.findByIdAndUpdate(order._id, {
+              $set: {
+                status: "return_picked",
+                "exchangeDetails.reverseStatus": "delivered_to_hub",
+                ...(order.exchangeDetails.stage === "approved" ? { "exchangeDetails.stage": "picked_up" } : {}),
+              },
+            });
+          }
+        } else if (currentStatusRaw.includes("picked") || currentStatusRaw.includes("transit") || currentStatusRaw.includes("shipped")) {
+          shipment.status = "IN_TRANSIT";
+          shipment.pickupStatus = "PICKED";
+          if (order?.exchangeDetails) {
+            await OrderModel.findByIdAndUpdate(order._id, {
+              $set: {
+                status: "return_picked",
+                "exchangeDetails.reverseStatus": "in_transit",
+                ...(order.exchangeDetails.stage === "approved"
+                  ? { "exchangeDetails.stage": "picked_up", "exchangeDetails.pickedUpAt": new Date() }
+                  : {}),
+              },
+            });
+          }
         }
-      } else if (currentStatusRaw.includes("rto")) {
-        shipment.status = "RTO_INITIATED";
+      } else if (isExchangeForwardShipment) {
+        if (currentStatusRaw.includes("delivered")) {
+          shipment.status = "DELIVERED";
+          if (order?.exchangeDetails) {
+            await OrderModel.findByIdAndUpdate(order._id, {
+              $set: {
+                status: "returned",
+                "exchangeDetails.stage": "completed",
+                "exchangeDetails.replacementCompletedAt": new Date(),
+              },
+            });
+          }
+        } else if (currentStatusRaw.includes("out for delivery")) {
+          shipment.status = "OUT_FOR_DELIVERY";
+        } else if (currentStatusRaw.includes("transit") || currentStatusRaw.includes("shipped")) {
+          shipment.status = "IN_TRANSIT";
+        } else if (currentStatusRaw.includes("rto")) {
+          shipment.status = "RTO_INITIATED";
+        }
+      } else {
+        if (currentStatusRaw.includes("delivered")) {
+          shipment.status = "DELIVERED";
+          if (order) await OrderModel.findByIdAndUpdate(order._id, { status: "delivered", deliveredAt: new Date(), $unset: { invoiceUrl: 1 } });
+        } else if (currentStatusRaw.includes("out for delivery")) {
+          shipment.status = "OUT_FOR_DELIVERY";
+        } else if (currentStatusRaw.includes("transit") || currentStatusRaw.includes("shipped")) {
+          shipment.status = "IN_TRANSIT";
+          if (order && order.status !== "shipped" && order.status !== "delivered") {
+            await OrderModel.findByIdAndUpdate(order._id, { status: "shipped" });
+          }
+        } else if (currentStatusRaw.includes("rto")) {
+          shipment.status = "RTO_INITIATED";
+        }
       }
 
       await shipment.save();
@@ -928,10 +1484,11 @@ export class ShipmentService {
       } catch {}
     }
 
-    // Sync Order warehouse and invalidate cached invoice URL
-    if (order && matchedWarehouse) {
+    // Sync Order warehouse and invalidate cached invoice URL (skip overriding main order warehouse on reverse pickup webhooks)
+    if (order && matchedWarehouse && shipment?.shipmentType !== "reverse") {
       order.warehouseId = String(matchedWarehouse._id);
       order.invoiceUrl = undefined; // Invalidate cached invoice URL so PDF regenerates with live warehouse origin state
+      if (!order.notes) order.notes = [];
       order.notes.push({
         text: `Dispatch warehouse synced from ${provider.toUpperCase()} Dashboard: ${matchedWarehouse.name} (${matchedWarehouse.state} - ${matchedWarehouse.pincode})`,
         author: "system",

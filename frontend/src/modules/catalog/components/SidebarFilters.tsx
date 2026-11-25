@@ -10,6 +10,7 @@ import {
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useProductAggregations } from "@/core/hooks/useProducts";
 import { slugify } from "@store4riders/shared-utils";
+import { updateQueryUrlShallow } from "@/core/utils/shallowUrl";
 
 const PRICE_RANGES = [
   { label: "< ₹3,000", short: "₹0.00 - ₹2,999.99", id: "under-3k", min: undefined, max: 3000 },
@@ -266,9 +267,7 @@ export function SidebarFilters({
 
     params.set("page", "1");
     const pathname = typeof window !== 'undefined' ? window.location.pathname : '/products';
-    startTransition(() => {
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    });
+    updateQueryUrlShallow(`${pathname}?${params.toString()}`, { replace: true });
   };
 
   const toggleArrayParam = (paramName: string, value: string) => {
@@ -304,9 +303,7 @@ export function SidebarFilters({
     
     params.set("page", "1");
     const pathname = typeof window !== 'undefined' ? window.location.pathname : '/products';
-    startTransition(() => {
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    });
+    updateQueryUrlShallow(`${pathname}?${params.toString()}`, { replace: true });
   };
 
   const handleBrandToggle = (brandName: string) => toggleArrayParam("brand", brandName);
@@ -327,9 +324,7 @@ export function SidebarFilters({
     }
     params.set("page", "1");
     const pathname = typeof window !== 'undefined' ? window.location.pathname : '/products';
-    startTransition(() => {
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    });
+    updateQueryUrlShallow(`${pathname}?${params.toString()}`, { replace: true });
   };
 
   const removeArrayParamItem = (paramName: string, value: string) => {
@@ -352,9 +347,7 @@ export function SidebarFilters({
     });
     params.set("page", "1");
     const pathname = typeof window !== 'undefined' ? window.location.pathname : '/products';
-    startTransition(() => {
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    });
+    updateQueryUrlShallow(`${pathname}?${params.toString()}`, { replace: true });
   };
 
   // Build active pills list for "Now Shopping By"

@@ -1900,7 +1900,7 @@ logger.warn(`[Recommendations] Redis error, falling back to DB`, { slug, error: 
 - [ ] **16.2** Add CSRF protection
   - Generate CSRF token on page load
   - Validate on all state-changing requests
-- [ ] **16.3** Build audit log system
+- [x] **16.3** Build audit log system
   - `audit-log.model.ts` â€” action, userId, resourceType, resourceId, oldValue, newValue, ip, timestamp
   - Log all admin actions: product create/update/delete, order status changes, user role changes
   - `GET /admin/audit-logs` â€” searchable, filterable log viewer

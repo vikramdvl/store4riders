@@ -94,17 +94,91 @@ export class ProductController {
   static async create(req: NextRequest) {
     const validatedData = await ProductValidator.validateCreate(req);
     const product = await ProductService.createProduct(validatedData as any);
+    try {
+      const { extractUserFromAuth } = await import("../../core/middlewares/auth");
+      const actorUserId = extractUserFromAuth(req);
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      const productId = (product as any)._id?.toString() || (product as any).id;
+      await AuditLogService.record({
+        category: "ADMIN",
+        action: "PRODUCT_CREATED",
+        severity: "info",
+        actorUserId,
+        resource: { type: "Product", id: productId, label: (product as any).sku || (product as any).name },
+        changes: {
+          after: {
+            name: (product as any).name,
+            sku: (product as any).sku,
+            basePrice: (product as any).basePrice,
+            specialPrice: (product as any).specialPrice,
+            stockStatus: (product as any).stockStatus,
+          },
+        },
+        req,
+        message: `Created product ${(product as any).name || ""} (${(product as any).sku || productId})`,
+      });
+    } catch {}
     return ApiResponse.success(product, "Product created successfully", 201);
   }
 
   static async update(req: NextRequest, id: string) {
     const validatedData = await ProductValidator.validateUpdate(req);
+    let prevProduct: Record<string, any> | null = null;
+    try {
+      const { ProductRepository } = await import("./product.repository");
+      prevProduct = await ProductRepository.findById(id);
+    } catch {}
     const product = await ProductService.updateProduct(id, validatedData as any);
+    try {
+      const { extractUserFromAuth } = await import("../../core/middlewares/auth");
+      const actorUserId = extractUserFromAuth(req);
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      const diff = AuditLogService.computeFieldDiff(prevProduct, validatedData as any, [
+        "name",
+        "sku",
+        "basePrice",
+        "specialPrice",
+        "stockStatus",
+        "status",
+        "brand",
+        "categoryId",
+      ]);
+      await AuditLogService.record({
+        category: "ADMIN",
+        action: "PRODUCT_UPDATED",
+        severity: "info",
+        actorUserId,
+        resource: { type: "Product", id, label: (product as any).sku || (product as any).name || id },
+        changes: diff,
+        req,
+        message: `Updated product ${(product as any).name || ""} (${(product as any).sku || id})`,
+      });
+    } catch {}
     return ApiResponse.success(product, "Product updated successfully");
   }
 
   static async delete(req: NextRequest, id: string) {
+    let prevProduct: Record<string, any> | null = null;
+    try {
+      const { ProductRepository } = await import("./product.repository");
+      prevProduct = await ProductRepository.findById(id);
+    } catch {}
     await ProductService.deleteProduct(id);
+    try {
+      const { extractUserFromAuth } = await import("../../core/middlewares/auth");
+      const actorUserId = extractUserFromAuth(req);
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      await AuditLogService.record({
+        category: "ADMIN",
+        action: "PRODUCT_DELETED",
+        severity: "critical",
+        actorUserId,
+        resource: { type: "Product", id, label: prevProduct?.sku || prevProduct?.name || id },
+        changes: prevProduct ? { before: { name: prevProduct.name, sku: prevProduct.sku, basePrice: prevProduct.basePrice } } : undefined,
+        req,
+        message: `Deleted product ${prevProduct?.name || ""} (${prevProduct?.sku || id})`,
+      });
+    } catch {}
     return ApiResponse.success(null, "Product deleted successfully");
   }
 

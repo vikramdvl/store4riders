@@ -131,9 +131,11 @@ productSchema.index({ "variants.attributes.size": 1 });
 productSchema.index({ "variants.stock": 1 });
 
 // High-performance compound indexes for category filtering and sorting
+productSchema.index({ status: 1, visibility: 1, isFeatured: -1, createdAt: -1, _id: -1 });
 productSchema.index({ categorySlugs: 1, status: 1, stockStatus: 1 });
 productSchema.index({ categorySlugs: 1, brand: 1, status: 1 });
 productSchema.index({ categorySlugs: 1, isFeatured: -1, createdAt: -1, _id: -1 });
+productSchema.index({ categorySlugs: 1, status: 1, visibility: 1, isFeatured: -1, createdAt: -1, _id: -1 });
 productSchema.index({ categorySlugs: 1, basePrice: 1, _id: -1 });
 productSchema.index({ categorySlugs: 1, basePrice: -1, _id: -1 });
 productSchema.index({ brand: 1, status: 1, stockStatus: 1 });

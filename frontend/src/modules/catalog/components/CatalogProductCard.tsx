@@ -124,11 +124,13 @@ export const CatalogProductCard: React.FC<{ product: CatalogProduct; priority?: 
           </div>
         )}
 
-        {/* Solid Orange Rating Badge (Top Right as in Wireframe) */}
-        <div className="absolute top-2 right-2 bg-banner text-white text-[9px] font-black px-1.5 py-0.5 rounded-sm flex items-center gap-0.5 shadow-xs z-10">
-          <StarIcon className="w-2.5 h-2.5 text-white" />
-          <span>{product.rating || "4.95"}</span>
-        </div>
+        {/* Solid Orange Rating Badge (only shown when product has reviews) */}
+        {Number(product.rating) > 0 && (
+          <div className="absolute top-2 right-2 bg-banner text-white text-[9px] font-black px-1.5 py-0.5 rounded-sm flex items-center gap-0.5 shadow-xs z-10">
+            <StarIcon className="w-2.5 h-2.5 text-white" />
+            <span>{Number(product.rating).toFixed(1)}</span>
+          </div>
+        )}
 
         {/* Bottom Dark Gradient Overlay with Product Name & Price */}
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2.5 pt-10 z-10 flex flex-col justify-end">
@@ -202,11 +204,13 @@ export const CatalogProductCard: React.FC<{ product: CatalogProduct; priority?: 
             </div>
           )}
 
-          {/* Liquid Glassmorphism Rating Badge */}
-          <div className="absolute top-2.5 right-2.5 bg-white/70 backdrop-blur-md border border-white/50 shadow-xs text-neutral-900 text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 z-10">
-            <StarIcon className="w-2.5 h-2.5 text-amber-500" />
-            <span>{product.rating}</span>
-          </div>
+          {/* Liquid Glassmorphism Rating Badge (only shown when product has reviews) */}
+          {Number(product.rating) > 0 && (
+            <div className="absolute top-2.5 right-2.5 bg-white/70 backdrop-blur-md border border-white/50 shadow-xs text-neutral-900 text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 z-10">
+              <StarIcon className="w-2.5 h-2.5 text-amber-500" />
+              <span>{Number(product.rating).toFixed(1)}</span>
+            </div>
+          )}
 
           {/* Hover Overlay: Swatches + Quick Add */}
           <div className="absolute inset-x-2.5 bottom-2.5 z-20 flex flex-col gap-2 opacity-0 translate-y-3 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-auto">

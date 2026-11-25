@@ -330,7 +330,7 @@ export function AdminHomepageSectionsModule() {
       imageUrl: existing?.imageUrl || "",
       category: existing?.category || "RIDING GEAR",
       productUrl: existing?.productUrl || "",
-      rating: existing?.rating || 4.8,
+      rating: existing?.rating || 0,
     };
   });
 
@@ -355,7 +355,7 @@ export function AdminHomepageSectionsModule() {
       imageUrl: "",
       category: "RIDING GEAR",
       productUrl: "",
-      rating: 4.8,
+      rating: 0,
     };
     setSectionsState((prev) => ({
       ...prev,
@@ -376,7 +376,7 @@ export function AdminHomepageSectionsModule() {
       imageUrl: "",
       category: "RIDING GEAR",
       productUrl: "",
-      rating: 4.8,
+      rating: 0,
     }));
     setSectionsState((prev) => ({
       ...prev,
@@ -399,7 +399,7 @@ export function AdminHomepageSectionsModule() {
       imageUrl: item.imageUrl || "",
       category: item.categoryName ? item.categoryName.toUpperCase() : "RIDING GEAR",
       productUrl: item.linkUrl,
-      rating: 4.8,
+      rating: 0,
     };
     setSectionsState((prev) => ({
       ...prev,
@@ -593,7 +593,7 @@ export function AdminHomepageSectionsModule() {
           priceFormatted: "",
           imageUrl: "",
           productUrl: "/products",
-          rating: 4.8,
+          rating: 0,
         });
       }
       existingItems[idx] = { ...existingItems[idx], ...updates };
@@ -629,7 +629,7 @@ export function AdminHomepageSectionsModule() {
           priceFormatted: "",
           imageUrl: "",
           productUrl: "/products",
-          rating: 4.8,
+          rating: 0,
         })),
       },
     }));
@@ -1725,9 +1725,11 @@ export function AdminHomepageSectionsModule() {
                               fill
                               className="object-contain p-2"
                             />
-                            <span className="absolute top-1.5 right-1.5 bg-[#FF5429] text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-xs">
-                              ★ 4.8
-                            </span>
+                            {Number(slot.rating) > 0 && (
+                              <span className="absolute top-1.5 right-1.5 bg-[#FF5429] text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-xs">
+                                ★ {Number(slot.rating).toFixed(1)}
+                              </span>
+                            )}
                           </div>
                           <div className="mt-1">
                             <p className="text-[11px] font-bold text-slate-900 truncate leading-tight">{title}</p>

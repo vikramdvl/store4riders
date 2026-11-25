@@ -55,10 +55,10 @@ export class ReviewService {
     try {
       const { SettingRepository } = await import("../settings/setting.repository");
       const settings = await SettingRepository.getSettings();
-      if (settings.googleRating) {
+      if (settings.googleLastSyncedAt && settings.googleRating && settings.googleRating > 0) {
         return {
           rating: settings.googleRating,
-          reviewCount: String(settings.googleReviewCount || "800+"),
+          reviewCount: settings.googleReviewCount ? String(settings.googleReviewCount) : "",
         };
       }
     } catch {
@@ -67,7 +67,7 @@ export class ReviewService {
     const stats = await ReviewRepository.calculateStoreRatingStats();
     return {
       rating: stats.avgRating,
-      reviewCount: stats.reviewCount > 0 ? `${stats.reviewCount}+` : "800+",
+      reviewCount: stats.reviewCount > 0 ? `${stats.reviewCount}+` : "",
     };
   }
 

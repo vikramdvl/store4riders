@@ -15,3 +15,5 @@ export * from "./contact.schema";
 export * from "./blog.schema";
 export * from "./newsletter.schema";
 export * from "./search.schema";
+export * from "./audit-log.schema";
+export * from "./blocked-ip.schema";

@@ -175,9 +175,18 @@ export class SettingRepository {
       }
     }
 
-    // ── Single save for ALL migrations ──
+    // ── Single atomic update for ALL migrations ──
     if (needsSave) {
-      await settings.save();
+      try {
+        const plain = (settings as any).toObject ? (settings as any).toObject() : settings;
+        const { _id, __v, createdAt, updatedAt, id, ...setPayload } = plain;
+        await SettingModel.updateOne(
+          { _id: settings._id },
+          { $set: setPayload }
+        );
+      } catch (saveErr) {
+        // Safe fallback - avoid breaking read/invoice operations on migration save conflicts
+      }
     }
 
     try {

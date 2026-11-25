@@ -33,7 +33,7 @@ const KNOWN_LABELS: Record<string, string> = {
   about: "About Us",
   terms: "Terms & Conditions",
   privacy: "Privacy Policy",
-  returns: "Returns & Exchanges",
+  returns: "Exchange & Replacements",
   shipping: "Shipping Info",
 };
 

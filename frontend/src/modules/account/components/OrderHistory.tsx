@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import { formatPrice } from "@store4riders/shared-utils";
+import { formatPrice, inferExchangeProgressFromNotes, getExchangeWindowStatus } from "@store4riders/shared-utils";
 import Link from "next/link";
 import Image from "next/image";
 import { 
@@ -19,10 +19,12 @@ import {
   ExternalLink
 } from "lucide-react";
 import { ExchangeOrderModal } from "./ExchangeOrderModal";
+import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
 
 type FilterTab = "all" | "active" | "delivered" | "exchanges" | "cancelled_failed";
 
 export function OrderHistory() {
+  const { data: publicSettings } = usePublicSettings();
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [selectedExchangeOrder, setSelectedExchangeOrder] = useState<any | null>(null);
 
@@ -158,7 +160,7 @@ export function OrderHistory() {
       return orders.filter(o => (o.status || "").toLowerCase() === "delivered");
     }
     if (activeTab === "exchanges") {
-      return orders.filter(o => ["return_requested", "return_approved", "return_picked", "returned"].includes((o.status || "").toLowerCase()));
+      return orders.filter(o => ["return_requested", "return_approved", "return_picked", "returned"].includes((o.status || "").toLowerCase()) || Boolean(o.exchangeDetails?.stage));
     }
     if (activeTab === "cancelled_failed") {
       return orders.filter(o => ["cancelled", "failed", "refunded"].includes((o.status || "").toLowerCase()));
@@ -172,7 +174,7 @@ export function OrderHistory() {
       all: orders.length,
       active: orders.filter(o => ["pending_payment", "confirmed", "processing", "packed", "shipped"].includes((o.status || "").toLowerCase())).length,
       delivered: orders.filter(o => (o.status || "").toLowerCase() === "delivered").length,
-      exchanges: orders.filter(o => ["return_requested", "return_approved", "return_picked", "returned"].includes((o.status || "").toLowerCase())).length,
+      exchanges: orders.filter(o => ["return_requested", "return_approved", "return_picked", "returned"].includes((o.status || "").toLowerCase()) || Boolean(o.exchangeDetails?.stage)).length,
       cancelled_failed: orders.filter(o => ["cancelled", "failed", "refunded"].includes((o.status || "").toLowerCase())).length,
     };
   }, [orders]);
@@ -313,7 +315,22 @@ export function OrderHistory() {
             });
             const isOrderPendingOrFailed = ["pending_payment", "failed"].includes((order.status || "").toLowerCase());
             const isDelivered = (order.status || "").toLowerCase() === "delivered";
-            const isUnderExchange = ["return_requested", "return_approved", "return_picked", "returned"].includes((order.status || "").toLowerCase());
+            const inferredEx = inferExchangeProgressFromNotes(order.notes, order.status);
+            const exStage = order.exchangeDetails?.stage || inferredEx.stage;
+            const effectiveExQc = order.exchangeDetails?.qcStatus || inferredEx.qcStatus;
+            const effectiveExFee =
+              typeof order.exchangeDetails?.shippingFee === "number"
+                ? order.exchangeDetails.shippingFee
+                : inferredEx.shippingFee;
+            const effectiveExFeeStatus =
+              order.exchangeDetails?.shippingFeeStatus || inferredEx.shippingFeeStatus;
+            const isUnderExchange =
+              ["return_requested", "return_approved", "return_picked", "returned"].includes((order.status || "").toLowerCase()) ||
+              Boolean(order.exchangeDetails?.stage);
+            const needsExchangeFeePay =
+              effectiveExQc === "passed" &&
+              effectiveExFeeStatus === "pending" &&
+              effectiveExFee > 0;
             const isShippedOrProcessing = ["shipped", "processing", "packed"].includes((order.status || "").toLowerCase());
 
             return (
@@ -430,22 +447,65 @@ export function OrderHistory() {
                       <Link href={`/account/orders/${orderIdStr}`} className="flex-1 sm:flex-initial">
                         <button 
                           type="button"
-                          className="w-full sm:w-auto bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs px-3.5 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
+                          className={`w-full sm:w-auto font-bold text-xs px-3.5 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer ${
+                            needsExchangeFeePay
+                              ? "bg-brand hover:bg-red-800 text-white"
+                              : effectiveExFeeStatus === "cod_on_replacement" && exStage !== "replacement_dispatched" && exStage !== "completed"
+                              ? "bg-blue-600 hover:bg-blue-700 text-white"
+                              : exStage === "replacement_dispatched"
+                              ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                              : "bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300"
+                          }`}
                         >
-                          <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Exchange Status</span>
+                          <RefreshCw className={`w-3.5 h-3.5 ${
+                            needsExchangeFeePay ||
+                            (effectiveExFeeStatus === "cod_on_replacement" && exStage !== "completed") ||
+                            exStage === "replacement_dispatched"
+                              ? "text-white"
+                              : "text-amber-600"
+                          }`} />
+                          <span>
+                            {needsExchangeFeePay
+                              ? `Pay ₹${effectiveExFee} Shipping Fee`
+                              : effectiveExFeeStatus === "cod_on_replacement" && exStage !== "replacement_dispatched" && exStage !== "completed"
+                              ? `COD ₹${effectiveExFee} Approved`
+                              : exStage === "replacement_dispatched"
+                              ? "Replacement Dispatched"
+                              : exStage === "qc_failed"
+                              ? "QC Failed — View"
+                              : exStage === "rejected"
+                              ? "Exchange Declined"
+                              : "Exchange Status"}
+                          </span>
                         </button>
                       </Link>
                     ) : isDelivered ? (
                       <>
-                        <button 
-                          type="button"
-                          onClick={() => setSelectedExchangeOrder(order)}
-                          className="flex-1 sm:flex-initial bg-white hover:bg-neutral-50 text-neutral-800 border border-neutral-300 hover:border-neutral-900 font-bold text-xs px-3.5 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Request Exchange</span>
-                        </button>
+                        {(() => {
+                          const configuredDays =
+                            typeof publicSettings?.returnWindowDays === "number"
+                              ? publicSettings.returnWindowDays
+                              : undefined;
+                          const winStatus = getExchangeWindowStatus(order?.deliveredAt || order?.updatedAt, configuredDays);
+                          if (!winStatus.allowed) {
+                            return winStatus.reason === "expired" ? (
+                              <span className="flex-1 sm:flex-initial bg-neutral-100 text-neutral-500 border border-neutral-200 font-bold text-xs px-3 py-2.5 rounded-lg flex items-center justify-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-neutral-400" />
+                                <span>Window Closed ({configuredDays}d)</span>
+                              </span>
+                            ) : null;
+                          }
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedExchangeOrder(order)}
+                              className="flex-1 sm:flex-initial bg-white hover:bg-neutral-50 text-neutral-800 border border-neutral-300 hover:border-neutral-900 font-bold text-xs px-3.5 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Request Exchange</span>
+                            </button>
+                          );
+                        })()}
                         <Link href={`/account/orders/${orderIdStr}/tracking`} className="flex-1 sm:flex-initial hidden sm:block">
                           <button 
                             type="button"

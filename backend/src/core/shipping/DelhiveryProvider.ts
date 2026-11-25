@@ -60,7 +60,9 @@ export class DelhiveryProvider implements ShippingProvider {
             return_add: warehouse.addressLine1 + (warehouse.addressLine2 ? `, ${warehouse.addressLine2}` : ""),
             return_state: originState,
             return_country: "India",
-            products_desc: input.items.map(i => i.name).join(", "),
+            products_desc: input.items.map((i) => `${i.name}${i.sku ? ` [${i.sku}]` : ""} x${i.quantity || 1}`).join(", "),
+            quantity: input.items.reduce((sum, i) => sum + (i.quantity || 1), 0) || 1,
+            total_amount: input.totalAmount,
             cod_amount: input.paymentMethod === "cod" ? input.totalAmount : 0,
             weight: input.weight * 1000, // API expects grams
             length: input.length,
@@ -89,6 +91,118 @@ export class DelhiveryProvider implements ShippingProvider {
     } catch (error: any) {
       logger.error(`Delhivery Create Shipment Error: ${JSON.stringify(error.response?.data || error.message)}`);
       throw new AppError("Failed to create Delhivery shipment", 400);
+    }
+  }
+
+  /**
+   * Creates a Reverse Pickup (RVP) shipment in Delhivery (Customer Doorstep -> Store Warehouse).
+   */
+  async createReverseShipment(input: CreateShipmentInput): Promise<CreateShipmentResult> {
+    this.getHeaders(); // Fail fast if DELHIVERY_API_KEY is missing
+    const token = ENV.DELHIVERY_API_KEY as string;
+    const warehouse = input.warehouseId
+      ? await WarehouseRepository.findById(input.warehouseId)
+      : await WarehouseRepository.findDefault();
+
+    if (!warehouse || !warehouse.pincode || !warehouse.city || !warehouse.state || !warehouse.addressLine1) {
+      throw new AppError(
+        "Warehouse shipping address is incomplete. Please configure Warehouse address, city, state, and pincode in Admin -> Warehouses.",
+        400
+      );
+    }
+
+    const cleanCustomerPhone = (input.shippingAddress.phone || "").replace(/\D/g, "").slice(-10);
+    if (!cleanCustomerPhone || cleanCustomerPhone.length !== 10) {
+      throw new AppError("Customer phone number must contain a valid 10-digit mobile number for Delhivery reverse pickup.", 400);
+    }
+
+    const cleanCustomerPin = (input.shippingAddress.pincode || "").replace(/\D/g, "").slice(0, 6);
+    if (!cleanCustomerPin || cleanCustomerPin.length !== 6) {
+      throw new AppError("Customer pickup pincode must be a valid 6-digit postal code for Delhivery reverse pickup.", 400);
+    }
+
+    const warehouseRegisteredName = (warehouse.delhiveryWarehouseName || warehouse.name || "").trim();
+    if (!warehouseRegisteredName) {
+      throw new AppError("Delhivery registered warehouse name is missing in Warehouse settings.", 400);
+    }
+
+    const cmuPayload = {
+      shipments: [
+        {
+          order: input.orderNumber,
+          payment_mode: "Pickup",
+          name: input.shippingAddress.fullName,
+          add: [input.shippingAddress.addressLine1, input.shippingAddress.addressLine2].filter(Boolean).join(", "),
+          pin: cleanCustomerPin,
+          city: input.shippingAddress.city,
+          state: input.shippingAddress.state,
+          country: input.shippingAddress.country || "India",
+          phone: cleanCustomerPhone,
+          products_desc: input.items.map((i) => `${i.name}${i.sku ? ` [${i.sku}]` : ""} x${i.quantity || 1}`).join(", ") || "Exchange Gear",
+          quantity: input.items.reduce((sum, i) => sum + (i.quantity || 1), 0) || 1,
+          cod_amount: 0,
+          total_amount: Math.max(1, Number(input.totalAmount) || 1),
+          weight: Math.max(100, Math.round((Number(input.weight) || 0.5) * 1000)),
+          length: Math.max(1, Math.round(Number(input.length) || 15)),
+          breadth: Math.max(1, Math.round(Number(input.breadth) || 15)),
+          height: Math.max(1, Math.round(Number(input.height) || 10)),
+          return_pin: String(warehouse.pincode).replace(/\D/g, "").slice(0, 6),
+          return_city: warehouse.city,
+          return_state: warehouse.state,
+          return_country: warehouse.country || "India",
+          return_phone: (warehouse.phone || "").replace(/\D/g, "").slice(-10),
+          return_add: [warehouse.addressLine1, warehouse.addressLine2].filter(Boolean).join(", "),
+          warehouse_name: warehouseRegisteredName,
+        },
+      ],
+      pickup_location: {
+        name: warehouseRegisteredName,
+        add: [warehouse.addressLine1, warehouse.addressLine2].filter(Boolean).join(", "),
+        city: warehouse.city,
+        pin: String(warehouse.pincode).replace(/\D/g, "").slice(0, 6),
+        country: warehouse.country || "India",
+        phone: (warehouse.phone || "").replace(/\D/g, "").slice(-10),
+      },
+    };
+
+    try {
+      const formBody = `format=json&data=${encodeURIComponent(JSON.stringify(cmuPayload))}`;
+      const response = await shippingPost(`${this.baseUrl}/api/cmu/create.json`, formBody, {
+        headers: {
+          Authorization: `Token ${token}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      });
+
+      const pkg = response.data?.packages?.[0];
+      if (!pkg || (pkg.status && pkg.status !== "Success") || response.data?.success === false) {
+        const msg =
+          pkg?.remarks?.[0] ||
+          response.data?.rmk ||
+          response.data?.error ||
+          "Failed to create Delhivery reverse pickup";
+        throw new AppError(String(msg), 400);
+      }
+
+      return {
+        success: true,
+        shipmentId: pkg.waybill,
+        providerOrderId: input.orderNumber,
+        awb: pkg.waybill,
+        courierName: "Delhivery Reverse",
+        message: pkg.waybill
+          ? `Delhivery reverse pickup scheduled (AWB: ${pkg.waybill})`
+          : "Reverse pickup created in Delhivery",
+      };
+    } catch (error: any) {
+      if (error instanceof AppError) throw error;
+      const errDetail =
+        error.response?.data?.rmk ||
+        error.response?.data?.packages?.[0]?.remarks?.[0] ||
+        error.response?.data?.message ||
+        error.message;
+      logger.error(`Delhivery Reverse Pickup Error: ${errDetail}`);
+      throw new AppError(errDetail || "Failed to create Delhivery reverse pickup", 400);
     }
   }
 

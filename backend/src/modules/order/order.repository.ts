@@ -120,6 +120,8 @@ export class OrderRepository {
       $or: [
         { gatewayOrderId },
         { orderNumber: gatewayOrderId },
+        { "exchangeDetails.shippingFeeGatewayOrderId": gatewayOrderId },
+        { "exchanges.shippingFeeGatewayOrderId": gatewayOrderId },
         ...(isObjectId ? [{ _id: gatewayOrderId }] : [])
       ]
     }).session(session || null).lean().exec() as unknown as IOrder | null;
@@ -181,6 +183,9 @@ export class OrderRepository {
 
   static async updateStatus(id: string, status: string, gatewayData?: any, session?: ClientSession): Promise<IOrder | null> {
     const update: any = { status };
+    if (status === "delivered") {
+      update.deliveredAt = new Date();
+    }
     if (gatewayData) {
       if (gatewayData.gatewayOrderId) update.gatewayOrderId = gatewayData.gatewayOrderId;
       if (gatewayData.paymentId) update.paymentId = gatewayData.paymentId;
@@ -210,6 +215,55 @@ export class OrderRepository {
       { $push: { notes: note } },
       { new: true, session }
     ).lean().exec() as unknown as IOrder | null;
+  }
+
+  static async updateExchangeDetails(
+    id: string,
+    exchangeDetails: import("@store4riders/shared-types").IExchangeDetails,
+    status?: string,
+    note?: import("@store4riders/shared-types").IOrderNote,
+    session?: ClientSession
+  ): Promise<IOrder | null> {
+    const existing = await OrderModel.findById(id)
+      .select("exchanges exchangeDetails")
+      .session(session || null)
+      .lean()
+      .exec() as any;
+
+    const currentExchanges: any[] = Array.isArray(existing?.exchanges) ? [...existing.exchanges] : [];
+    if (currentExchanges.length === 0 && existing?.exchangeDetails?.stage) {
+      currentExchanges.push({
+        ...existing.exchangeDetails,
+        exchangeId: existing.exchangeDetails.exchangeId || "ex_legacy",
+      });
+    }
+
+    const targetId = exchangeDetails.exchangeId;
+    if (targetId) {
+      const idx = currentExchanges.findIndex((ex: any) => ex?.exchangeId === targetId);
+      if (idx >= 0) {
+        currentExchanges[idx] = exchangeDetails;
+      } else {
+        currentExchanges.push(exchangeDetails);
+      }
+    } else if (currentExchanges.length > 0) {
+      currentExchanges[currentExchanges.length - 1] = exchangeDetails;
+    } else {
+      currentExchanges.push(exchangeDetails);
+    }
+
+    const setPayload: Record<string, any> = {
+      exchangeDetails,
+      exchanges: currentExchanges,
+    };
+    if (status) {
+      setPayload.status = status;
+    }
+    const update: Record<string, any> = { $set: setPayload };
+    if (note) {
+      update.$push = { notes: note };
+    }
+    return OrderModel.findByIdAndUpdate(id, update, { new: true, session }).lean().exec() as unknown as IOrder | null;
   }
 
   static async updateWarehouse(id: string, warehouseId: string, note?: import("@store4riders/shared-types").IOrderNote, session?: ClientSession): Promise<IOrder | null> {

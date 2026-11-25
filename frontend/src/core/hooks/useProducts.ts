@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useQuery, keepPreviousData, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 
@@ -111,73 +112,107 @@ export interface UseProductsParams {
   [key: string]: string | number | undefined;
 }
 
+const DYNAMIC_PRODUCT_PARAMS = [
+  "helmet_type",
+  "material",
+  "riding_style",
+  "certification",
+  "gender",
+  "size",
+  "colour",
+  "motorcycle_model",
+  "inStock",
+  "onSale",
+] as const;
+
+export interface PaginatedProductsResult {
+  items: IBackendProduct[];
+  totalCount: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
+}
+
+export function getProductsQueryKey(params?: UseProductsParams) {
+  return ["products", params] as const;
+}
+
+export async function fetchProductsPage(params?: UseProductsParams): Promise<PaginatedProductsResult> {
+  const queryParams = new URLSearchParams();
+  if (params?.category) queryParams.append("category", params.category);
+  if (params?.brand) queryParams.append("brand", params.brand);
+  if (params?.search) queryParams.append("search", params.search);
+  if (params?.page) queryParams.append("page", params.page.toString());
+  if (params?.limit) queryParams.append("limit", params.limit.toString());
+  if (params?.minPrice !== undefined) queryParams.append("minPrice", params.minPrice.toString());
+  if (params?.maxPrice !== undefined) queryParams.append("maxPrice", params.maxPrice.toString());
+  if (params?.priceFrom !== undefined) queryParams.append("priceFrom", params.priceFrom.toString());
+  if (params?.priceTo !== undefined) queryParams.append("priceTo", params.priceTo.toString());
+  if (params?.sort) queryParams.append("sort", params.sort);
+  if (params?.scope) queryParams.append("scope", params.scope);
+  if (params?.status) queryParams.append("status", params.status);
+  if (params?.attributeSet) queryParams.append("attributeSet", params.attributeSet);
+  if (params?.attributeSetCode) queryParams.append("attributeSetCode", params.attributeSetCode);
+  if (params?.productType) queryParams.append("productType", params.productType);
+  if (params?.sku) queryParams.append("sku", params.sku);
+  if (params?.name) queryParams.append("name", params.name);
+  if (params?.id) queryParams.append("id", params.id);
+  if (params?.parentOnly) queryParams.append("parentOnly", String(params.parentOnly));
+
+  for (const key of DYNAMIC_PRODUCT_PARAMS) {
+    if (params?.[key]) queryParams.append(key, String(params[key]));
+  }
+
+  const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
+
+  interface PaginatedResponse {
+    items: IBackendProduct[];
+    totalCount: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }
+
+  const response = await apiClient.get<{ data: PaginatedResponse }>(`/products${queryString}`);
+  return {
+    items: response.data.data.items,
+    totalCount: response.data.data.totalCount || 0,
+    page: response.data.data.page,
+    limit: response.data.data.limit,
+    totalPages: response.data.data.totalPages,
+  };
+}
+
 export function useProducts(
   params?: UseProductsParams,
   options?: {
     enabled?: boolean;
-    initialData?: {
-      items: IBackendProduct[];
-      totalCount: number;
-      page?: number;
-      limit?: number;
-      totalPages?: number;
-    };
+    initialData?: PaginatedProductsResult;
   }
 ) {
   return useQuery({
-    queryKey: ["products", params],
-    queryFn: async () => {
-      const queryParams = new URLSearchParams();
-      if (params?.category) queryParams.append("category", params.category);
-      if (params?.brand) queryParams.append("brand", params.brand);
-      if (params?.search) queryParams.append("search", params.search);
-      if (params?.page) queryParams.append("page", params.page.toString());
-      if (params?.limit) queryParams.append("limit", params.limit.toString());
-      if (params?.minPrice !== undefined) queryParams.append("minPrice", params.minPrice.toString());
-      if (params?.maxPrice !== undefined) queryParams.append("maxPrice", params.maxPrice.toString());
-      if (params?.priceFrom !== undefined) queryParams.append("priceFrom", params.priceFrom.toString());
-      if (params?.priceTo !== undefined) queryParams.append("priceTo", params.priceTo.toString());
-      if (params?.sort) queryParams.append("sort", params.sort);
-      if (params?.scope) queryParams.append("scope", params.scope);
-      if (params?.status) queryParams.append("status", params.status);
-      if (params?.attributeSet) queryParams.append("attributeSet", params.attributeSet);
-      if (params?.attributeSetCode) queryParams.append("attributeSetCode", params.attributeSetCode);
-      if (params?.productType) queryParams.append("productType", params.productType);
-      if (params?.sku) queryParams.append("sku", params.sku);
-      if (params?.name) queryParams.append("name", params.name);
-      if (params?.id) queryParams.append("id", params.id);
-      if (params?.parentOnly) queryParams.append("parentOnly", String(params.parentOnly));
-      
-      const DYNAMIC_PARAMS = ['helmet_type', 'material', 'riding_style', 'certification', 'gender', 'size', 'colour', 'motorcycle_model', 'inStock', 'onSale'];
-      for (const key of DYNAMIC_PARAMS) {
-        if (params?.[key]) queryParams.append(key, String(params[key]));
-      }
-      
-      const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
-      
-      interface PaginatedResponse {
-        items: IBackendProduct[];
-        totalCount: number;
-        page: number;
-        limit: number;
-        totalPages: number;
-      }
-      
-      const response = await apiClient.get<{ data: PaginatedResponse }>(`/products${queryString}`);
-      return { 
-        items: response.data.data.items, 
-        totalCount: response.data.data.totalCount || 0,
-        page: response.data.data.page,
-        limit: response.data.data.limit,
-        totalPages: response.data.data.totalPages
-      };
-    },
+    queryKey: getProductsQueryKey(params),
+    queryFn: () => fetchProductsPage(params),
     enabled: options?.enabled !== undefined ? options.enabled : true,
     initialData: options?.initialData,
     staleTime: 1000 * 60 * 3, // 3 minutes instant cache
     gcTime: 1000 * 60 * 10,    // 10 minutes memory
     placeholderData: keepPreviousData,
   });
+}
+
+export function usePrefetchProducts() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    (params: UseProductsParams) => {
+      return queryClient.prefetchQuery({
+        queryKey: getProductsQueryKey(params),
+        queryFn: () => fetchProductsPage(params),
+        staleTime: 1000 * 60 * 3,
+      });
+    },
+    [queryClient]
+  );
 }
 
 export function useAdminProducts(params?: UseProductsParams) {

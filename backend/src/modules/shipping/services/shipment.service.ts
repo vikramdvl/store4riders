@@ -64,8 +64,22 @@ export class ShipmentService {
 
   static async checkServiceability(deliveryPincode: string, weightKg: number, isCod: boolean): Promise<{ serviceable: boolean, codAvailable: boolean }> {
     try {
+      const { WarehouseRepository } = await import("../../warehouse/warehouse.repository");
+      const defaultWh = await WarehouseRepository.findDefault();
+      let pickupPincode = defaultWh?.pincode;
+
+      if (!pickupPincode) {
+        const { SettingRepository } = await import("../../settings/setting.repository");
+        const settings = await SettingRepository.getSettings();
+        pickupPincode = settings?.storeOriginPincode;
+      }
+
+      if (!pickupPincode) {
+        throw new AppError("No warehouse origin pincode configured for serviceability check", 400);
+      }
+
       const rates = await RateService.calculateRates({
-        pickupPincode: "110001", // Assuming a generic default warehouse pincode
+        pickupPincode,
         deliveryPincode,
         weightKg,
         isCod,

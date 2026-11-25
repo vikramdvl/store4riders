@@ -100,16 +100,21 @@ export function useLogout() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const logoutStore = useAuthStore((state) => state.logout);
+  const setLoggingOut = useAuthStore((state) => state.setLoggingOut);
 
   return useMutation({
     mutationFn: async () => {
       try {
-        await apiClient.post("/auth/logout");
+        const refreshToken = useAuthStore.getState().refreshToken;
+        await apiClient.post("/auth/logout", refreshToken ? { refreshToken } : {});
       } catch (e) {
         // Proceed to clean up locally even if network is offline
       }
     },
     onSettled: () => {
+      // Prevent account guards from redirecting to /login while deliberate logout navigates home
+      setLoggingOut(true);
+
       // 1. Clear Zustand auth store (user, token, refreshToken, isAuthenticated: false)
       logoutStore();
 
@@ -120,7 +125,8 @@ export function useLogout() {
       queryClient.clear();
 
       toast.success("Logged out successfully");
-      router.push("/");
+      router.replace("/");
+      setTimeout(() => setLoggingOut(false), 500);
     },
   });
 }

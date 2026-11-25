@@ -12,12 +12,12 @@ const links = [
   { name: "Profile Details", path: "/account", icon: User },
   { name: "Addresses", path: "/account/addresses", icon: MapPin },
   { name: "Order History", path: "/account/orders", icon: Package },
-  { name: "Exchanges & Returns", path: "/account/orders?tab=exchanges", icon: RefreshCw },
+  { name: "Exchanges", path: "/account/orders?tab=exchanges", icon: RefreshCw },
   { name: "Wishlist", path: "/account/wishlist", icon: Heart },
 ];
 
 export function AccountSidebar() {
-  const { user, isAuthenticated, setUser, logout } = useAuthStore();
+  const { user, isAuthenticated, isLoggingOut } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -28,10 +28,10 @@ export function AccountSidebar() {
   }, []);
 
   useEffect(() => {
-    if (mounted && !isAuthenticated) {
+    if (mounted && !isAuthenticated && !isLoggingOut) {
       router.replace(`/login?redirect=${encodeURIComponent(pathname || "/account")}`);
     }
-  }, [mounted, isAuthenticated, pathname, router]);
+  }, [mounted, isAuthenticated, isLoggingOut, pathname, router]);
 
   const logoutMutation = useLogout();
   const handleLogout = () => {

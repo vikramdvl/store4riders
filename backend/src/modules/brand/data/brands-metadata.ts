@@ -109,7 +109,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
       },
       {
         question: "Is Store4Riders an authorized seller of SMK helmets?",
-        answer: "Yes, Store4Riders is an authorized retailer offering 100% genuine SMK helmets with factory warranty, valid GST invoice, and hassle-free returns.",
+        answer: "Yes, Store4Riders is an authorized retailer offering 100% genuine SMK helmets with factory warranty, valid GST invoice, and hassle-free size exchanges.",
       },
       {
         question: "Is there a warranty on SMK helmets?",

@@ -121,6 +121,11 @@ export interface ShippingProvider {
   createShipment(input: CreateShipmentInput): Promise<CreateShipmentResult>;
 
   /**
+   * Create a reverse return/exchange pickup shipment (customer doorstep -> warehouse)
+   */
+  createReverseShipment?(input: CreateShipmentInput): Promise<CreateShipmentResult>;
+
+  /**
    * Request pickup for an created shipment
    */
   requestPickup(shipmentId: string, providerOrderId?: string): Promise<PickupResult>;

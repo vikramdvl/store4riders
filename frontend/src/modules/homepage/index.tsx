@@ -214,6 +214,24 @@ export const HomepageModule: React.FC<{
     });
   }
 
+  const resolveProductRating = (p: any): number => {
+    const rating = Number(p?.avgRating);
+    if (!rating || rating <= 0) return 0;
+    if (p?.reviewCount !== undefined && Number(p.reviewCount) <= 0) return 0;
+    return Number(rating.toFixed(1));
+  };
+
+  const resolveConfiguredItemRating = (configured: any): number => {
+    const urlPath = (configured?.productUrl || "").split("?")[0].replace(/^\//, "").trim();
+    if (urlPath && backendProductsList.length > 0) {
+      const matched = backendProductsList.find(
+        (p: any) => p.slug === urlPath || String(p._id) === urlPath || String(p.id) === String(configured?.id)
+      );
+      if (matched) return resolveProductRating(matched);
+    }
+    return 0;
+  };
+
   const gridProducts: BrowseProductData[] = diverseProducts.length > 0 
     ? diverseProducts.map((p: any, idx: number) => {
         // Resolve price with fallbacks: basePrice → variant prices → specialPrice
@@ -238,7 +256,7 @@ export const HomepageModule: React.FC<{
           name: p.name,
           priceFormatted: `₹ ${Math.round(displayPrice)?.toLocaleString('en-IN') || '0'}`,
           imageUrl,
-          rating: p.avgRating ? Number(Number(p.avgRating).toFixed(1)) : 4.8,
+          rating: resolveProductRating(p),
           productUrl
         };
       })
@@ -258,7 +276,7 @@ export const HomepageModule: React.FC<{
             name: configured.name,
             priceFormatted: configured.priceFormatted || "₹ 0",
             imageUrl: configured.imageUrl || "/no-image.svg",
-            rating: configured.rating || 4.8,
+            rating: resolveConfiguredItemRating(configured),
             productUrl: configured.productUrl || "/products",
           };
         }
@@ -310,7 +328,7 @@ export const HomepageModule: React.FC<{
           name: p.name,
           priceFormatted: `₹ ${Math.round(displayPrice)?.toLocaleString('en-IN') || '0'}`,
           imageUrl,
-          rating: p.avgRating ? Number(Number(p.avgRating).toFixed(1)) : 4.8,
+          rating: resolveProductRating(p),
           productUrl,
         };
       })
@@ -330,7 +348,7 @@ export const HomepageModule: React.FC<{
             name: configured.name,
             priceFormatted: configured.priceFormatted || "₹ 0",
             imageUrl: configured.imageUrl || "/no-image.svg",
-            rating: configured.rating || 4.8,
+            rating: resolveConfiguredItemRating(configured),
             productUrl: configured.productUrl || "/products",
           };
         }
@@ -438,6 +456,7 @@ export const HomepageModule: React.FC<{
           brand: it.brand || "STORE4RIDERS",
           priceFormatted: it.priceFormatted || "₹ 0",
           imageUrl: it.imageUrl || undefined,
+          rating: resolveConfiguredItemRating(it),
           productUrl: it.productUrl || "/products",
         }));
       }
@@ -513,6 +532,7 @@ export const HomepageModule: React.FC<{
         brand: p.brand || "STORE4RIDERS",
         priceFormatted: `₹ ${Math.round(displayPrice)?.toLocaleString('en-IN') || '0'}`,
         imageUrl,
+        rating: resolveProductRating(p),
         productUrl,
       };
     });

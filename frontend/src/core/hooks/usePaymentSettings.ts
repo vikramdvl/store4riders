@@ -32,6 +32,7 @@ export interface IPublicSettings {
   youtubeUrl?: string;
   twitterUrl?: string;
   returnWindowDays?: number;
+  exchangeShippingFee?: number;
   snapmintMinOrderValue?: number;
   footerConfig?: IFooterConfig;
   policyPages?: IPolicyPageConfig[];

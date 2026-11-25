@@ -34,7 +34,7 @@ export interface OfficialPageDefinition {
 export const OFFICIAL_PAGE_DEFINITIONS: OfficialPageDefinition[] = [
   {
     slug: "returns-replacements-store4riders",
-    name: "Exchange & Returns",
+    name: "Exchange & Replacements",
     icon: ArrowLeftRight,
     defaultTitle: "Exchange & Replacement Policy",
     defaultSubtitle:

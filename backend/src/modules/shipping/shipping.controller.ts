@@ -19,17 +19,47 @@ export class ShippingController {
     if (!body.orderId) {
       throw new AppError("orderId is required", 400);
     }
-    const result = await ShipmentService.pushOrderToShiprocket({
-      orderId: body.orderId,
-      warehouseId: body.warehouseId,
-      weightKg: body.weightKg !== undefined ? Number(body.weightKg) : (body.weight !== undefined ? Number(body.weight) : undefined),
-      length: body.length !== undefined ? Number(body.length) : undefined,
-      breadth: body.breadth !== undefined ? Number(body.breadth) : undefined,
-      height: body.height !== undefined ? Number(body.height) : undefined,
-      autoAssignAwb: Boolean(body.autoAssignAwb),
-      recipientPhone: body.recipientPhone || body.phone,
-    });
-    return ApiResponse.success(result.shipment, result.message, 200);
+    let actorUserId: string | undefined;
+    try {
+      const { extractUserFromAuth } = await import("../../core/middlewares/auth");
+      actorUserId = extractUserFromAuth(req);
+    } catch {}
+    try {
+      const result = await ShipmentService.pushOrderToShiprocket({
+        orderId: body.orderId,
+        warehouseId: body.warehouseId,
+        weightKg: body.weightKg !== undefined ? Number(body.weightKg) : (body.weight !== undefined ? Number(body.weight) : undefined),
+        length: body.length !== undefined ? Number(body.length) : undefined,
+        breadth: body.breadth !== undefined ? Number(body.breadth) : undefined,
+        height: body.height !== undefined ? Number(body.height) : undefined,
+        autoAssignAwb: Boolean(body.autoAssignAwb),
+        recipientPhone: body.recipientPhone || body.phone,
+      });
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      await AuditLogService.record({
+        category: "SHIPPING",
+        action: "SHIPMENT_CREATED_SHIPROCKET",
+        severity: "info",
+        actorUserId,
+        resource: { type: "Shipment", id: String(body.orderId), label: result.shipment?.awb || String(body.orderId) },
+        req,
+        message: `Pushed order ${body.orderId} to Shiprocket (${result.message})`,
+      });
+      return ApiResponse.success(result.shipment, result.message, 200);
+    } catch (err: any) {
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      await AuditLogService.record({
+        category: "SHIPPING",
+        action: "SHIPMENT_FAILED_SHIPROCKET",
+        severity: "warning",
+        status: "failure",
+        actorUserId,
+        resource: { type: "Shipment", id: String(body.orderId), label: String(body.orderId) },
+        req,
+        message: `Shiprocket dispatch failed for order ${body.orderId}: ${err?.message || "Courier error"}`,
+      });
+      throw err;
+    }
   }
 
   /**
@@ -41,17 +71,47 @@ export class ShippingController {
     if (!body.orderId || !body.provider || !body.warehouseId) {
       throw new AppError("orderId, provider, and warehouseId are required", 400);
     }
-    const result = await ShipmentService.createDirectShipment({
-      orderId: body.orderId,
-      provider: body.provider,
-      warehouseId: body.warehouseId,
-      weightKg: Number(body.weightKg || body.weight || 1),
-      length: body.length ? Number(body.length) : 15,
-      breadth: body.breadth ? Number(body.breadth) : 15,
-      height: body.height ? Number(body.height) : 10,
-      recipientPhone: body.recipientPhone || body.phone,
-    });
-    return ApiResponse.success(result.shipment, result.message, 201);
+    let actorUserId: string | undefined;
+    try {
+      const { extractUserFromAuth } = await import("../../core/middlewares/auth");
+      actorUserId = extractUserFromAuth(req);
+    } catch {}
+    try {
+      const result = await ShipmentService.createDirectShipment({
+        orderId: body.orderId,
+        provider: body.provider,
+        warehouseId: body.warehouseId,
+        weightKg: Number(body.weightKg || body.weight || 1),
+        length: body.length ? Number(body.length) : 15,
+        breadth: body.breadth ? Number(body.breadth) : 15,
+        height: body.height ? Number(body.height) : 10,
+        recipientPhone: body.recipientPhone || body.phone,
+      });
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      await AuditLogService.record({
+        category: "SHIPPING",
+        action: "SHIPMENT_CREATED_DIRECT",
+        severity: "info",
+        actorUserId,
+        resource: { type: "Shipment", id: String(body.orderId), label: result.shipment?.awb || String(body.orderId) },
+        req,
+        message: `Created ${String(body.provider).toUpperCase()} shipment for order ${body.orderId}`,
+      });
+      return ApiResponse.success(result.shipment, result.message, 201);
+    } catch (err: any) {
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      await AuditLogService.record({
+        category: "SHIPPING",
+        action: "SHIPMENT_FAILED_DIRECT",
+        severity: "warning",
+        status: "failure",
+        actorUserId,
+        resource: { type: "Shipment", id: String(body.orderId), label: String(body.orderId) },
+        req,
+        message: `${String(body.provider).toUpperCase()} shipment failed for order ${body.orderId}: ${err?.message || "Courier error"}`,
+      });
+      throw err;
+    }
   }
 
   /**

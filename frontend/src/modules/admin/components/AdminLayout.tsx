@@ -11,6 +11,7 @@ function AdminLiveStreamSubscriber() {
 }
 
 const KNOWN_DASHBOARD_ROUTES = [
+  "/admin/audit-logs",
   "/admin/blog",
   "/admin/brands",
   "/admin/categories",

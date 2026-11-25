@@ -75,20 +75,46 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+async function getLayoutPublicSettings() {
+  const baseUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+  const settingsUrl = baseUrl.includes("/v1") ? `${baseUrl}/settings/public` : `${baseUrl}/v1/settings/public`;
+  try {
+    const res = await fetch(settingsUrl, {
+      next: { revalidate: 60 },
+      signal: AbortSignal.timeout(2000),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      return json?.data || null;
+    }
+  } catch {
+    // Graceful fallback when API server is unavailable during static analysis
+  }
+  return null;
+}
+
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const storeSettings = await getLayoutPublicSettings();
+  const returnDays =
+    typeof storeSettings?.returnWindowDays === "number" ? storeSettings.returnWindowDays : undefined;
+
   const websiteSchema = {
     "@context": "https://schema.org",
     "@graph": [
       buildWebSiteSchema(siteUrl),
       buildOrganizationSchema({
         siteUrl,
-        phone: process.env.NEXT_PUBLIC_STORE_PHONE || "+91 - 7263007788",
-        email: "contact@store4riders.com",
-        returnWindowDays: 7,
+        phone:
+          storeSettings?.supportPhone ||
+          storeSettings?.whatsappNumber ||
+          process.env.NEXT_PUBLIC_STORE_PHONE ||
+          "+91 - 7263007788",
+        email: storeSettings?.supportEmail || "contact@store4riders.com",
+        returnWindowDays: returnDays,
       }),
     ],
   };

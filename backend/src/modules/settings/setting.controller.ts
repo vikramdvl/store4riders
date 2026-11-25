@@ -43,6 +43,7 @@ export class SettingController {
       youtubeUrl: settings.youtubeUrl,
       twitterUrl: settings.twitterUrl,
       returnWindowDays: typeof settings.returnWindowDays === "number" ? settings.returnWindowDays : 7,
+      exchangeShippingFee: typeof settings.exchangeShippingFee === "number" ? settings.exchangeShippingFee : 299,
       snapmintMinOrderValue: settings.snapmintMinOrderValue,
       brandsMetaTitle: settings.brandsMetaTitle || "",
       brandsMetaDescription: settings.brandsMetaDescription || "",
@@ -52,8 +53,8 @@ export class SettingController {
       guidesMetaKeywords: settings.guidesMetaKeywords || "",
       footerConfig: settings.footerConfig,
       policyPages: settings.policyPages || [],
-      googleRating: settings.googleRating ?? 4.8,
-      googleReviewCount: settings.googleReviewCount ?? "800+",
+      googleRating: settings.googleLastSyncedAt && typeof settings.googleRating === "number" ? settings.googleRating : 0,
+      googleReviewCount: settings.googleLastSyncedAt && settings.googleReviewCount ? settings.googleReviewCount : "",
       googleLastSyncedAt: settings.googleLastSyncedAt,
       upiMerchantVpa: settings.upiMerchantVpa || process.env.GOOGLE_PAY_MERCHANT_VPA || undefined,
       upiMerchantName: settings.upiMerchantName || process.env.GOOGLE_PAY_MERCHANT_NAME || settings.legalBusinessName || "Store4Riders",
@@ -65,8 +66,25 @@ export class SettingController {
   }
 
   static async updateSettings(req: any) {
+    const prevSettings = await SettingService.getSettings();
     const validatedData = await SettingValidator.validateUpdateSettings(req);
     const settings = await SettingService.updateSettings(validatedData);
+    try {
+      const { extractUserFromAuth } = await import("../../core/middlewares/auth");
+      const actorUserId = extractUserFromAuth(req);
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      const diff = AuditLogService.computeFieldDiff(prevSettings as any, validatedData as any);
+      await AuditLogService.record({
+        category: "ADMIN",
+        action: "SETTINGS_UPDATED",
+        severity: "critical",
+        actorUserId,
+        resource: { type: "StoreSettings", label: "Global Store Settings" },
+        changes: diff,
+        req,
+        message: `Updated store configuration (${diff?.after ? Object.keys(diff.after).join(", ") : "settings"})`,
+      });
+    } catch {}
     return ApiResponse.success(settings, "Settings updated successfully");
   }
 }

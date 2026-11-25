@@ -34,6 +34,7 @@ import {
   Ticket,
   Info,
   Phone,
+  Activity,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useLogout } from "@/core/hooks/useAuth";
@@ -148,6 +149,13 @@ const navItems: NavItem[] = [
       { name: "Staff & Team", href: "/admin/users?tab=staff", icon: ShieldCheck },
       { name: "Customers", href: "/admin/users?tab=customers", icon: UserCheck },
     ],
+  },
+  // 8.1 Security & Audit Trail
+  {
+    name: "Logs & Health",
+    href: "/admin/audit-logs",
+    icon: Activity,
+    allowedRoles: ["super_admin", "admin"],
   },
   // 9. Customer Care & Support
   { 

@@ -59,7 +59,7 @@ export class CCavenueGateway implements PaymentGateway {
       }
     }
 
-    let cancelUrl = (ENV.CCAVENUE_CANCEL_URL || process.env.CCAVENUE_CANCEL_URL || "").trim();
+    let cancelUrl = ((order as any)?.cancelUrl || ENV.CCAVENUE_CANCEL_URL || process.env.CCAVENUE_CANCEL_URL || "").trim();
     if (!cancelUrl) {
       const orderParam = `?cancelled=true${order.orderNumber ? `&orderId=${encodeURIComponent(order.orderNumber)}` : ""}`;
       if (isLive && cleanApiBase.includes("localhost")) {

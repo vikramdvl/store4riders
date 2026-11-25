@@ -210,7 +210,7 @@ export function AdminCustomerCareDashboard() {
       case "payment_issue":
         return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">Payment Issue</span>;
       case "return_exchange":
-        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">Return &amp; Exchange</span>;
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">Exchange</span>;
       case "product_sizing":
         return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Sizing / Fitment</span>;
       case "shipping_delay":
@@ -417,7 +417,7 @@ export function AdminCustomerCareDashboard() {
                   <option value="all">All Categories</option>
                   <option value="order_issue">Order Issue</option>
                   <option value="payment_issue">Payment Issue</option>
-                  <option value="return_exchange">Return &amp; Exchange</option>
+                  <option value="return_exchange">Exchange</option>
                   <option value="product_sizing">Sizing / Fitment</option>
                   <option value="shipping_delay">Shipping Delay</option>
                   <option value="general">General</option>
@@ -579,7 +579,7 @@ export function AdminCustomerCareDashboard() {
                     <option value="shipped">Shipped &amp; In Transit</option>
                     <option value="delivered">Delivered</option>
                     <option value="failed">Failed / Dropped Checkouts</option>
-                    <option value="exchanges">Returns &amp; Exchanges</option>
+                    <option value="exchanges">Exchanges</option>
                     <option value="cancelled">Cancelled</option>
                   </select>
 

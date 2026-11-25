@@ -81,6 +81,7 @@ export const updateSettingSchema = z.object({
   youtubeUrl: z.string().optional(),
   twitterUrl: z.string().optional(),
   returnWindowDays: z.number().min(0).max(365).optional(),
+  exchangeShippingFee: z.number().min(0).max(10000).optional(),
   popularSearches: z.array(z.string()).optional(),
   snapmintMinOrderValue: z.number().min(0).optional(),
   brandsMetaTitle: z.string().max(200).optional().or(z.literal("")),

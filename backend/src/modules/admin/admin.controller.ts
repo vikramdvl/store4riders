@@ -16,13 +16,37 @@ export class AdminController {
     const body = await req.json();
     const data = AdminValidator.validateCreateStaffUser(body);
     const user = await UserService.createStaffUser(data as any, requestingUserId);
+    const { AuditLogService } = await import("../audit-log/audit-log.service");
+    const targetId = (user as any)._id?.toString() || (user as any).id;
+    await AuditLogService.record({
+      category: "ADMIN",
+      action: "STAFF_USER_CREATED",
+      severity: "critical",
+      actorUserId: requestingUserId,
+      resource: { type: "User", id: targetId, label: user.email },
+      changes: { after: { email: user.email, role: user.role, firstName: user.firstName, lastName: user.lastName } },
+      req,
+      message: `Created staff account ${user.email} with role ${user.role}`,
+    });
     return ApiResponse.success(user, "Staff user created successfully", 201);
   }
 
   static async updateRole(req: NextRequest, userId: string, requestingUserId?: string) {
     const body = await req.json();
     const { role } = AdminValidator.validateRoleUpdate(body);
+    const prevRole = await UserService.getRole(userId);
     const user = await UserService.updateRole(userId, role, requestingUserId);
+    const { AuditLogService } = await import("../audit-log/audit-log.service");
+    await AuditLogService.record({
+      category: "ADMIN",
+      action: "USER_ROLE_UPDATED",
+      severity: "critical",
+      actorUserId: requestingUserId,
+      resource: { type: "User", id: userId, label: user.email },
+      changes: { before: { role: prevRole }, after: { role: user.role } },
+      req,
+      message: `Changed role for ${user.email} from ${prevRole} to ${user.role}`,
+    });
     return ApiResponse.success(user, "User role updated successfully");
   }
 
@@ -30,11 +54,35 @@ export class AdminController {
     const body = await req.json();
     const { isActive } = AdminValidator.validateStatusUpdate(body);
     const user = await UserService.updateStatus(userId, isActive, requestingUserId);
+    const { AuditLogService } = await import("../audit-log/audit-log.service");
+    await AuditLogService.record({
+      category: "ADMIN",
+      action: "USER_STATUS_UPDATED",
+      severity: "warning",
+      actorUserId: requestingUserId,
+      resource: { type: "User", id: userId, label: user.email },
+      changes: { before: { isActive: !isActive }, after: { isActive } },
+      req,
+      message: `${isActive ? "Enabled" : "Disabled"} account ${user.email}`,
+    });
     return ApiResponse.success(user, "User status updated successfully");
   }
 
   static async deleteUser(req: NextRequest, userId: string, requestingUserId: string) {
+    const { UserRepository } = await import("../user/user.repository");
+    const targetUser = await UserRepository.findById(userId);
     await UserService.deleteUser(userId, requestingUserId);
+    const { AuditLogService } = await import("../audit-log/audit-log.service");
+    await AuditLogService.record({
+      category: "ADMIN",
+      action: "USER_DELETED",
+      severity: "critical",
+      actorUserId: requestingUserId,
+      resource: { type: "User", id: userId, label: targetUser?.email || userId },
+      changes: targetUser ? { before: { email: targetUser.email, role: targetUser.role } } : undefined,
+      req,
+      message: `Deleted user account ${targetUser?.email || userId}`,
+    });
     return ApiResponse.success(null, "User deleted successfully");
   }
 
@@ -83,6 +131,21 @@ export class AdminController {
     const csvContent = await file.text();
     const { ProductService } = await import("../product/product.service");
     const report = await ProductService.bulkUpdateFromCsv(csvContent);
+    try {
+      const { extractUserFromAuth } = await import("../../core/middlewares/auth");
+      const actorUserId = extractUserFromAuth(req);
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      await AuditLogService.record({
+        category: "ADMIN",
+        action: "PRODUCTS_BULK_UPDATED",
+        severity: "warning",
+        actorUserId,
+        resource: { type: "ProductBulkUpdate", label: file.name || "bulk-update.csv" },
+        req,
+        message: `Processed CSV bulk product update (${file.name || "bulk-update.csv"})`,
+        metadata: report as any,
+      });
+    } catch {}
     return ApiResponse.success(report, "Bulk update processed");
   }
 
@@ -121,6 +184,11 @@ export class AdminController {
     return ApiResponse.success(null, "Test product removed successfully");
   }
 
+  static async getSystemHealth() {
+    const report = await AdminService.getSystemHealth();
+    return ApiResponse.success(report, "System health report generated");
+  }
+
   /**
    * Enterprise Real-Time Server-Sent Events (SSE) Stream
    * Pushes instant notifications for new orders, status changes, and shipments.
@@ -136,9 +204,27 @@ export class AdminController {
     }
 
     const { verifyToken } = await import("../../core/utils/jwt");
-    const decoded = verifyToken(token);
+    let decoded: { userId: string };
+    try {
+      decoded = verifyToken(token);
+    } catch {
+      throw new UnauthorizedError("Invalid or expired access token");
+    }
+
     const role = await UserService.getRole(decoded.userId);
-    if (!["admin", "superadmin", "manager", "staff", "logistic"].includes(role)) {
+    if (
+      ![
+        "super_admin",
+        "admin",
+        "superadmin",
+        "manager",
+        "staff",
+        "logistic",
+        "order_manager",
+        "customer_care",
+        "customer_support",
+      ].includes(role)
+    ) {
       throw new ForbiddenError("Insufficient permissions to access admin live stream");
     }
 

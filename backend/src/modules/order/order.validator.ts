@@ -1,5 +1,15 @@
 import { NextRequest } from "next/server";
-import { createOrderSchema, verifyPaymentSchema } from "@store4riders/shared-validation";
+import {
+  createOrderSchema,
+  verifyPaymentSchema,
+  adminHandleReturnSchema,
+  exchangePickupSchema,
+  exchangeQcSchema,
+  exchangeFeeStatusSchema,
+  exchangeFeePaySchema,
+  exchangeDispatchSchema,
+  exchangeRequestItemSchema,
+} from "@store4riders/shared-validation";
 import { extractUserFromAuth } from "../../core/middlewares/auth";
 
 /**
@@ -116,22 +126,67 @@ export class OrderValidator {
         .trim()
         .min(5, "Reason must be at least 5 characters")
         .max(1000, "Reason cannot exceed 1000 characters"),
-      images: z.array(z.string().url("Invalid image URL")).max(5).optional()
+      images: z.array(z.string().url("Invalid image URL")).max(5).optional(),
+      items: z.array(exchangeRequestItemSchema).max(20).optional(),
     });
     const body = await req.json();
     const parsed = schema.parse(body);
     // Sanitize reason to prevent XSS / script injection attacks
     parsed.reason = parsed.reason.replace(/<[^>]*>?/gm, "").replace(/[<>{}$`\\]/g, "").trim();
+    if (Array.isArray(parsed.items)) {
+      parsed.items = parsed.items.map((item: any) => ({
+        ...item,
+        ...(item.desiredReplacement
+          ? {
+              desiredReplacement: String(item.desiredReplacement)
+                .replace(/<[^>]*>?/gm, "")
+                .replace(/[<>{}$`\\]/g, "")
+                .trim(),
+            }
+          : {}),
+      }));
+    }
     return parsed;
   }
 
-  static async validateAdminHandleReturn(req: NextRequest) {
+  static async validateExchangeComplete(req: NextRequest) {
     const { z } = require("zod");
     const schema = z.object({
-      action: z.enum(["approve", "reject"]),
-      adminNote: z.string().max(1000).optional()
+      exchangeId: z.string().max(100).optional(),
     });
+    const body = await req.json().catch(() => ({}));
+    return schema.parse(body || {});
+  }
+
+  static async validateAdminHandleReturn(req: NextRequest) {
     const body = await req.json();
-    return schema.parse(body);
+    return adminHandleReturnSchema.parse(body);
+  }
+
+  static async validateExchangePickup(req: NextRequest) {
+    const body = await req.json();
+    return exchangePickupSchema.parse(body);
+  }
+
+  static async validateExchangeQc(req: NextRequest) {
+    const body = await req.json();
+    const parsed = exchangeQcSchema.parse(body);
+    parsed.qcNotes = parsed.qcNotes.replace(/<[^>]*>?/gm, "").trim();
+    return parsed;
+  }
+
+  static async validateExchangeFeeStatus(req: NextRequest) {
+    const body = await req.json();
+    return exchangeFeeStatusSchema.parse(body);
+  }
+
+  static async validateExchangeFeePay(req: NextRequest) {
+    const body = await req.json();
+    return exchangeFeePaySchema.parse(body);
+  }
+
+  static async validateExchangeDispatch(req: NextRequest) {
+    const body = await req.json();
+    return exchangeDispatchSchema.parse(body);
   }
 }

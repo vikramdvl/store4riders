@@ -8,13 +8,13 @@ import { CouponService } from "../coupon/coupon.service";
 import { SettingRepository } from "../settings/setting.repository";
 import { PaymentRepository } from "../payment/payment.repository";
 import { PaymentGatewayFactory } from "../../core/payments/PaymentGatewayFactory";
-import { IOrder, IPayment } from "@store4riders/shared-types";
+import { IOrder, IPayment, IExchangeDetails, IExchangeItem } from "@store4riders/shared-types";
 import { AppError, NotFoundError, ValidationError } from "../../core/errors/AppError";
 import { addEmailJob } from "../../core/queue/email.queue";
 import { logger } from "../../core/utils/logger";
 import { ENV } from "../../core/config/env";
-import { calculateTax, calculateInclusiveTax, getTaxRateFromClass } from "@store4riders/shared-utils";
-import { getCache, setCache } from "../../core/cache/redis";
+import { calculateTax, calculateInclusiveTax, getTaxRateFromClass, parseExchangeNote, findExchangeRequestNote, inferExchangeProgressFromNotes, getExchangeWindowStatus } from "@store4riders/shared-utils";
+import { getCache, setCache, deleteCache } from "../../core/cache/redis";
 import { withTransactionSafe } from "../../core/database/transaction";
 
 export class OrderService {
@@ -510,14 +510,17 @@ export class OrderService {
     let stockFailed = false;
     let paymentRecord: any = null;
     await withTransactionSafe(async (session) => {
-      const order = await OrderRepository.findByGatewayOrderId(gatewayOrderId, session);
+      const paymentByGateway = await PaymentRepository.findByGatewayOrderId(gatewayOrderId, session);
+      const order =
+        (await OrderRepository.findByGatewayOrderId(gatewayOrderId, session)) ||
+        (paymentByGateway?.orderId ? await OrderRepository.findById(paymentByGateway.orderId, session) : null);
       if (!order) throw new AppError("Order not found", 404);
 
       // Ownership check
       if (userId && order.userId && String(order.userId) !== userId) throw new AppError("Order belongs to different user", 403);
 
       const orderIdStr = String((order as any)._id || order.id);
-      const payment = (await PaymentRepository.findByGatewayOrderId(gatewayOrderId, session))
+      const payment = paymentByGateway
         || (order.gatewayOrderId ? await PaymentRepository.findByGatewayOrderId(order.gatewayOrderId, session) : null)
         || (await PaymentRepository.findByOrderId(orderIdStr, session));
       if (!payment) throw new AppError("Payment record not found", 404);
@@ -535,6 +538,16 @@ export class OrderService {
 
       if (!verifyResult.success) {
         throw new AppError(verifyResult.message || "Payment verification failed", 400);
+      }
+
+      if (payment.paymentPurpose === "exchange_fee") {
+        await this.applyExchangeFeeCapture(
+          order,
+          payment,
+          verifyResult.gatewayPaymentId || paymentId || gatewayOrderId,
+          session
+        );
+        return;
       }
 
       if (order.status !== "confirmed") {
@@ -626,9 +639,13 @@ export class OrderService {
     let paymentRecord: any = null;
     let finalOrderNumber = "";
     let finalOrderId = "";
+    let isExchangeFeePayment = false;
 
     await withTransactionSafe(async (session) => {
-      const order = await OrderRepository.findByGatewayOrderId(gatewayOrderId, session);
+      const paymentByGateway = await PaymentRepository.findByGatewayOrderId(gatewayOrderId, session);
+      const order =
+        (await OrderRepository.findByGatewayOrderId(gatewayOrderId, session)) ||
+        (paymentByGateway?.orderId ? await OrderRepository.findById(paymentByGateway.orderId, session) : null);
 
         if (!order) {
           logger.warn(`Order not found for Gateway Order ID: ${gatewayOrderId}`);
@@ -638,7 +655,7 @@ export class OrderService {
         finalOrderNumber = order.orderNumber;
         finalOrderId = String((order as any)._id || order.id);
 
-        let payment = await PaymentRepository.findByGatewayOrderId(gatewayOrderId, session);
+        let payment = paymentByGateway;
         if (!payment) {
           payment = await PaymentRepository.findByOrderId(finalOrderId, session);
         }
@@ -647,6 +664,7 @@ export class OrderService {
           return;
         }
         paymentRecord = payment;
+        isExchangeFeePayment = payment.paymentPurpose === "exchange_fee";
 
         const orderIdStr = String((order as any)._id || order.id);
         const paymentIdStr = String((payment as any)._id || payment.id);
@@ -659,6 +677,43 @@ export class OrderService {
             return;
           }
           await PaymentRepository.addWebhookEvent(paymentIdStr, eventId, session);
+        }
+
+        if (isExchangeFeePayment) {
+          if (eventName === "payment.captured") {
+            if (paymentEntity?.amount !== undefined && paymentEntity.amount !== null) {
+              const receivedAmountPaise = Math.round(Number(paymentEntity.amount) * 100);
+              const expectedAmountPaise = Math.round(Number(payment.amount) * 100);
+              if (receivedAmountPaise < expectedAmountPaise) {
+                logger.error(
+                  `CRITICAL SECURITY ALERT: Exchange fee amount tampering detected for order ${orderIdStr}! Expected ₹${payment.amount}, received ₹${paymentEntity.amount}`
+                );
+                await PaymentRepository.atomicStatusTransition(
+                  paymentIdStr,
+                  ["created", "pending"],
+                  "failed",
+                  {},
+                  session
+                );
+                return;
+              }
+            }
+            await this.applyExchangeFeeCapture(
+              order,
+              payment,
+              paymentEntity?.id || gatewayOrderId,
+              session
+            );
+          } else if (eventName === "payment.failed") {
+            await PaymentRepository.atomicStatusTransition(
+              paymentIdStr,
+              ["created", "pending"],
+              "failed",
+              {},
+              session
+            );
+          }
+          return;
         }
 
         if (eventName === "payment.captured") {
@@ -781,6 +836,7 @@ export class OrderService {
 
     return {
       success: eventName === "payment.captured" && !stockFailed,
+      isExchangeFee: isExchangeFeePayment,
       orderNumber: finalOrderNumber || gatewayOrderId,
       orderId: finalOrderId || gatewayOrderId,
       eventName,
@@ -791,8 +847,10 @@ export class OrderService {
 
   static async syncPaymentStatus(orderIdOrNumber: string, userId?: string) {
     const isObjectId = mongoose.Types.ObjectId.isValid(orderIdOrNumber);
+    const paymentByGateway = await PaymentRepository.findByGatewayOrderId(orderIdOrNumber);
     const order = await OrderRepository.findByGatewayOrderId(orderIdOrNumber) 
-      || (isObjectId ? await OrderRepository.findById(orderIdOrNumber) : null);
+      || (isObjectId ? await OrderRepository.findById(orderIdOrNumber) : null)
+      || (paymentByGateway?.orderId ? await OrderRepository.findById(paymentByGateway.orderId) : null);
 
     if (!order) {
       throw new NotFoundError("Order");
@@ -803,6 +861,59 @@ export class OrderService {
     }
 
     const orderIdStr = String((order as any)._id || order.id);
+
+    // Handle Exchange Fee payment sync separately without altering main order confirmed status
+    if (paymentByGateway?.paymentPurpose === "exchange_fee") {
+      if (order.exchangeDetails?.shippingFeeStatus === "paid_online") {
+        return {
+          status: order.status,
+          orderNumber: order.orderNumber,
+          isConfirmed: true,
+          isExchangeFee: true,
+          message: "Exchange shipping fee is already paid!",
+        };
+      }
+      try {
+        const gateway = PaymentGatewayFactory.create(paymentByGateway.gateway);
+        const liveStatus = await gateway.getPaymentStatus(paymentByGateway.gatewayOrderId);
+        let isSuccess = false;
+        let gatewayPaymentId = "";
+
+        if (paymentByGateway.gateway === "payu") {
+          const transObj = liveStatus?.transaction_details?.[paymentByGateway.gatewayOrderId];
+          isSuccess = transObj?.status === "success";
+          gatewayPaymentId = transObj?.mihpayid;
+        } else if (paymentByGateway.gateway === "ccavenue") {
+          isSuccess = liveStatus?.order_status === "Success" || liveStatus?.status === "Success";
+          gatewayPaymentId = liveStatus?.tracking_id;
+        } else if (paymentByGateway.gateway === "upi" || paymentByGateway.gateway === "gpay") {
+          isSuccess = liveStatus?.status === "SUCCESS" || liveStatus?.isSuccess === true;
+          gatewayPaymentId = liveStatus?.gatewayPaymentId || paymentByGateway.gatewayPaymentId || "";
+        }
+
+        if (isSuccess) {
+          await withTransactionSafe(async (session) => {
+            await this.applyExchangeFeeCapture(order, paymentByGateway, gatewayPaymentId || paymentByGateway.gatewayOrderId, session);
+          });
+          return {
+            status: order.status,
+            orderNumber: order.orderNumber,
+            isConfirmed: true,
+            isExchangeFee: true,
+            reconciled: true,
+            message: "Exchange shipping fee verified with bank!",
+          };
+        }
+      } catch {}
+
+      return {
+        status: order.status,
+        orderNumber: order.orderNumber,
+        isConfirmed: false,
+        isExchangeFee: true,
+        message: "Exchange shipping fee payment not confirmed yet.",
+      };
+    }
 
     // If order is already confirmed, processing, shipped, etc.
     if (order.status !== "pending_payment" && order.status !== "failed") {
@@ -998,7 +1109,22 @@ export class OrderService {
       if (query.status === "failed") {
         dbQuery.status = { $in: ["failed", "pending_payment"] };
       } else if (query.status === "exchanges") {
-        dbQuery.status = { $in: ["return_requested", "return_approved", "return_picked", "returned"] };
+        dbQuery.$or = [
+          { status: { $in: ["return_requested", "return_approved", "return_picked", "returned"] } },
+          { "exchangeDetails.stage": { $exists: true } },
+          { "exchanges.stage": { $exists: true } },
+        ];
+      } else if (query.status === "return_picked") {
+        dbQuery.status = "return_picked";
+        dbQuery.$or = [
+          { "exchangeDetails.stage": "picked_up" },
+          { "exchangeDetails.stage": { $exists: false } },
+        ];
+      } else if (["qc_passed", "qc_failed", "fee_settled", "replacement_dispatched", "rejected"].includes(query.status)) {
+        dbQuery["exchangeDetails.stage"] = query.status;
+      } else if (query.status === "awaiting_fee") {
+        dbQuery["exchangeDetails.stage"] = "qc_passed";
+        dbQuery["exchangeDetails.shippingFeeStatus"] = "pending";
       } else if (query.status === "all_orders") {
         dbQuery.status = { $nin: ["failed", "pending_payment"] };
       } else if (query.status === "all" || query.status === "any") {
@@ -1125,7 +1251,13 @@ export class OrderService {
         searchOr.push({ userId: { $in: userOrderIds } });
       }
 
-      dbQuery.$or = searchOr;
+      if (dbQuery.$or) {
+        const existingOr = dbQuery.$or;
+        delete dbQuery.$or;
+        dbQuery.$and = [...(dbQuery.$and || []), { $or: existingOr }, { $or: searchOr }];
+      } else {
+        dbQuery.$or = searchOr;
+      }
     }
     if (query.userId) dbQuery.userId = query.userId;
 
@@ -1241,7 +1373,13 @@ export class OrderService {
     ] = await Promise.all([
       OrderModel.countDocuments({ status: { $nin: ["failed", "pending_payment"] } }).exec(),
       OrderModel.countDocuments({ status: { $in: ["failed", "pending_payment"] } }).exec(),
-      OrderModel.countDocuments({ status: { $in: ["return_requested", "return_approved", "return_picked", "returned"] } }).exec(),
+      OrderModel.countDocuments({
+        $or: [
+          { status: { $in: ["return_requested", "return_approved", "return_picked", "returned"] } },
+          { "exchangeDetails.stage": { $exists: true } },
+          { "exchanges.stage": { $exists: true } },
+        ],
+      }).exec(),
       OrderModel.countDocuments({ status: { $nin: ["failed", "pending_payment"] }, paymentMethod: { $ne: "cod" } }).exec(),
       OrderModel.countDocuments({ status: { $nin: ["failed", "pending_payment"] }, paymentMethod: "cod" }).exec(),
     ]);
@@ -1339,48 +1477,1020 @@ export class OrderService {
     return true;
   }
 
-  static async requestReturn(orderId: string, userId: string, reason: string, images?: string[]) {
+  private static async invalidateAdminCountsCache() {
+    try {
+      await deleteCache("admin_order_counts");
+    } catch {}
+  }
+
+  private static resolveExchangeDetails(
+    order: IOrder,
+    configuredShippingFee: number,
+    exchangeId?: string
+  ): IExchangeDetails {
+    const exchangesList = Array.isArray((order as any).exchanges) ? (order as any).exchanges : [];
+    if (exchangeId && exchangesList.length > 0) {
+      const matched = exchangesList.find((ex: any) => ex?.exchangeId === exchangeId);
+      if (matched) {
+        return { ...matched };
+      }
+    }
+
+    if (order.exchangeDetails && (!exchangeId || order.exchangeDetails.exchangeId === exchangeId)) {
+      return { ...order.exchangeDetails };
+    }
+
+    if (exchangesList.length > 0) {
+      const active =
+        exchangesList.find((ex: any) => !["completed", "rejected", "qc_failed"].includes(ex?.stage)) ||
+        exchangesList[exchangesList.length - 1];
+      if (active) return { ...active };
+    }
+
+    const returnNote = findExchangeRequestNote(order.notes);
+    const parsed = parseExchangeNote(returnNote?.text);
+    const inferred = inferExchangeProgressFromNotes(order.notes, order.status, configuredShippingFee);
+
+    return {
+      stage: inferred.stage as IExchangeDetails["stage"],
+      reasonType: parsed.reasonType || "Exchange Requested",
+      desiredReplacement: parsed.replacementRequirement || "",
+      customerNote: parsed.customerNote || "",
+      requestedItemNames: parsed.itemsList || "",
+      requestedAt: returnNote?.timestamp || order.updatedAt || new Date(),
+      reverseAwb: inferred.reverseAwb || undefined,
+      qcStatus: inferred.qcStatus,
+      qcNotes: inferred.qcNotes || undefined,
+      rejectionReason: inferred.rejectionReason || undefined,
+      replacementAwb: inferred.replacementAwb || undefined,
+      shippingFee: inferred.shippingFee,
+      shippingFeeStatus: inferred.shippingFeeStatus as IExchangeDetails["shippingFeeStatus"],
+    };
+  }
+
+  private static computeAggregateExchangeOrderStatus(
+    order: IOrder,
+    updatedExchange: IExchangeDetails,
+    singleExchangeFallbackStatus: string
+  ): string {
+    const existingList: IExchangeDetails[] = Array.isArray((order as any).exchanges)
+      ? [...(order as any).exchanges]
+      : [];
+
+    if (existingList.length === 0) {
+      return singleExchangeFallbackStatus;
+    }
+
+    const targetId = updatedExchange.exchangeId;
+    if (targetId) {
+      const idx = existingList.findIndex((ex) => ex?.exchangeId === targetId);
+      if (idx >= 0) existingList[idx] = updatedExchange;
+      else existingList.push(updatedExchange);
+    } else {
+      existingList[existingList.length - 1] = updatedExchange;
+    }
+
+    if (existingList.length <= 1) {
+      return singleExchangeFallbackStatus;
+    }
+
+    const stages = existingList.map((ex) => ex.stage);
+    if (stages.some((s) => ["picked_up", "qc_passed", "fee_settled", "replacement_dispatched"].includes(s))) {
+      return "return_picked";
+    }
+    if (stages.includes("approved")) return "return_approved";
+    if (stages.includes("requested")) return "return_requested";
+    if (stages.includes("completed")) return "returned";
+    return "delivered";
+  }
+
+  private static matchOrderItemForExchange(orderItem: any, reqItem: any): boolean {
+    const reqOrderItemId = reqItem?.orderItemId ? String(reqItem.orderItemId) : "";
+    const oiId = String(orderItem?._id || orderItem?.id || "");
+    if (reqOrderItemId && oiId && reqOrderItemId === oiId) return true;
+
+    const reqProdId = reqItem?.productId ? String(reqItem.productId) : "";
+    const oiProdId = String(orderItem?.productId || "");
+    if (reqProdId && oiProdId && reqProdId === oiProdId) {
+      const reqVar = reqItem?.variantId ? String(reqItem.variantId).toLowerCase() : "";
+      const oiVar = orderItem?.variantId ? String(orderItem.variantId).toLowerCase() : "";
+      if (reqVar) return reqVar === oiVar;
+      const reqSku = reqItem?.sku ? String(reqItem.sku).toLowerCase() : "";
+      const oiSku = orderItem?.sku ? String(orderItem.sku).toLowerCase() : "";
+      if (reqSku) return reqSku === oiSku;
+      return true;
+    }
+    return false;
+  }
+
+  private static async applyExchangeFeeCapture(
+    order: IOrder,
+    payment: any,
+    gatewayPaymentId: string,
+    session?: any
+  ) {
+    const orderIdStr = String((order as any)._id || order.id);
+    const paymentIdStr = String((payment as any)._id || payment.id);
+    const exchangesList = Array.isArray((order as any).exchanges) ? (order as any).exchanges : [];
+    const matchedByGateway = exchangesList.find(
+      (ex: any) => ex?.shippingFeeGatewayOrderId && ex.shippingFeeGatewayOrderId === payment.gatewayOrderId
+    );
+    const existing = this.resolveExchangeDetails(
+      order,
+      Number(payment.amount) || 0,
+      matchedByGateway?.exchangeId
+    );
+
+    const transitioned = await PaymentRepository.atomicStatusTransition(
+      paymentIdStr,
+      ["created", "pending", "failed"],
+      "captured",
+      { gatewayPaymentId },
+      session
+    );
+
+    if (!transitioned && existing.shippingFeeStatus === "paid_online") {
+      return order;
+    }
+
+    const nextStage =
+      existing.stage === "replacement_dispatched" || existing.stage === "completed"
+        ? existing.stage
+        : "fee_settled";
+
+    const updatedExchange: IExchangeDetails = {
+      ...existing,
+      qcStatus: existing.qcStatus === "failed" ? "failed" : "passed",
+      shippingFee: typeof payment.amount === "number" ? payment.amount : existing.shippingFee,
+      shippingFeeStatus: "paid_online",
+      shippingFeeCollectionMode: "online",
+      shippingFeePaymentMethod: payment.gateway,
+      shippingFeePaymentRef: gatewayPaymentId,
+      shippingFeeGatewayOrderId: payment.gatewayOrderId,
+      shippingFeePaidAt: new Date(),
+      stage: nextStage,
+    };
+
+    const note = {
+      text: `Exchange shipping fee of Rs. ${updatedExchange.shippingFee} paid online via ${String(payment.gateway || "online").toUpperCase()} (Ref: ${gatewayPaymentId}). Ready for replacement dispatch.`,
+      author: order.userId || "customer",
+      timestamp: new Date(),
+    };
+
+    const updated = await OrderRepository.updateExchangeDetails(
+      orderIdStr,
+      updatedExchange,
+      undefined,
+      note,
+      session
+    );
+    await this.invalidateAdminCountsCache();
+
+    const customerEmail = order.guestEmail || order.customerEmail;
+    if (customerEmail) {
+      addEmailJob(
+        customerEmail,
+        `Exchange Shipping Fee Received — Order #${order.orderNumber}`,
+        `<p>Hello ${order.shippingAddress?.fullName || "Rider"},</p><p>We have received your 2-way exchange shipping fee of <strong>Rs. ${updatedExchange.shippingFee}</strong> for Order <strong>#${order.orderNumber}</strong> (Ref: ${gatewayPaymentId}).</p><p>Our warehouse team is now packing your replacement and will share tracking details shortly.</p>`
+      );
+    }
+
+    return updated;
+  }
+
+  static async requestReturn(
+    orderId: string,
+    userId: string,
+    reason: string,
+    images?: string[],
+    items?: Array<{
+      orderItemId?: string;
+      productId: string;
+      variantId?: string;
+      sku?: string;
+      name?: string;
+      quantity?: number;
+      desiredReplacement?: string;
+    }>
+  ) {
     const order = await OrderRepository.findById(orderId);
     if (!order || order.userId !== userId) {
       throw new AppError("Order not found", 404);
     }
-    
-    if (order.status !== "delivered") {
-      throw new AppError("Only delivered orders can be exchanged or returned", 400);
+
+    const hasStructuredItems = Array.isArray(items) && items.length > 0;
+    const isDeliveredOrExchanging = [
+      "delivered",
+      "return_requested",
+      "return_approved",
+      "return_picked",
+      "returned",
+    ].includes(order.status);
+
+    if (hasStructuredItems ? !isDeliveredOrExchanging : order.status !== "delivered") {
+      throw new AppError("Only delivered orders can be exchanged", 400);
     }
+
+    const settings = await SettingRepository.getSettings();
+    const windowDays = typeof settings.returnWindowDays === "number" ? settings.returnWindowDays : 7;
+    const windowReferenceDate = (order as any).deliveredAt || (order as any).updatedAt;
+    const windowStatus = getExchangeWindowStatus(windowReferenceDate, windowDays);
+    if (!windowStatus.allowed) {
+      if (windowStatus.reason === "disabled") {
+        throw new AppError("Exchanges are currently disabled per store policy", 400);
+      }
+      throw new AppError(`Exchange window of ${windowDays} days has expired for this order`, 400);
+    }
+
+    const orderItems = Array.isArray(order.items) ? order.items : [];
+    const existingExchanges: IExchangeDetails[] = Array.isArray((order as any).exchanges)
+      ? (order as any).exchanges
+      : order.exchangeDetails?.stage
+      ? [order.exchangeDetails]
+      : [];
+
+    let resolvedExchangeItems: IExchangeItem[] | undefined;
+    if (hasStructuredItems) {
+      resolvedExchangeItems = [];
+      for (const reqItem of items!) {
+        const matchedOrderItem = orderItems.find((oi: any) => this.matchOrderItemForExchange(oi, reqItem));
+        if (!matchedOrderItem) {
+          throw new ValidationError(`Item ${reqItem.name || reqItem.productId} does not belong to this order`);
+        }
+
+        // Prevent duplicate active or completed exchange on the same item
+        const alreadyCovered = existingExchanges.some((ex) => {
+          if (ex.stage === "rejected" || ex.stage === "qc_failed") return false;
+          if (Array.isArray(ex.items) && ex.items.length > 0) {
+            return ex.items.some((exItm) => this.matchOrderItemForExchange(matchedOrderItem, exItm));
+          }
+          // Legacy order-level exchange without structured items covers all order items
+          return true;
+        });
+
+        if (alreadyCovered) {
+          throw new ValidationError(
+            `${matchedOrderItem.name} already has an active or completed exchange request.`
+          );
+        }
+
+        resolvedExchangeItems.push({
+          orderItemId: String((matchedOrderItem as any)._id || matchedOrderItem.id || "") || undefined,
+          productId: String(matchedOrderItem.productId),
+          ...(matchedOrderItem.variantId ? { variantId: matchedOrderItem.variantId } : {}),
+          sku: matchedOrderItem.sku || reqItem.sku || "EXCHANGE",
+          name: matchedOrderItem.name,
+          quantity: Math.min(matchedOrderItem.quantity || 1, reqItem.quantity || matchedOrderItem.quantity || 1),
+          unitPrice: matchedOrderItem.unitPrice,
+          ...(matchedOrderItem.image ? { image: matchedOrderItem.image } : {}),
+          ...(reqItem.desiredReplacement ? { desiredReplacement: reqItem.desiredReplacement } : {}),
+        });
+      }
+    }
+
+    const configuredFee = typeof settings.exchangeShippingFee === "number" ? settings.exchangeShippingFee : 299;
+    const parsed = parseExchangeNote(reason);
+    const exchangeId = `ex_${crypto.randomUUID().slice(0, 8)}`;
+
+    const computedItemNames = resolvedExchangeItems?.length
+      ? resolvedExchangeItems.map((i) => `${i.name}${i.variantId ? ` [${i.variantId}]` : ""}`).join(", ")
+      : parsed.itemsList || order.items?.map((i: any) => i.name).join(", ");
+
+    const exchangeDetails: IExchangeDetails = {
+      exchangeId,
+      ...(resolvedExchangeItems?.length ? { items: resolvedExchangeItems } : {}),
+      stage: "requested",
+      reasonType: parsed.reasonType || "Exchange Requested",
+      desiredReplacement: parsed.replacementRequirement || "",
+      customerNote: parsed.customerNote || reason,
+      requestedItemNames: computedItemNames,
+      requestedAt: new Date(),
+      qcStatus: "pending",
+      shippingFee: configuredFee,
+      shippingFeeStatus: configuredFee <= 0 ? "waived" : "pending",
+    };
 
     const dbId = (order as any)._id?.toString() || order.id || orderId;
     const note = {
       text: `Exchange requested: ${reason}`,
       author: userId,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
-    
-    await OrderRepository.addNote(dbId, note);
-    return await OrderRepository.updateStatus(dbId, "return_requested");
+
+    const nextOrderStatus = this.computeAggregateExchangeOrderStatus(
+      order,
+      exchangeDetails,
+      "return_requested"
+    );
+
+    const updated = await OrderRepository.updateExchangeDetails(dbId, exchangeDetails, nextOrderStatus, note);
+    await this.invalidateAdminCountsCache();
+    return updated;
   }
 
-  static async adminHandleReturn(orderId: string, action: string, adminNote?: string) {
+  static async adminHandleReturn(
+    orderId: string,
+    action: string,
+    adminNote?: string,
+    options?: {
+      exchangeId?: string;
+      shippingFee?: number;
+      reverseCourier?: string;
+      reverseAwb?: string;
+      reverseTrackingUrl?: string;
+      warehouseId?: string;
+      triggerCourier?: "none" | "shiprocket" | "delhivery" | "xpressbees" | "manual";
+    }
+  ) {
     const order = await OrderRepository.findById(orderId);
     if (!order) {
       throw new AppError("Order not found", 404);
     }
-    
-    if (order.status !== "return_requested") {
+
+    const dbId = (order as any)._id?.toString() || order.id || orderId;
+    const settings = await SettingRepository.getSettings();
+    const configuredFee = typeof settings.exchangeShippingFee === "number" ? settings.exchangeShippingFee : 299;
+    const baseDetails = this.resolveExchangeDetails(order, configuredFee, options?.exchangeId);
+
+    const hasRequestedExchange =
+      order.status === "return_requested" ||
+      (Array.isArray((order as any).exchanges) &&
+        baseDetails.stage === "requested" &&
+        ["return_requested", "return_approved", "return_picked", "returned"].includes(order.status));
+
+    if (!hasRequestedExchange) {
       throw new AppError("Order is not in return_requested status", 400);
     }
 
-    const status = action === "approve" ? "return_approved" : "delivered";
-    const dbId = (order as any)._id?.toString() || order.id || orderId;
-    
-    const noteText = action === "approve" ? "Exchange approved." : "Exchange rejected.";
-    await OrderRepository.addNote(dbId, {
-      text: adminNote ? `${noteText} Reason: ${adminNote}` : noteText,
+    if (action === "reject") {
+      const rejectionReason = adminNote?.trim() || "Exchange request rejected per store policy guidelines.";
+      const updatedExchange: IExchangeDetails = {
+        ...baseDetails,
+        stage: "rejected",
+        rejectionReason,
+      };
+      const nextStatus = this.computeAggregateExchangeOrderStatus(order, updatedExchange, "delivered");
+      const updated = await OrderRepository.updateExchangeDetails(dbId, updatedExchange, nextStatus, {
+        text: `Exchange rejected. Reason: ${rejectionReason}`,
+        author: "Admin",
+        timestamp: new Date(),
+      });
+      await this.invalidateAdminCountsCache();
+      return updated;
+    }
+
+    const effectiveFee =
+      typeof options?.shippingFee === "number" && options.shippingFee >= 0
+        ? options.shippingFee
+        : baseDetails.shippingFee;
+
+    let reverseMeta: Partial<IExchangeDetails> = {};
+    let reverseLog = "";
+
+    const triggerProvider = options?.triggerCourier;
+    if (
+      triggerProvider === "shiprocket" ||
+      triggerProvider === "delhivery" ||
+      triggerProvider === "xpressbees"
+    ) {
+      const { ShipmentService } = await import("../shipping/shipment.service");
+      const rev = await ShipmentService.createExchangeReverseShipment({
+        orderId: dbId,
+        provider: triggerProvider,
+        ...(options?.warehouseId ? { warehouseId: options.warehouseId } : {}),
+        ...(baseDetails.items?.length ? { exchangeItems: baseDetails.items } : {}),
+      });
+      reverseMeta = {
+        reverseCourier: rev.courierName || `${triggerProvider.toUpperCase()} Reverse`,
+        reverseAwb: rev.awb,
+        reverseTrackingUrl: rev.trackingUrl,
+        reverseShipmentId: rev.shipment?._id ? String(rev.shipment._id) : undefined,
+        reverseStatus: "scheduled",
+      };
+      reverseLog = rev.awb
+        ? ` Reverse pickup AWB: ${rev.awb} (${reverseMeta.reverseCourier}).`
+        : ` Reverse pickup pushed to ${triggerProvider.toUpperCase()}.`;
+    } else if (triggerProvider === "manual" && options?.reverseCourier && options?.reverseAwb) {
+      const { ShipmentService } = await import("../shipping/shipment.service");
+      const rev = await ShipmentService.createExchangeReverseShipment({
+        orderId: dbId,
+        provider: "manual",
+        courierName: options.reverseCourier,
+        awb: options.reverseAwb,
+        trackingUrl: options.reverseTrackingUrl,
+        ...(options?.warehouseId ? { warehouseId: options.warehouseId } : {}),
+        ...(baseDetails.items?.length ? { exchangeItems: baseDetails.items } : {}),
+      });
+      reverseMeta = {
+        reverseCourier: rev.courierName,
+        reverseAwb: rev.awb,
+        reverseTrackingUrl: rev.trackingUrl,
+        reverseShipmentId: rev.shipment?._id ? String(rev.shipment._id) : undefined,
+        reverseStatus: "scheduled",
+      };
+      reverseLog = ` Reverse pickup AWB: ${rev.awb} (${rev.courierName}).`;
+    }
+
+    const updatedExchange: IExchangeDetails = {
+      ...baseDetails,
+      ...reverseMeta,
+      stage: "approved",
+      approvedAt: new Date(),
+      qcStatus: "pending",
+      shippingFee: effectiveFee,
+      shippingFeeStatus: effectiveFee <= 0 ? "waived" : baseDetails.shippingFeeStatus === "waived" ? "pending" : baseDetails.shippingFeeStatus,
+    };
+
+    const noteText = adminNote ? `Exchange approved. Note: ${adminNote}${reverseLog}` : `Exchange approved.${reverseLog}`;
+    const nextStatus = this.computeAggregateExchangeOrderStatus(order, updatedExchange, "return_approved");
+    const updated = await OrderRepository.updateExchangeDetails(dbId, updatedExchange, nextStatus, {
+      text: noteText,
       author: "Admin",
-      timestamp: new Date()
+      timestamp: new Date(),
+    });
+    await this.invalidateAdminCountsCache();
+    return updated;
+  }
+
+  static async adminExchangePickup(
+    orderId: string,
+    payload: {
+      exchangeId?: string;
+      action: "schedule_reverse" | "mark_picked_up" | "update_tracking";
+      provider?: "shiprocket" | "delhivery" | "xpressbees" | "manual";
+      reverseCourier?: string;
+      reverseAwb?: string;
+      reverseTrackingUrl?: string;
+      warehouseId?: string;
+      weightKg?: number;
+      length?: number;
+      breadth?: number;
+      height?: number;
+    }
+  ) {
+    const order = await OrderRepository.findById(orderId);
+    if (!order) throw new NotFoundError("Order");
+
+    const dbId = (order as any)._id?.toString() || order.id || orderId;
+    const settings = await SettingRepository.getSettings();
+    const configuredFee = typeof settings.exchangeShippingFee === "number" ? settings.exchangeShippingFee : 299;
+    const details = this.resolveExchangeDetails(order, configuredFee, payload.exchangeId);
+
+    const canUpdatePickup =
+      ["return_approved", "return_picked"].includes(order.status) ||
+      ["approved", "picked_up"].includes(details.stage);
+
+    if (!canUpdatePickup) {
+      throw new ValidationError("Order must be in Exchange Approved or Picked Up state for reverse pickup updates");
+    }
+
+    if (payload.action === "schedule_reverse") {
+      const { ShipmentService } = await import("../shipping/shipment.service");
+      const rev = await ShipmentService.createExchangeReverseShipment({
+        orderId: dbId,
+        provider: payload.provider || "shiprocket",
+        warehouseId: payload.warehouseId,
+        courierName: payload.reverseCourier,
+        awb: payload.reverseAwb,
+        trackingUrl: payload.reverseTrackingUrl,
+        ...(details.items?.length ? { exchangeItems: details.items } : {}),
+        weightKg: payload.weightKg,
+        length: payload.length,
+        breadth: payload.breadth,
+        height: payload.height,
+      });
+
+      const updatedExchange: IExchangeDetails = {
+        ...details,
+        reverseCourier: rev.courierName,
+        reverseAwb: rev.awb,
+        reverseTrackingUrl: rev.trackingUrl,
+        reverseShipmentId: rev.shipment?._id ? String(rev.shipment._id) : details.reverseShipmentId,
+        reverseStatus: "scheduled",
+      };
+
+      const updated = await OrderRepository.updateExchangeDetails(dbId, updatedExchange, undefined, {
+        text: rev.awb
+          ? `Reverse pickup scheduled via ${rev.courierName} (AWB: ${rev.awb})`
+          : `Reverse pickup order created in ${rev.courierName || "Shiprocket"}`,
+        author: "Admin",
+        timestamp: new Date(),
+      });
+      await this.invalidateAdminCountsCache();
+      return updated;
+    }
+
+    if (payload.action === "update_tracking") {
+      const updatedExchange: IExchangeDetails = {
+        ...details,
+        ...(payload.reverseCourier ? { reverseCourier: payload.reverseCourier.trim() } : {}),
+        ...(payload.reverseAwb ? { reverseAwb: payload.reverseAwb.trim() } : {}),
+        ...(payload.reverseTrackingUrl !== undefined ? { reverseTrackingUrl: payload.reverseTrackingUrl.trim() } : {}),
+        reverseStatus: details.reverseStatus || "scheduled",
+      };
+      return await OrderRepository.updateExchangeDetails(dbId, updatedExchange, undefined, {
+        text: `Reverse tracking updated (${updatedExchange.reverseCourier || "Courier"}: ${updatedExchange.reverseAwb || "N/A"})`,
+        author: "Admin",
+        timestamp: new Date(),
+      });
+    }
+
+    // mark_picked_up
+    const updatedExchange: IExchangeDetails = {
+      ...details,
+      ...(payload.reverseCourier ? { reverseCourier: payload.reverseCourier.trim() } : {}),
+      ...(payload.reverseAwb ? { reverseAwb: payload.reverseAwb.trim() } : {}),
+      stage: details.qcStatus === "passed" ? details.stage : "picked_up",
+      reverseStatus: "picked_up",
+      pickedUpAt: new Date(),
+    };
+    const nextStatus = this.computeAggregateExchangeOrderStatus(order, updatedExchange, "return_picked");
+    const updated = await OrderRepository.updateExchangeDetails(dbId, updatedExchange, nextStatus, {
+      text: `Courier picked up exchange parcel from customer${updatedExchange.reverseAwb ? ` (AWB: ${updatedExchange.reverseAwb})` : ""}. In transit to warehouse for QC.`,
+      author: "Admin",
+      timestamp: new Date(),
+    });
+    await this.invalidateAdminCountsCache();
+    return updated;
+  }
+
+  static async adminSubmitExchangeQc(
+    orderId: string,
+    adminUserId: string,
+    payload: {
+      exchangeId?: string;
+      result: "passed" | "failed";
+      tagsIntact: boolean;
+      unusedCondition: boolean;
+      packagingIntact: boolean;
+      qcNotes: string;
+      shippingFee?: number;
+      feeCollectionMode?: "online" | "cod" | "waived";
+    }
+  ) {
+    const order = await OrderRepository.findById(orderId);
+    if (!order) throw new NotFoundError("Order");
+
+    const dbId = (order as any)._id?.toString() || order.id || orderId;
+    const settings = await SettingRepository.getSettings();
+    const configuredFee = typeof settings.exchangeShippingFee === "number" ? settings.exchangeShippingFee : 299;
+    const details = this.resolveExchangeDetails(order, configuredFee, payload.exchangeId);
+
+    const canPerformQc =
+      ["return_approved", "return_picked"].includes(order.status) ||
+      ["approved", "picked_up"].includes(details.stage);
+
+    if (!canPerformQc) {
+      throw new ValidationError("QC inspection can only be performed on approved or picked-up exchange orders");
+    }
+
+    if (details.stage === "replacement_dispatched" || details.stage === "completed") {
+      throw new ValidationError("Replacement is already dispatched or completed");
+    }
+
+    const requestedMode = payload.feeCollectionMode;
+    const effectiveFee =
+      requestedMode === "waived"
+        ? 0
+        : typeof payload.shippingFee === "number" && payload.shippingFee >= 0
+        ? payload.shippingFee
+        : details.shippingFee;
+
+    const alreadyPaid = ["paid_online", "paid_manual"].includes(details.shippingFeeStatus);
+
+    if (payload.result === "failed") {
+      const updatedExchange: IExchangeDetails = {
+        ...details,
+        stage: "qc_failed",
+        qcStatus: "failed",
+        qcChecklist: {
+          tagsIntact: payload.tagsIntact,
+          unusedCondition: payload.unusedCondition,
+          packagingIntact: payload.packagingIntact,
+        },
+        qcNotes: payload.qcNotes,
+        qcInspectedAt: new Date(),
+        qcInspectedBy: adminUserId,
+        reverseStatus: "delivered_to_hub",
+        rejectionReason: payload.qcNotes,
+      };
+      const nextStatus = this.computeAggregateExchangeOrderStatus(order, updatedExchange, "return_picked");
+      const updated = await OrderRepository.updateExchangeDetails(dbId, updatedExchange, nextStatus, {
+        text: `Warehouse QC FAILED: ${payload.qcNotes}`,
+        author: "Admin",
+        timestamp: new Date(),
+      });
+      await this.invalidateAdminCountsCache();
+
+      const customerEmail = order.guestEmail || order.customerEmail;
+      if (customerEmail) {
+        addEmailJob(
+          customerEmail,
+          `Exchange Quality Inspection Update — Order #${order.orderNumber}`,
+          `<p>Hello ${order.shippingAddress?.fullName || "Rider"},</p><p>Your exchange parcel for Order <strong>#${order.orderNumber}</strong> did not pass warehouse quality inspection.</p><p><strong>Reason:</strong> ${payload.qcNotes}</p><p>Our support team will reach out regarding re-shipping the parcel back to you.</p>`
+        );
+      }
+
+      return updated;
+    }
+
+    if (requestedMode === "cod" && effectiveFee <= 0) {
+      throw new ValidationError("COD exchange shipping fee must be greater than Rs. 0.");
+    }
+
+    let finalFeeStatus = details.shippingFeeStatus;
+    let collectionMode: "online" | "cod" | "waived" = details.shippingFeeCollectionMode || "online";
+    let paymentMethodVal = details.shippingFeePaymentMethod;
+
+    if (alreadyPaid) {
+      finalFeeStatus = details.shippingFeeStatus;
+    } else if (effectiveFee <= 0 || requestedMode === "waived") {
+      finalFeeStatus = "waived";
+      collectionMode = "waived";
+      paymentMethodVal = "waived";
+    } else if (requestedMode === "cod" || (!requestedMode && details.shippingFeeStatus === "cod_on_replacement")) {
+      finalFeeStatus = "cod_on_replacement";
+      collectionMode = "cod";
+      paymentMethodVal = "cod";
+    } else {
+      finalFeeStatus = "pending";
+      collectionMode = "online";
+    }
+
+    const nextStage = finalFeeStatus === "pending" ? "qc_passed" : "fee_settled";
+
+    const updatedExchange: IExchangeDetails = {
+      ...details,
+      stage: nextStage,
+      qcStatus: "passed",
+      qcChecklist: {
+        tagsIntact: payload.tagsIntact,
+        unusedCondition: payload.unusedCondition,
+        packagingIntact: payload.packagingIntact,
+      },
+      qcNotes: payload.qcNotes,
+      qcInspectedAt: new Date(),
+      qcInspectedBy: adminUserId,
+      reverseStatus: "delivered_to_hub",
+      pickedUpAt: details.pickedUpAt || new Date(),
+      shippingFee: effectiveFee,
+      shippingFeeStatus: finalFeeStatus,
+      shippingFeeCollectionMode: collectionMode,
+      shippingFeePaymentMethod: paymentMethodVal,
+    };
+
+    const noteText =
+      finalFeeStatus === "pending"
+        ? `Warehouse QC PASSED (${payload.qcNotes}). Awaiting 2-way courier fee of Rs. ${effectiveFee} (Online Pay) from customer.`
+        : finalFeeStatus === "cod_on_replacement"
+        ? `Warehouse QC PASSED (${payload.qcNotes}). Exchange shipping fee set as COD ON REPLACEMENT PARCEL (Rs. ${effectiveFee} to be collected at delivery). Ready for replacement dispatch.`
+        : `Warehouse QC PASSED (${payload.qcNotes}). Shipping fee status: ${finalFeeStatus}. Ready for replacement dispatch.`;
+
+    const nextStatus = this.computeAggregateExchangeOrderStatus(order, updatedExchange, "return_picked");
+    const updated = await OrderRepository.updateExchangeDetails(dbId, updatedExchange, nextStatus, {
+      text: noteText,
+      author: "Admin",
+      timestamp: new Date(),
+    });
+    await this.invalidateAdminCountsCache();
+
+    const customerEmail = order.guestEmail || order.customerEmail;
+    if (customerEmail && finalFeeStatus === "pending" && effectiveFee > 0) {
+      const orderUrl = `${ENV.FRONTEND_URL}/account/orders/${encodeURIComponent(dbId)}`;
+      addEmailJob(
+        customerEmail,
+        `QC Passed! Pay Rs. ${effectiveFee} Shipping Fee for Exchange #${order.orderNumber}`,
+        `<p>Hello ${order.shippingAddress?.fullName || "Rider"},</p><p>Good news! Your exchange gear for Order <strong>#${order.orderNumber}</strong> passed our warehouse quality inspection.</p><p>Please settle the 2-way pickup &amp; replacement shipping fee of <strong>Rs. ${effectiveFee}</strong> online inside your order page via PayU / UPI / Card to unlock immediate replacement dispatch.</p><p><a href="${orderUrl}">Pay Shipping Fee Online</a></p>`
+      );
+    }
+
+    return updated;
+  }
+
+  static async adminSettleExchangeFee(
+    orderId: string,
+    adminUserId: string,
+    payload: {
+      exchangeId?: string;
+      settlementMode: "online_pending" | "paid_manual" | "cod_on_replacement" | "waived";
+      paymentRef?: string;
+      shippingFee?: number;
+      note?: string;
+    }
+  ) {
+    const order = await OrderRepository.findById(orderId);
+    if (!order) throw new NotFoundError("Order");
+
+    const dbId = (order as any)._id?.toString() || order.id || orderId;
+    const settings = await SettingRepository.getSettings();
+    const configuredFee = typeof settings.exchangeShippingFee === "number" ? settings.exchangeShippingFee : 299;
+    const details = this.resolveExchangeDetails(order, configuredFee, payload.exchangeId);
+
+    if (details.qcStatus !== "passed") {
+      throw new ValidationError("Quality check must pass before updating shipping fee mode");
+    }
+
+    if (details.stage === "replacement_dispatched" || details.stage === "completed") {
+      throw new ValidationError("Cannot change fee mode after replacement parcel has been dispatched");
+    }
+
+    if (details.shippingFeeStatus === "paid_online" && payload.settlementMode === "online_pending") {
+      throw new ValidationError("Customer has already paid the exchange shipping fee online");
+    }
+
+    if (payload.settlementMode === "paid_manual" && !payload.paymentRef?.trim()) {
+      throw new ValidationError("UPI / Payment reference ID is required when marking fee as manually paid");
+    }
+
+    const effectiveFee =
+      payload.settlementMode === "waived"
+        ? 0
+        : typeof payload.shippingFee === "number" && payload.shippingFee >= 0
+        ? payload.shippingFee
+        : details.shippingFee > 0
+        ? details.shippingFee
+        : configuredFee;
+
+    if (
+      (payload.settlementMode === "cod_on_replacement" || payload.settlementMode === "online_pending") &&
+      effectiveFee <= 0
+    ) {
+      throw new ValidationError("Shipping fee amount must be greater than Rs. 0 for this mode");
+    }
+
+    const isOnlinePending = payload.settlementMode === "online_pending";
+    const nextFeeStatus =
+      payload.settlementMode === "online_pending" ? ("pending" as const) : payload.settlementMode;
+    const nextStage = isOnlinePending ? ("qc_passed" as const) : ("fee_settled" as const);
+    const collectionMode: "online" | "cod" | "waived" =
+      payload.settlementMode === "cod_on_replacement"
+        ? "cod"
+        : payload.settlementMode === "waived"
+        ? "waived"
+        : "online";
+
+    const updatedExchange: IExchangeDetails = {
+      ...details,
+      shippingFee: effectiveFee,
+      shippingFeeStatus: nextFeeStatus,
+      shippingFeeCollectionMode: collectionMode,
+      shippingFeePaymentMethod:
+        payload.settlementMode === "cod_on_replacement"
+          ? "cod"
+          : payload.settlementMode === "paid_manual"
+          ? "manual_upi"
+          : payload.settlementMode === "waived"
+          ? "waived"
+          : "payu",
+      shippingFeePaymentRef: payload.paymentRef?.trim() || details.shippingFeePaymentRef,
+      shippingFeePaidAt: payload.settlementMode === "paid_manual" ? new Date() : details.shippingFeePaidAt,
+      stage: nextStage,
+    };
+
+    const modeDesc = isOnlinePending
+      ? `enabled ONLINE PAY MODE (Rs. ${effectiveFee} — customer can pay via PayU/UPI on website)`
+      : payload.settlementMode === "paid_manual"
+      ? `marked PAID MANUALLY (Rs. ${effectiveFee}, Ref: ${payload.paymentRef?.trim()})`
+      : payload.settlementMode === "cod_on_replacement"
+      ? `set as COD ON REPLACEMENT PARCEL (Rs. ${effectiveFee} to be collected at delivery)`
+      : `WAIVED by admin`;
+
+    const updated = await OrderRepository.updateExchangeDetails(dbId, updatedExchange, undefined, {
+      text: `Exchange shipping fee ${modeDesc}.${payload.note ? ` Note: ${payload.note}` : ""}`,
+      author: `Admin (${adminUserId})`,
+      timestamp: new Date(),
+    });
+    await this.invalidateAdminCountsCache();
+
+    const customerEmail = order.guestEmail || order.customerEmail;
+    if (customerEmail && isOnlinePending) {
+      const orderUrl = `${ENV.FRONTEND_URL}/account/orders/${encodeURIComponent(dbId)}`;
+      addEmailJob(
+        customerEmail,
+        `Pay Rs. ${effectiveFee} Exchange Shipping Fee — Order #${order.orderNumber}`,
+        `<p>Hello ${order.shippingAddress?.fullName || "Rider"},</p><p>Online payment of <strong>Rs. ${effectiveFee}</strong> is now open for your gear exchange on Order <strong>#${order.orderNumber}</strong>.</p><p><a href="${orderUrl}">Click here to Pay via PayU / UPI / Card</a></p>`
+      );
+    }
+
+    return updated;
+  }
+
+  static async initiateExchangeFeePayment(
+    orderId: string,
+    userId: string,
+    paymentMethod: "payu" | "ccavenue" | "upi",
+    exchangeId?: string
+  ) {
+    const order = await OrderRepository.findById(orderId);
+    if (!order || order.userId !== userId) {
+      throw new NotFoundError("Order");
+    }
+
+    const dbId = (order as any)._id?.toString() || order.id || orderId;
+    const settings = await SettingRepository.getSettings();
+    const configuredFee = typeof settings.exchangeShippingFee === "number" ? settings.exchangeShippingFee : 299;
+    const details = this.resolveExchangeDetails(order, configuredFee, exchangeId);
+
+    if (details.qcStatus !== "passed") {
+      throw new ValidationError("Your exchange item must pass warehouse quality inspection before shipping fee payment opens.");
+    }
+
+    if (details.shippingFeeStatus === "paid_online" || details.shippingFeeStatus === "paid_manual" || details.shippingFeeStatus === "waived") {
+      throw new ValidationError("Exchange shipping fee is already settled for this order.");
+    }
+
+    if (details.shippingFeeStatus === "cod_on_replacement") {
+      throw new ValidationError("Shipping fee is set to Cash on Delivery when your replacement arrives.");
+    }
+
+    const feeAmount = Number(details.shippingFee);
+    if (!feeAmount || feeAmount <= 0) {
+      throw new ValidationError("No shipping fee is due for this exchange.");
+    }
+
+    const enabled = Array.isArray(settings.enabledGateways) ? settings.enabledGateways : [];
+    const gatewayAllowed =
+      paymentMethod === "upi"
+        ? Boolean(settings.upiMerchantVpa || ENV.GOOGLE_PAY_MERCHANT_VPA)
+        : enabled.length === 0 || enabled.includes(paymentMethod);
+    if (!gatewayAllowed) {
+      throw new ValidationError(`Payment gateway '${paymentMethod}' is currently unavailable.`);
+    }
+
+    const user = order.userId ? await UserRepository.findById(order.userId) : null;
+    const userEmail = user?.email || order.guestEmail || order.customerEmail;
+    const feeOrderNumber = `${order.orderNumber}-EXF-${Date.now().toString().slice(-4)}`;
+
+    const gateway = PaymentGatewayFactory.create(paymentMethod);
+    const cleanFrontendUrl = (ENV.FRONTEND_URL || "").replace(/\/$/, "");
+    const gatewayResult = await gateway.createOrder(
+      {
+        ...order,
+        id: dbId,
+        orderNumber: feeOrderNumber,
+        userEmail,
+        ...(cleanFrontendUrl
+          ? { cancelUrl: `${cleanFrontendUrl}/account/orders/${encodeURIComponent(dbId)}?exchangeFeePaid=false` }
+          : {}),
+      } as any,
+      feeAmount
+    );
+
+    const gatewayOrderId = gatewayResult.gatewayOrderId;
+
+    await PaymentRepository.create({
+      orderId: dbId,
+      status: "created",
+      amount: feeAmount,
+      gatewayOrderId,
+      method: paymentMethod as any,
+      gateway: paymentMethod as any,
+      paymentPurpose: "exchange_fee",
+      webhookEvents: [],
+      idempotencyKey: `exf_${dbId}_${gatewayOrderId}`,
     });
 
-    return await OrderRepository.updateStatus(dbId, status);
+    const updatedDetails: IExchangeDetails = {
+      ...details,
+      shippingFeeGatewayOrderId: gatewayOrderId,
+    };
+    await OrderRepository.updateExchangeDetails(dbId, updatedDetails);
+
+    return {
+      orderId: dbId,
+      orderNumber: feeOrderNumber,
+      gatewayOrderId,
+      amount: feeAmount,
+      gatewayResponse: gatewayResult.gatewayResponse,
+      paymentMethod,
+    };
+  }
+
+  static async adminDispatchReplacement(
+    orderId: string,
+    adminUserId: string,
+    payload: {
+      exchangeId?: string;
+      provider: "shiprocket" | "delhivery" | "xpressbees" | "manual";
+      warehouseId?: string;
+      courierName?: string;
+      awb?: string;
+      trackingUrl?: string;
+      replacementVariant?: string;
+      weightKg?: number;
+      length?: number;
+      breadth?: number;
+      height?: number;
+      autoAssignAwb?: boolean;
+    }
+  ) {
+    const order = await OrderRepository.findById(orderId);
+    if (!order) throw new NotFoundError("Order");
+
+    const dbId = (order as any)._id?.toString() || order.id || orderId;
+    const settings = await SettingRepository.getSettings();
+    const configuredFee = typeof settings.exchangeShippingFee === "number" ? settings.exchangeShippingFee : 299;
+    const details = this.resolveExchangeDetails(order, configuredFee, payload.exchangeId);
+
+    if (details.qcStatus !== "passed") {
+      throw new ValidationError("Cannot dispatch replacement before Warehouse QC passes.");
+    }
+
+    if (details.stage === "replacement_dispatched" || details.stage === "completed") {
+      throw new ValidationError("Replacement parcel has already been dispatched for this exchange.");
+    }
+
+    const isFeeSettled =
+      details.shippingFee <= 0 ||
+      ["paid_online", "paid_manual", "cod_on_replacement", "waived"].includes(details.shippingFeeStatus);
+
+    if (!isFeeSettled) {
+      throw new ValidationError(
+        `Shipping fee (Rs. ${details.shippingFee}) is still pending. Collect fee online/manually or select 'COD on Replacement' before dispatching.`
+      );
+    }
+
+    const isCodFee = details.shippingFeeStatus === "cod_on_replacement" && details.shippingFee > 0;
+    const { ShipmentService } = await import("../shipping/shipment.service");
+    const dispatchResult = await ShipmentService.createExchangeReplacementShipment({
+      orderId: dbId,
+      provider: payload.provider,
+      warehouseId: payload.warehouseId,
+      courierName: payload.courierName,
+      awb: payload.awb,
+      trackingUrl: payload.trackingUrl,
+      replacementVariant: payload.replacementVariant || details.desiredReplacement,
+      ...(details.items?.length ? { exchangeItems: details.items } : {}),
+      isCodFee,
+      codFeeAmount: isCodFee ? details.shippingFee : 0,
+      weightKg: payload.weightKg,
+      length: payload.length,
+      breadth: payload.breadth,
+      height: payload.height,
+      autoAssignAwb: payload.autoAssignAwb,
+    });
+
+    const updatedExchange: IExchangeDetails = {
+      ...details,
+      ...(payload.replacementVariant ? { desiredReplacement: payload.replacementVariant.trim() } : {}),
+      stage: "replacement_dispatched",
+      replacementCourier: dispatchResult.courierName || payload.courierName || payload.provider.toUpperCase(),
+      replacementAwb: dispatchResult.awb,
+      replacementTrackingUrl: dispatchResult.trackingUrl,
+      replacementShipmentId: dispatchResult.shipment?._id ? String(dispatchResult.shipment._id) : undefined,
+      replacementDispatchedAt: new Date(),
+    };
+
+    const codTag = isCodFee ? ` [COD Fee: Rs. ${details.shippingFee} on delivery]` : " [Prepaid Rs. 0]";
+    const noteText = `Replacement dispatched via ${updatedExchange.replacementCourier}${updatedExchange.replacementAwb ? ` (AWB: ${updatedExchange.replacementAwb})` : ""}${codTag}.`;
+
+    const nextStatus = this.computeAggregateExchangeOrderStatus(order, updatedExchange, "return_picked");
+    const updated = await OrderRepository.updateExchangeDetails(dbId, updatedExchange, nextStatus, {
+      text: noteText,
+      author: `Admin (${adminUserId})`,
+      timestamp: new Date(),
+    });
+    await this.invalidateAdminCountsCache();
+
+    const customerEmail = order.guestEmail || order.customerEmail;
+    if (customerEmail) {
+      addEmailJob(
+        customerEmail,
+        `Replacement Dispatched for Order #${order.orderNumber} — Store4Riders`,
+        `<p>Hello ${order.shippingAddress?.fullName || "Rider"},</p><p>Your replacement gear (<strong>${updatedExchange.desiredReplacement || "Replacement"}</strong>) for Order <strong>#${order.orderNumber}</strong> has been dispatched via <strong>${updatedExchange.replacementCourier}</strong>.</p>${updatedExchange.replacementAwb ? `<p><strong>Tracking AWB:</strong> ${updatedExchange.replacementAwb}</p>` : ""}${isCodFee ? `<p><strong>Note:</strong> Courier will collect <strong>Rs. ${details.shippingFee}</strong> (2-way exchange shipping fee) upon delivery.</p>` : ""}`
+      );
+    }
+
+    return updated;
+  }
+
+  static async adminCompleteExchange(orderId: string, adminUserId: string, exchangeId?: string) {
+    const order = await OrderRepository.findById(orderId);
+    if (!order) throw new NotFoundError("Order");
+
+    const dbId = (order as any)._id?.toString() || order.id || orderId;
+    const settings = await SettingRepository.getSettings();
+    const configuredFee = typeof settings.exchangeShippingFee === "number" ? settings.exchangeShippingFee : 299;
+    const details = this.resolveExchangeDetails(order, configuredFee, exchangeId);
+
+    if (details.qcStatus !== "passed") {
+      throw new ValidationError("Cannot mark exchange complete before Warehouse QC passes.");
+    }
+
+    const updatedExchange: IExchangeDetails = {
+      ...details,
+      stage: "completed",
+      replacementCompletedAt: new Date(),
+    };
+
+    const nextStatus = this.computeAggregateExchangeOrderStatus(order, updatedExchange, "returned");
+    const updated = await OrderRepository.updateExchangeDetails(dbId, updatedExchange, nextStatus, {
+      text: "Exchange completed — replacement gear delivered to customer.",
+      author: `Admin (${adminUserId})`,
+      timestamp: new Date(),
+    });
+    await this.invalidateAdminCountsCache();
+    return updated;
   }
 
   static async getInvoiceUrl(orderId: string, userId: string) {
@@ -1436,6 +2546,18 @@ export class OrderService {
           : Math.max(0, (order.pricing?.total || 0) - advancePaid))
       : 0;
 
+    let activeReturnDays = 7;
+    try {
+      const storeSettings = await SettingRepository.getSettings();
+      if (typeof storeSettings?.returnWindowDays === "number" && storeSettings.returnWindowDays >= 0) {
+        activeReturnDays = storeSettings.returnWindowDays;
+      }
+    } catch {}
+    const policyFooterLine =
+      activeReturnDays > 0
+        ? `* Note: Store4Riders operates under a strict ${activeReturnDays}-Day Size & Gear Exchange Policy. No monetary returns/refunds.`
+        : `* Note: Store4Riders operates under a Final Sale Policy for this item. Size exchanges are not applicable.`;
+
     const emailSubject = `Tax Invoice for Order #${order.orderNumber} - Store4Riders`;
     const emailBody = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
@@ -1466,7 +2588,7 @@ export class OrderService {
         </div>
 
         <p style="font-size: 12px; color: #64748b; line-height: 1.5;">
-          * Note: Store4Riders operates under a strict 7-Day Size & Gear Exchange Policy. No monetary returns/refunds.
+          ${policyFooterLine}
         </p>
         <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
         <p style="font-size: 12px; color: #94a3b8; text-align: center;">

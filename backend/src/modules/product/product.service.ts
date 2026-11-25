@@ -57,15 +57,32 @@ export class ProductService {
         .join(";");
     };
 
-    const cacheKey = `products_v16_${page}_${limit}_${serializeFilter(filters)}_${serializeFilter(sort)}`;
+    const filterKey = serializeFilter(filters);
+    const cacheKey = `products_v17_${page}_${limit}_${filterKey}_${serializeFilter(sort)}`;
     const cached = await getCache(cacheKey);
     if (cached) return cached;
 
     const skip = (page - 1) * limit;
-    const [items, totalCount] = await Promise.all([
-      ProductRepository.findAll(filters, skip, limit, sort),
-      ProductRepository.count(filters),
-    ]);
+    const countCacheKey = `products_count_v1_${filterKey}`;
+    const cachedCount = await getCache(countCacheKey);
+
+    let items: IProduct[];
+    let totalCount: number;
+
+    if (typeof cachedCount === "number") {
+      totalCount = cachedCount;
+      items =
+        totalCount === 0 || skip >= totalCount
+          ? []
+          : await ProductRepository.findAll(filters, skip, limit, sort);
+    } else {
+      [items, totalCount] = await Promise.all([
+        ProductRepository.findAll(filters, skip, limit, sort),
+        ProductRepository.count(filters),
+      ]);
+      await setCache(countCacheKey, totalCount, PRODUCT_LIST_TTL);
+    }
+
     const result = { items, totalCount };
 
     await setCache(cacheKey, result, PRODUCT_LIST_TTL);

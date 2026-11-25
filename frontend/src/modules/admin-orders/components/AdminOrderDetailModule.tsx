@@ -5,12 +5,13 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import { format } from "date-fns";
-import { formatPrice } from "@store4riders/shared-utils";
+import { formatPrice, getOrderExchangesList } from "@store4riders/shared-utils";
 import { useAdminOrderById } from "@/core/hooks/useOrderById";
 import { 
   useAdminUpdateOrderStatus, 
   useAdminAddOrderNote, 
   useAdminHandleReturn, 
+  useAdminCompleteExchange,
   useAdminDeleteOrder,
   useAdminResendInvoiceEmail,
   useAdminAssignWarehouse
@@ -20,7 +21,11 @@ import { useGenerateInvoice } from "@/core/hooks/useOrderActions";
 import { useOrderShipments } from "@/core/hooks/useShipments";
 import { usePushToShiprocket } from "@/core/hooks/useAdminShipments";
 import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
-import { parseExchangeNote } from "./ExchangeRequestsModule";
+import {
+  ExchangeWorkflowModals,
+  resolveOrderExchangeState,
+  type ActiveExchangeActionModal,
+} from "./ExchangeWorkflowModals";
 import { toast } from "sonner";
 import { 
   ArrowLeftIcon, 
@@ -107,10 +112,20 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
   const { data: publicSettings } = usePublicSettings();
   const { data: warehouses } = useWarehouses();
   const { data: orderShipments } = useOrderShipments(orderId);
-  const latestShipment = orderShipments && orderShipments.length > 0 ? orderShipments[0] : null;
+  const latestShipment =
+    orderShipments && orderShipments.length > 0
+      ? orderShipments.find(
+          (s: any) =>
+            s.shipmentType !== "reverse" &&
+            !String(s.idempotencyKey || "").startsWith("exchange_fwd_")
+        ) ||
+        orderShipments.find((s: any) => s.shipmentType !== "reverse") ||
+        null
+      : null;
   const updateStatusMutation = useAdminUpdateOrderStatus();
   const addNoteMutation = useAdminAddOrderNote();
   const handleReturnMutation = useAdminHandleReturn();
+  const completeExchangeMutation = useAdminCompleteExchange();
   const generateInvoiceMutation = useGenerateInvoice();
   const resendInvoiceMutation = useAdminResendInvoiceEmail();
   const assignWarehouseMutation = useAdminAssignWarehouse();
@@ -120,6 +135,7 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
 
   const [noteText, setNoteText] = useState("");
   const [returnNote, setReturnNote] = useState("");
+  const [activeExchangeModal, setActiveExchangeModal] = useState<ActiveExchangeActionModal>(null);
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -217,8 +233,13 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
     });
   };
 
-  const handleReturnAction = (action: "approve" | "reject") => {
-    handleReturnMutation.mutate({ orderId, action, adminNote: returnNote });
+  const handleReturnAction = (action: "approve" | "reject", exchangeId?: string) => {
+    handleReturnMutation.mutate({
+      orderId,
+      ...(exchangeId ? { exchangeId } : {}),
+      action,
+      adminNote: returnNote,
+    });
   };
 
   const handleDeleteOrder = () => {
@@ -858,92 +879,233 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
             </div>
           </div>
 
-          {/* Exchange Management (Visible for any exchange status) */}
-          {["return_requested", "return_approved", "return_picked", "returned"].includes(order.status) && (() => {
-            const exchangeNote = order.notes?.slice().reverse().find((n: any) => 
-              typeof n.text === "string" && (n.text.toLowerCase().includes("return") || n.text.toLowerCase().includes("exchange"))
-            );
-            const parsed = parseExchangeNote(exchangeNote?.text);
-            const isPendingAction = order.status === "return_requested";
+          {/* Exchange Management (Visible for any active or audited exchange — supports multiple item-level exchanges) */}
+          {(["return_requested", "return_approved", "return_picked", "returned"].includes(order.status) ||
+            Boolean((order as any).exchangeDetails?.stage) ||
+            getOrderExchangesList(order).length > 0) && (() => {
+            const defaultExFee = typeof publicSettings?.exchangeShippingFee === "number" ? publicSettings.exchangeShippingFee : 299;
+            const exchangesList = getOrderExchangesList(order);
+            const entriesToRender = exchangesList.length > 0 ? exchangesList : [undefined];
 
             return (
-              <div className="bg-orange-50/90 border border-orange-200 rounded-lg p-5 space-y-3 animate-in fade-in">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <h2 className="text-sm font-black uppercase text-orange-950 flex items-center gap-1.5">
-                    <span>🔄</span>
-                    <span>Customer Exchange Request</span>
-                  </h2>
-                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase border ${
-                    order.status === "return_requested" ? "bg-amber-100 text-amber-800 border-amber-300" :
-                    order.status === "return_approved" ? "bg-purple-100 text-purple-800 border-purple-300" :
-                    order.status === "return_picked" ? "bg-blue-100 text-blue-800 border-blue-300" :
-                    "bg-emerald-100 text-emerald-800 border-emerald-300"
-                  }`}>
-                    {getStatusLabel(order.status)}
-                  </span>
-                </div>
+              <div className="space-y-4">
+                {entriesToRender.map((exEntry: any, exIdx: number) => {
+                  const currentExchangeId = exEntry?.exchangeId;
+                  const exState = resolveOrderExchangeState(order, defaultExFee, currentExchangeId);
+                  const isPendingAction = exState.stage === "requested";
+                  const isFeeSettled =
+                    exState.feeAmount <= 0 ||
+                    ["paid_online", "paid_manual", "cod_on_replacement", "waived"].includes(exState.feeStatus);
+                  const itemsLabel = exState.items?.length > 0
+                    ? exState.items.map((i: any) => `${i.name}${i.variantId ? ` [${i.variantId}]` : ""} x${i.quantity || 1}`).join(", ")
+                    : exState.requestedItemNames;
 
-                {/* Parsed Reason & Replacement Box */}
-                <div className="bg-white rounded-lg p-3 border border-orange-200/80 space-y-2 text-xs">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-neutral-400 block mb-0.5">Reason Category:</span>
-                    <span className="font-bold text-neutral-900 bg-neutral-100 px-2 py-0.5 rounded text-xs">
-                      {parsed.reasonType}
-                    </span>
-                  </div>
+                  return (
+                    <div key={currentExchangeId || `adm_ex_${exIdx}`} className="bg-orange-50/90 border border-orange-200 rounded-lg p-5 space-y-3 animate-in fade-in">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <h2 className="text-sm font-black uppercase text-orange-950 flex items-center gap-1.5">
+                          <span>🔄</span>
+                          <span>
+                            {entriesToRender.length > 1
+                              ? `Customer Exchange #${exIdx + 1}`
+                              : "Customer Exchange Lifecycle"}
+                          </span>
+                        </h2>
+                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase border ${
+                          exState.stage === "rejected" || exState.stage === "qc_failed"
+                            ? "bg-red-100 text-red-800 border-red-300"
+                            : exState.stage === "completed" || exState.stage === "replacement_dispatched"
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                            : exState.stage === "qc_passed" || exState.stage === "requested"
+                            ? "bg-amber-100 text-amber-800 border-amber-300"
+                            : "bg-purple-100 text-purple-800 border-purple-300"
+                        }`}>
+                          {exState.stage.replace(/_/g, " ")}
+                        </span>
+                      </div>
 
-                  {parsed.replacementRequirement && (
-                    <div className="bg-amber-50/80 p-2 rounded border border-amber-200">
-                      <span className="text-[10px] uppercase font-bold text-amber-900 block mb-0.5">Desired Replacement:</span>
-                      <span className="font-bold text-neutral-900 break-all text-xs">{parsed.replacementRequirement}</span>
+                      {/* Parsed Reason & Replacement Box */}
+                      <div className="bg-white rounded-lg p-3 border border-orange-200/80 space-y-2 text-xs">
+                        {itemsLabel && (
+                          <div className="bg-neutral-50 p-2 rounded border border-neutral-200">
+                            <span className="text-[10px] uppercase font-bold text-neutral-500 block mb-0.5">Exchanged Item(s):</span>
+                            <span className="font-bold text-neutral-900 text-xs">{itemsLabel}</span>
+                          </div>
+                        )}
+
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-neutral-400 block mb-0.5">Reason Category:</span>
+                          <span className="font-bold text-neutral-900 bg-neutral-100 px-2 py-0.5 rounded text-xs">
+                            {exState.reasonType}
+                          </span>
+                        </div>
+
+                        {exState.desiredReplacement && (
+                          <div className="bg-amber-50/80 p-2 rounded border border-amber-200">
+                            <span className="text-[10px] uppercase font-bold text-amber-900 block mb-0.5">Desired Replacement:</span>
+                            <span className="font-bold text-neutral-900 break-all text-xs">{exState.desiredReplacement}</span>
+                          </div>
+                        )}
+
+                        {exState.customerNote && (
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-neutral-400 block mb-0.5">Customer Note:</span>
+                            <p className="text-neutral-800 break-all bg-neutral-50 p-2 rounded border border-neutral-100 text-xs">
+                              &ldquo;{exState.customerNote}&rdquo;
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Logistics / QC / Fee Telemetry */}
+                        <div className="pt-2 border-t border-neutral-100 space-y-1.5 text-[11px]">
+                          <div className="flex justify-between">
+                            <span className="text-neutral-500">Reverse Pickup AWB:</span>
+                            <span className="font-mono font-bold text-neutral-900">
+                              {exState.reverseAwb ? `${exState.reverseCourier} • ${exState.reverseAwb}` : "Not assigned"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-neutral-500">Warehouse QC:</span>
+                            <span className={`font-bold uppercase ${
+                              exState.qcStatus === "passed" ? "text-emerald-700" : exState.qcStatus === "failed" ? "text-red-700" : "text-neutral-600"
+                            }`}>
+                              {exState.qcStatus}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-neutral-500">2-Way Shipping Fee (₹{exState.feeAmount}):</span>
+                            <span className={`font-bold uppercase ${
+                              exState.feeStatus === "paid_online" || exState.feeStatus === "paid_manual"
+                                ? "text-emerald-700"
+                                : exState.feeStatus === "cod_on_replacement"
+                                ? "text-blue-700"
+                                : "text-amber-800"
+                            }`}>
+                              {exState.feeStatus === "paid_online"
+                                ? `PAID ONLINE (${(exState.feePaymentMethod || "GATEWAY").toUpperCase()})`
+                                : exState.feeStatus === "pending"
+                                ? "AWAITING ONLINE PAY"
+                                : exState.feeStatus.replace(/_/g, " ")}
+                            </span>
+                          </div>
+                          {exState.feePaymentRef && (
+                            <div className="flex justify-between">
+                              <span className="text-neutral-500">Fee Payment Ref:</span>
+                              <span className="font-mono font-bold text-neutral-900">{exState.feePaymentRef}</span>
+                            </div>
+                          )}
+                          {exState.replacementAwb && (
+                            <div className="flex justify-between">
+                              <span className="text-emerald-700 font-semibold">Replacement Forward AWB:</span>
+                              <span className="font-mono font-bold text-emerald-900">
+                                {exState.replacementCourier} • {exState.replacementAwb}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Admin Stage Actions */}
+                      {!isCustomerCare && (
+                        <div className="space-y-2 pt-2 border-t border-orange-200">
+                          {isPendingAction && (
+                            <>
+                              <input 
+                                type="text" 
+                                value={returnNote}
+                                onChange={e => setReturnNote(e.target.value)}
+                                placeholder="Rejection reason or internal note..."
+                                className="w-full px-3 py-2 border border-orange-200 rounded text-xs focus:outline-none focus:border-orange-400 bg-white"
+                              />
+                              <div className="flex gap-2">
+                                <button 
+                                  type="button"
+                                  onClick={() => setActiveExchangeModal({ type: "approve", order, exchangeId: currentExchangeId })}
+                                  className="flex-1 py-2 bg-emerald-600 text-white font-bold text-xs uppercase rounded hover:bg-emerald-700 transition-colors shadow-2xs cursor-pointer"
+                                >
+                                  Approve &amp; Pickup
+                                </button>
+                                <button 
+                                  type="button"
+                                  onClick={() => handleReturnAction("reject", currentExchangeId)}
+                                  disabled={handleReturnMutation.isPending}
+                                  className="flex-1 py-2 bg-red-600 text-white font-bold text-xs uppercase rounded hover:bg-red-700 transition-colors disabled:opacity-50 shadow-2xs cursor-pointer"
+                                >
+                                  Reject Exchange
+                                </button>
+                              </div>
+                            </>
+                          )}
+
+                          {(exState.stage === "approved" || exState.stage === "picked_up") && exState.qcStatus !== "passed" && (
+                            <div className="flex gap-2 flex-wrap">
+                              {exState.stage === "approved" && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveExchangeModal({ type: "pickup", order, exchangeId: currentExchangeId })}
+                                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase rounded shadow-2xs cursor-pointer"
+                                >
+                                  Pickup / Reverse AWB
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setActiveExchangeModal({ type: "qc", order, exchangeId: currentExchangeId })}
+                                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase rounded shadow-2xs cursor-pointer"
+                              >
+                                Perform Warehouse QC
+                              </button>
+                            </div>
+                          )}
+
+                          {exState.qcStatus === "passed" && exState.stage !== "replacement_dispatched" && exState.stage !== "completed" && (
+                            <div className="flex gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => setActiveExchangeModal({ type: "fee", order, exchangeId: currentExchangeId })}
+                                className="flex-1 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs uppercase rounded shadow-2xs cursor-pointer"
+                              >
+                                {isFeeSettled ? "Fee / COD Options" : `Collect Fee (₹${exState.feeAmount})`}
+                              </button>
+                              {isFeeSettled && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveExchangeModal({ type: "dispatch", order, exchangeId: currentExchangeId })}
+                                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase rounded shadow-2xs cursor-pointer"
+                                >
+                                  Dispatch Replacement
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {exState.stage === "replacement_dispatched" && (
+                            <button
+                              type="button"
+                              disabled={completeExchangeMutation.isPending}
+                              onClick={() => {
+                                if (window.confirm(`Mark replacement delivered and complete exchange for Order #${order.orderNumber}?`)) {
+                                  completeExchangeMutation.mutate(
+                                    currentExchangeId ? { orderId, exchangeId: currentExchangeId } : orderId
+                                  );
+                                }
+                              }}
+                              className="w-full py-2 bg-neutral-900 hover:bg-black text-white font-bold text-xs uppercase rounded shadow-2xs disabled:opacity-50 cursor-pointer"
+                            >
+                              Mark Replacement Delivered (Complete)
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {isCustomerCare && (
+                        <div className="text-xs font-semibold text-orange-800 bg-orange-100/60 p-2.5 rounded border border-orange-200">
+                          ⓘ Logistics team handles pickup, QC inspection, and replacement dispatch.
+                        </div>
+                      )}
                     </div>
-                  )}
-
-                  {parsed.customerNote && (
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-neutral-400 block mb-0.5">Customer Note:</span>
-                      <p className="text-neutral-800 break-all bg-neutral-50 p-2 rounded border border-neutral-100 text-xs">
-                        "{parsed.customerNote}"
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Admin Actions if pending review */}
-                {isPendingAction && !isCustomerCare && (
-                  <div className="space-y-2 pt-2 border-t border-orange-200">
-                    <input 
-                      type="text" 
-                      value={returnNote}
-                      onChange={e => setReturnNote(e.target.value)}
-                      placeholder="Optional admin note / response to customer..."
-                      className="w-full px-3 py-2 border border-orange-200 rounded text-xs focus:outline-none focus:border-orange-400 bg-white"
-                    />
-
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => handleReturnAction("approve")}
-                        disabled={handleReturnMutation.isPending}
-                        className="flex-1 py-2 bg-emerald-600 text-white font-bold text-xs uppercase rounded hover:bg-emerald-700 transition-colors disabled:opacity-50 shadow-2xs cursor-pointer"
-                      >
-                        Approve Exchange
-                      </button>
-                      <button 
-                        onClick={() => handleReturnAction("reject")}
-                        disabled={handleReturnMutation.isPending}
-                        className="flex-1 py-2 bg-red-600 text-white font-bold text-xs uppercase rounded hover:bg-red-700 transition-colors disabled:opacity-50 shadow-2xs cursor-pointer"
-                      >
-                        Reject Exchange
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {isCustomerCare && (
-                  <div className="text-xs font-semibold text-orange-800 bg-orange-100/60 p-2.5 rounded border border-orange-200">
-                    ⓘ Logistics team handles pickup and approval of exchanges.
-                  </div>
-                )}
+                  );
+                })}
               </div>
             );
           })()}
@@ -1032,6 +1194,11 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
 
         </div>
       </div>
+
+      <ExchangeWorkflowModals
+        activeModal={activeExchangeModal}
+        onClose={() => setActiveExchangeModal(null)}
+      />
     </>
   );
 

@@ -151,7 +151,7 @@ const browseProductItemSchema = new Schema(
     imageUrl: { type: String, default: "" },
     category: { type: String, default: "RIDING GEAR" },
     productUrl: { type: String, default: "/products" },
-    rating: { type: Number, default: 4.8 },
+    rating: { type: Number, default: 0 },
   },
   { _id: false }
 );

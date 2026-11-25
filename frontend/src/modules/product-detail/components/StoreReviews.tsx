@@ -77,7 +77,7 @@ export const StoreReviews: React.FC<{ reviews?: ReviewData[]; hideHeader?: boole
   
   const homepageReviewIds = useUIStore((state) => state.homepageReviewIds);
   const { data: publicSettings } = usePublicSettings();
-  const dynamicRating = publicSettings?.googleRating ?? 4.8;
+  const dynamicRating = publicSettings?.googleRating;
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useStoreReviews({
     random: true,
@@ -118,9 +118,11 @@ export const StoreReviews: React.FC<{ reviews?: ReviewData[]; hideHeader?: boole
             <h3 className="text-xs md:text-sm font-extrabold uppercase tracking-wider text-neutral-900">
               Store Reviews
             </h3>
-            <span className="hidden sm:inline-flex items-center gap-1.5 bg-white border border-neutral-200/80 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-neutral-800 shadow-xs ml-1">
-              <span suppressHydrationWarning className="text-amber-500">★ {dynamicRating}</span>
-            </span>
+            {dynamicRating && dynamicRating > 0 ? (
+              <span className="hidden sm:inline-flex items-center gap-1.5 bg-white border border-neutral-200/80 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-neutral-800 shadow-xs ml-1">
+                <span suppressHydrationWarning className="text-amber-500">★ {dynamicRating}</span>
+              </span>
+            ) : null}
           </div>
           <a 
             href="https://www.google.com/maps/search/?api=1&query=Store4Riders" 

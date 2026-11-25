@@ -1,5 +1,5 @@
 import mongoose, { Schema } from "mongoose";
-import { IOrder, IOrderItem, IOrderPricing, IOrderAddress } from "@store4riders/shared-types";
+import { IOrder, IOrderItem, IOrderPricing, IOrderAddress, IExchangeDetails, IExchangeItem } from "@store4riders/shared-types";
 
 const orderItemSchema = new Schema<IOrderItem>({
   productId: { type: String, required: true },
@@ -45,6 +45,89 @@ const orderAddressSchema = new Schema<IOrderAddress>({
   email: { type: String },
 });
 
+const exchangeItemSchema = new Schema<IExchangeItem>(
+  {
+    orderItemId: { type: String },
+    productId: { type: String, required: true },
+    variantId: { type: String },
+    sku: { type: String, required: true },
+    name: { type: String, required: true },
+    quantity: { type: Number, required: true, default: 1 },
+    unitPrice: { type: Number },
+    image: { type: String },
+    desiredReplacement: { type: String },
+  },
+  { _id: false }
+);
+
+const exchangeDetailsSchema = new Schema<IExchangeDetails>(
+  {
+    exchangeId: { type: String },
+    items: { type: [exchangeItemSchema], required: false },
+    stage: {
+      type: String,
+      enum: [
+        "requested",
+        "approved",
+        "picked_up",
+        "qc_passed",
+        "qc_failed",
+        "fee_settled",
+        "replacement_dispatched",
+        "completed",
+        "rejected",
+      ],
+      required: true,
+    },
+    reasonType: { type: String, required: true },
+    desiredReplacement: { type: String, default: "" },
+    customerNote: { type: String, default: "" },
+    requestedItemNames: { type: String },
+    requestedAt: { type: Date },
+    approvedAt: { type: Date },
+    reverseCourier: { type: String },
+    reverseAwb: { type: String },
+    reverseTrackingUrl: { type: String },
+    reverseShipmentId: { type: String },
+    reverseStatus: { type: String },
+    pickedUpAt: { type: Date },
+    qcStatus: { type: String, enum: ["pending", "passed", "failed"], default: "pending" },
+    qcChecklist: {
+      type: {
+        tagsIntact: { type: Boolean, default: false },
+        unusedCondition: { type: Boolean, default: false },
+        packagingIntact: { type: Boolean, default: false },
+      },
+      _id: false,
+    },
+    qcNotes: { type: String },
+    qcInspectedAt: { type: Date },
+    qcInspectedBy: { type: String },
+    shippingFee: { type: Number, required: true, default: 0 },
+    shippingFeeStatus: {
+      type: String,
+      enum: ["pending", "paid_online", "paid_manual", "cod_on_replacement", "waived"],
+      default: "pending",
+    },
+    shippingFeeCollectionMode: {
+      type: String,
+      enum: ["online", "cod", "waived"],
+    },
+    shippingFeePaymentMethod: { type: String },
+    shippingFeePaymentRef: { type: String },
+    shippingFeeGatewayOrderId: { type: String },
+    shippingFeePaidAt: { type: Date },
+    replacementCourier: { type: String },
+    replacementAwb: { type: String },
+    replacementTrackingUrl: { type: String },
+    replacementShipmentId: { type: String },
+    replacementDispatchedAt: { type: Date },
+    replacementCompletedAt: { type: Date },
+    rejectionReason: { type: String },
+  },
+  { _id: false }
+);
+
 const orderSchema = new Schema<IOrder>(
   {
     orderNumber: { type: String, required: true, unique: true },
@@ -72,6 +155,9 @@ const orderSchema = new Schema<IOrder>(
         timestamp: { type: Date, default: Date.now },
       },
     ],
+    deliveredAt: { type: Date },
+    exchangeDetails: { type: exchangeDetailsSchema, required: false },
+    exchanges: { type: [exchangeDetailsSchema], required: false },
   },
   { timestamps: true }
 );
@@ -79,12 +165,43 @@ const orderSchema = new Schema<IOrder>(
 // High-performance operational indexes for Admin Dashboard and Order querying
 orderSchema.index({ createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ "exchangeDetails.stage": 1 });
 orderSchema.index({ paymentMethod: 1 });
 orderSchema.index({ "shippingAddress.phone": 1 });
 orderSchema.index({ "shippingAddress.fullName": 1 });
 orderSchema.index({ "shippingAddress.email": 1 });
 
-export const OrderModel = mongoose.models.Order || mongoose.model<IOrder>("Order", orderSchema);
+// Patch cached Mongoose model during Next.js dev hot-reloads so newly added paths aren't stripped by strict mode
+const cachedOrderModel = (mongoose.models as Record<string, mongoose.Model<IOrder>> | undefined)?.Order;
+if ((cachedOrderModel as any)?.schema && typeof (cachedOrderModel as any).schema.path === "function") {
+  const cachedSchema = (cachedOrderModel as any).schema;
+  if (!cachedSchema.path("exchangeDetails")) {
+    cachedSchema.add({ exchangeDetails: { type: exchangeDetailsSchema, required: false } });
+  } else {
+    const exSubSchema = cachedSchema.path("exchangeDetails")?.schema;
+    if (exSubSchema) {
+      if (!exSubSchema.path("shippingFeeCollectionMode")) {
+        exSubSchema.add({
+          shippingFeeCollectionMode: { type: String, enum: ["online", "cod", "waived"] },
+        });
+      }
+      if (!exSubSchema.path("exchangeId")) {
+        exSubSchema.add({ exchangeId: { type: String } });
+      }
+      if (!exSubSchema.path("items")) {
+        exSubSchema.add({ items: { type: [exchangeItemSchema], required: false } });
+      }
+    }
+  }
+  if (!cachedSchema.path("exchanges")) {
+    cachedSchema.add({ exchanges: { type: [exchangeDetailsSchema], required: false } });
+  }
+  if (!cachedSchema.path("deliveredAt")) {
+    cachedSchema.add({ deliveredAt: { type: Date } });
+  }
+}
+
+export const OrderModel = cachedOrderModel || mongoose.model<IOrder>("Order", orderSchema);
 
 export interface IOrderCounter {
   _id: string;

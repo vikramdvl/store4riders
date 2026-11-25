@@ -186,6 +186,10 @@ const ProductCard = ({ product, showBuyNow = false, priority = false }: ProductC
   }
 
   const uniqueColors = Array.from(colorNamesMap.values()).slice(0, 4);
+  const rawRating = Number(product.avgRating) || Number(product.rating) || 0;
+  const hasProductRating =
+    rawRating > 0 &&
+    (product.reviewCount === undefined || Number(product.reviewCount) > 0);
 
   return (
     <Link prefetch={true} href={`/${product.slug || product.id}${preferredColor ? `?color=${encodeURIComponent(preferredColor)}` : ''}`}>
@@ -210,13 +214,15 @@ const ProductCard = ({ product, showBuyNow = false, priority = false }: ProductC
             referrerPolicy="no-referrer"
           />
 
-          {/* Sleek Liquid Glassmorphism Rating Badge */}
-          <div className="absolute top-2.5 left-2.5 bg-white/40 backdrop-blur-md border border-white/50 shadow-[0_4px_12px_rgba(0,0,0,0.05)] text-neutral-900 text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 z-10 transition-transform hover:scale-105">
-            <svg className="w-2.5 h-2.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
-            <span>{product.avgRating ? Number(product.avgRating).toFixed(1) : (product.rating ? Number(product.rating).toFixed(1) : "4.9")}</span>
-          </div>
+          {/* Sleek Liquid Glassmorphism Rating Badge (only shown when product has reviews) */}
+          {hasProductRating && (
+            <div className="absolute top-2.5 left-2.5 bg-white/40 backdrop-blur-md border border-white/50 shadow-[0_4px_12px_rgba(0,0,0,0.05)] text-neutral-900 text-[10px] md:text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 z-10 transition-transform hover:scale-105">
+              <svg className="w-2.5 h-2.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+              </svg>
+              <span>{rawRating.toFixed(1)}</span>
+            </div>
+          )}
 
           {/* Wishlist Button */}
           <button
@@ -349,7 +355,7 @@ const ProductCard = ({ product, showBuyNow = false, priority = false }: ProductC
             category: typeof product.category === "string" ? product.category : product.category?.name || "",
             priceFormatted: formatPrice(price),
             imageUrl,
-            rating: 4.9,
+            rating: hasProductRating ? rawRating : 0,
             productUrl: `/${product.slug || product.id || product._id}${preferredColor ? `?color=${encodeURIComponent(preferredColor)}` : ""}`,
             rawSlug: product.slug,
             rawProduct: product,

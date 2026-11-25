@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { isTokenExpiringSoon, refreshAccessToken } from "@/core/api/client";
 import { toast } from "sonner";
 
 interface AdminLiveEvent {
@@ -19,7 +20,7 @@ interface AdminLiveEvent {
  */
 export function useAdminLiveStream() {
   const queryClient = useQueryClient();
-  const token = useAuthStore((state) => state.token);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -27,14 +28,56 @@ export function useAdminLiveStream() {
   useEffect(() => {
     // Only establish connection for authenticated staff/admin roles
     const role = user?.role;
-    const isStaff = ["admin", "superadmin", "manager", "staff", "logistic"].includes(role || "");
+    const isStaff = [
+      "super_admin",
+      "admin",
+      "superadmin",
+      "manager",
+      "staff",
+      "logistic",
+      "order_manager",
+      "customer_care",
+      "customer_support",
+    ].includes(role || "");
     if (!isStaff) return;
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
     let isMounted = true;
+    let lastConnectAttemptAt = 0;
 
-    const connect = () => {
+    const scheduleReconnect = (delayMs = 5000, forceRefresh = false) => {
+      if (!isMounted || reconnectTimeoutRef.current) return;
+      reconnectTimeoutRef.current = setTimeout(() => {
+        reconnectTimeoutRef.current = null;
+        void connect(forceRefresh);
+      }, delayMs);
+    };
+
+    const connect = async (forceRefresh = false) => {
       if (!isMounted) return;
+
+      const {
+        isAuthenticated,
+        token: currentToken,
+        lastTokenRefreshAt,
+      } = useAuthStore.getState();
+
+      if (!isAuthenticated) return;
+
+      let activeToken = currentToken;
+      if (forceRefresh || isTokenExpiringSoon(currentToken, lastTokenRefreshAt)) {
+        try {
+          activeToken = await refreshAccessToken();
+        } catch {
+          // If session expired (401/403), refreshAccessToken logs out and stops reconnection
+          if (useAuthStore.getState().isAuthenticated) {
+            scheduleReconnect(5000);
+          }
+          return;
+        }
+      }
+
+      if (!isMounted || !useAuthStore.getState().isAuthenticated) return;
 
       // Clean up any stale connection
       if (eventSourceRef.current) {
@@ -42,8 +85,9 @@ export function useAdminLiveStream() {
         eventSourceRef.current = null;
       }
 
-      const streamUrl = `${API_URL}/admin/stream${token ? `?token=${encodeURIComponent(token)}` : ""}`;
-      
+      lastConnectAttemptAt = Date.now();
+      const streamUrl = `${API_URL}/admin/stream${activeToken ? `?token=${encodeURIComponent(activeToken)}` : ""}`;
+
       try {
         const es = new EventSource(streamUrl, { withCredentials: true });
         eventSourceRef.current = es;
@@ -105,13 +149,9 @@ export function useAdminLiveStream() {
           if (es.readyState === EventSource.CLOSED) {
             es.close();
             eventSourceRef.current = null;
-            // Graceful reconnect retry after 5 seconds
-            if (isMounted && !reconnectTimeoutRef.current) {
-              reconnectTimeoutRef.current = setTimeout(() => {
-                reconnectTimeoutRef.current = null;
-                connect();
-              }, 5000);
-            }
+            // If connection failed quickly (e.g. expired JWT returning 401), force token refresh on retry
+            const failedQuickly = Date.now() - lastConnectAttemptAt < 15000;
+            scheduleReconnect(5000, failedQuickly);
           }
         };
       } catch {
@@ -119,13 +159,13 @@ export function useAdminLiveStream() {
       }
     };
 
-    connect();
+    void connect(false);
 
     // Reconnect/re-sync when merchant switches back to the tab
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
-          connect();
+          void connect(false);
         }
       }
     };
@@ -142,5 +182,5 @@ export function useAdminLiveStream() {
         eventSourceRef.current = null;
       }
     };
-  }, [token, user?.role, queryClient]);
+  }, [isAuthenticated, user?.role, queryClient]);
 }

@@ -155,5 +155,40 @@ export async function adminRouter(req: NextRequest, routePath: string[]): Promis
     return await categoryRouter(req, routePath.slice(1));
   }
 
+  if (routePath[0] === "audit-logs") {
+    const { auditLogRouter } = await import("../audit-log/audit-log.route");
+    return await auditLogRouter(req, routePath.slice(1));
+  }
+
+  if (routePath[0] === "blocked-ips") {
+    const { blockedIpRouter } = await import("../blocked-ip/blocked-ip.route");
+    return await blockedIpRouter(req, routePath.slice(1));
+  }
+
+/**
+ * @swagger
+ * /api/v1/admin/system-health:
+ *   get:
+ *     summary: Real-time diagnostics for DB, Redis, Meilisearch, API runtime, payment gateways, and shipping providers
+ *     tags:
+ *       - Admin
+ *     security:
+ *       - bearerAuth: []
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: System health report returned
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Admin access required
+ */
+  if (method === "GET" && pathLen === 1 && routePath[0] === "system-health") {
+    const userId = extractUserFromAuth(req);
+    const { checkAdmin } = await import("../../core/middlewares/admin");
+    await checkAdmin(userId, UserService.getRole);
+    return await AdminController.getSystemHealth();
+  }
+
   return null;
 }

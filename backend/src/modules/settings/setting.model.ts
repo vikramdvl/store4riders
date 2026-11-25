@@ -39,6 +39,7 @@ export interface ISetting extends Document {
   youtubeUrl?: string;
   twitterUrl?: string;
   returnWindowDays?: number;
+  exchangeShippingFee?: number;
   popularSearches?: string[];
   snapmintMinOrderValue?: number;
   brandsMetaTitle?: string;
@@ -191,6 +192,7 @@ const settingSchema = new Schema<ISetting>(
     youtubeUrl: { type: String, default: "https://www.youtube.com/channel/UCfXjs09-TOC1WJnutHUjphg" },
     twitterUrl: { type: String, default: "https://twitter.com/store4riders" },
     returnWindowDays: { type: Number, default: 7 },
+    exchangeShippingFee: { type: Number, required: true, default: 299 },
     popularSearches: { type: [String], default: [] },
     upiMerchantVpa: { type: String, default: "" },
     upiMerchantName: { type: String, default: "Store4Riders" },
@@ -227,11 +229,19 @@ const settingSchema = new Schema<ISetting>(
         { name: "Large Box (Helmets)", length: 40, breadth: 30, height: 30 }
       ]
     },
-    googleRating: { type: Number, default: 4.8 },
-    googleReviewCount: { type: String, default: "800+" },
+    googleRating: { type: Number, default: 0 },
+    googleReviewCount: { type: String, default: "" },
     googleLastSyncedAt: { type: Date }
   },
   { timestamps: true }
 );
 
-export const SettingModel = mongoose.models.Setting || mongoose.model<ISetting>("Setting", settingSchema);
+// Patch cached Mongoose model during Next.js dev hot-reloads
+const cachedSettingModel = (mongoose.models as Record<string, mongoose.Model<ISetting>> | undefined)?.Setting;
+if ((cachedSettingModel as any)?.schema && typeof (cachedSettingModel as any).schema.path === "function") {
+  if (!(cachedSettingModel as any).schema.path("exchangeShippingFee")) {
+    (cachedSettingModel as any).schema.add({ exchangeShippingFee: { type: Number, required: true, default: 299 } });
+  }
+}
+
+export const SettingModel = cachedSettingModel || mongoose.model<ISetting>("Setting", settingSchema);

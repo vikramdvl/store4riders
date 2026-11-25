@@ -126,7 +126,7 @@ export const CheckoutPaymentStep = ({
   };
 
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in duration-300">
+    <div className="flex flex-col gap-4 sm:gap-6 animate-in fade-in duration-300">
       
       {/* Failure & Cancellation Diagnostic Banners */}
       {(isFailedParam || isCancelledParam) && (
@@ -200,43 +200,62 @@ export const CheckoutPaymentStep = ({
         </>
       )}
 
-      {/* Main Payment Container (Clay Card) */}
-      <div className="bg-white rounded-3xl p-5 sm:p-7 shadow-[0_12px_32px_-6px_rgba(15,23,42,0.05),0_4px_16px_-2px_rgba(15,23,42,0.02),inset_0_1.5px_0_rgba(255,255,255,1),inset_0_-2px_4px_rgba(0,0,0,0.015)] border border-slate-100/90 ring-1 ring-slate-900/[0.02] flex flex-col gap-5">
+      {/* Main Payment Container */}
+      <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-[0_1px_3px_rgba(15,23,42,0.04)] border border-slate-200/90 flex flex-col gap-4">
         
         {/* Heading */}
-        <div className="flex flex-col gap-1 pb-3 border-b border-slate-100">
-          <h2 className="font-sans font-bold text-lg md:text-xl text-neutral-900 tracking-tight uppercase flex items-center gap-2.5">
-            <span className="w-7 h-7 rounded-xl bg-gradient-to-br from-neutral-900 to-neutral-800 text-white text-xs font-black shadow-[0_4px_10px_rgba(0,0,0,0.25),inset_0_1px_1px_rgba(255,255,255,0.3)] flex items-center justify-center">2</span>
-            <span>PAYMENT METHOD</span>
-          </h2>
-          <p className="text-xs text-neutral-500 leading-relaxed font-sans max-w-lg mt-0.5">
-            Please select your preferred payment method below. All online transactions are secure and encrypted.
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-sans font-bold text-base sm:text-lg text-slate-900 tracking-tight uppercase flex items-center gap-2">
+              <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-slate-900 text-white text-xs font-bold flex items-center justify-center shrink-0">2</span>
+              <span>PAYMENT OPTIONS</span>
+            </h2>
+            <button
+              type="button"
+              onClick={() => setCurrentStep(1)}
+              className="lg:hidden text-[11px] font-bold text-slate-700 hover:text-slate-950 uppercase tracking-wider px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 hover:border-slate-400 transition-colors shrink-0 cursor-pointer"
+            >
+              ← Back
+            </button>
+          </div>
+          <p className="text-xs text-slate-500 leading-relaxed font-sans">
+            All online transactions are 100% secure and 256-bit encrypted.
           </p>
         </div>
 
-        {/* Delivery Summary with Edit Button */}
+        {/* Delivery Summary Strip */}
         {shippingAddressSummary && (
-          <div className="flex items-center justify-between p-4 bg-slate-50/80 border border-slate-200/80 rounded-2xl shadow-[inset_0_2px_4px_rgba(15,23,42,0.02)]">
-            <div className="flex flex-col gap-0.5 min-w-0 pr-3">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">DELIVERING TO</span>
-              <span className="text-xs text-slate-800 font-semibold line-clamp-1">{shippingAddressSummary}</span>
+          <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+            <div className="flex items-start gap-2 min-w-0">
+              <svg className="w-4 h-4 text-slate-700 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <div className="flex flex-col min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Deliver to</span>
+                <span className="text-xs text-slate-800 font-semibold line-clamp-1">{shippingAddressSummary}</span>
+              </div>
             </div>
             <button
               type="button"
               onClick={() => setCurrentStep(1)}
-              className="bg-white hover:bg-orange-50/60 border border-slate-200 hover:border-banner/50 text-banner font-bold text-xs uppercase px-3.5 py-1.5 rounded-xl shadow-[0_2px_6px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,1)] transition-all active:translate-y-0.5 shrink-0"
+              className="bg-white hover:bg-slate-100 border border-slate-300 hover:border-slate-900 text-slate-900 font-bold text-[11px] uppercase px-3 py-1.5 rounded-lg transition-colors shrink-0 cursor-pointer"
             >
-              Edit
+              Change
             </button>
           </div>
         )}
 
-        {/* Payment Method Gateways */}
-        <div className="flex flex-col gap-3.5 pt-1">
-          {isLoading ? (
-            <div className="p-6 border border-slate-200/80 rounded-2xl animate-pulse bg-slate-50/60 h-28" />
-          ) : (
-            availableGateways.map((method) => {
+        {/* Unified Enterprise Payment Options List */}
+        {isLoading ? (
+          <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+            <div className="p-4 h-20 animate-pulse bg-slate-50/70" />
+            <div className="p-4 h-16 animate-pulse bg-slate-50/40" />
+            <div className="p-4 h-16 animate-pulse bg-slate-50/70" />
+          </div>
+        ) : (
+          <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
+            {availableGateways.map((method) => {
               // 1. PayU
               if (method === "payu") {
                 const isSelected = paymentOption === "payu";
@@ -244,52 +263,62 @@ export const CheckoutPaymentStep = ({
                   <label
                     key="payu"
                     onClick={() => handleSelectGateway("payu")}
-                    className={`relative flex flex-col p-4 sm:p-5 rounded-2xl transition-all duration-300 overflow-hidden cursor-pointer ${
+                    className={`relative block p-3.5 sm:p-4 transition-colors duration-150 cursor-pointer ${
                       isSelected
-                        ? "border-2 border-banner bg-gradient-to-br from-[#fff7f4] via-white to-white shadow-[0_14px_30px_-6px_rgba(255,84,41,0.18),inset_0_1.5px_0_rgba(255,255,255,1),inset_0_-2px_4px_rgba(255,84,41,0.04)] -translate-y-0.5"
-                        : "border border-slate-200/80 bg-white hover:bg-slate-50/50 shadow-[0_4px_14px_-2px_rgba(0,0,0,0.04),inset_0_1.5px_0_rgba(255,255,255,1)] hover:shadow-[0_8px_22px_-4px_rgba(0,0,0,0.07)] hover:-translate-y-0.5"
+                        ? "bg-slate-50/90"
+                        : "bg-white hover:bg-slate-50/50"
                     }`}
                   >
-                    <div className="flex items-start gap-3.5">
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 mt-0.5 ${isSelected ? 'border-banner bg-banner shadow-[0_2px_6px_rgba(255,84,41,0.35),inset_0_1px_1px_rgba(255,255,255,0.4)]' : 'border-slate-300 bg-slate-50 shadow-inner'}`}>
-                        {isSelected && <div className="w-2 h-2 rounded-full bg-white shadow-xs" />}
+                    {isSelected && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-slate-900" aria-hidden="true" />}
+                    <div className="flex items-start gap-3">
+                      <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center transition-colors shrink-0 mt-0.5 ${isSelected ? "border-slate-900 bg-slate-900" : "border-slate-300 bg-white"}`}>
+                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                       </div>
 
-                      <div className="flex flex-col w-full">
-                        <div className="font-bold text-sm text-neutral-900 w-full flex items-center justify-between">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-sans font-bold">PayUMoney - Bajaj EMI, Credit Cards, Net Banking & More</span>
-                          </div>
-                          <div className="flex items-center ml-auto gap-1.5 shrink-0">
-                            <Image src="/icons/payment/payu.svg" alt="PayU" width={40} height={20} className="object-contain h-5 w-auto" priority loading="eager" unoptimized />
-                            <Image src="/icons/payment/upi.svg" alt="UPI" width={30} height={16} className="object-contain h-4 w-auto" priority loading="eager" unoptimized />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-sans font-bold text-[13.5px] sm:text-sm text-slate-900 leading-snug">
+                            UPI, Cards, NetBanking &amp; EMI
+                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <Image src="/icons/payment/payu.svg" alt="PayU" width={36} height={18} className="object-contain h-4 w-auto" priority loading="eager" unoptimized />
+                            <Image src="/icons/payment/upi.svg" alt="UPI" width={28} height={14} className="object-contain h-3.5 w-auto" priority loading="eager" unoptimized />
                           </div>
                         </div>
-                        <span className="text-[11px] text-neutral-500 mt-0.5 pr-2">
-                          Google Pay, PhonePe, Paytm, Visa, Mastercard, RuPay, NetBanking & Bajaj Finserv EMI
-                        </span>
 
-                        {/* Logo Strip */}
-                        <div className="flex items-center gap-2 mt-3 flex-wrap">
-                          <div className="bg-white border border-slate-200/80 rounded-xl px-2 py-0.5 flex items-center justify-center h-7 w-[46px] shadow-[0_2px_6px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,1)]">
-                            <Image src="/icons/payment/gpay.svg" alt="GPay" width={40} height={24} className="object-contain w-full h-full" priority loading="eager" unoptimized />
+                        <p className="text-[11.5px] text-slate-500 mt-0.5 leading-snug">
+                          GPay, PhonePe, Paytm, Credit/Debit Cards &amp; Bajaj EMI
+                        </p>
+
+                        {/* Accepted Payment Methods Strip (expanded cleanly on selection) */}
+                        {isSelected && (
+                          <div className="flex items-center gap-1.5 mt-3 flex-wrap animate-in fade-in duration-150">
+                            {[
+                              { src: "/icons/payment/gpay.svg", alt: "GPay" },
+                              { src: "/icons/payment/phonepe.svg", alt: "PhonePe" },
+                              { src: "/icons/payment/paytm.svg", alt: "Paytm" },
+                              { src: "/icons/payment/visa.svg", alt: "VISA" },
+                              { src: "/icons/payment/mastercard.svg", alt: "Mastercard" },
+                              { src: "/icons/payment/rupay.svg", alt: "RuPay" },
+                            ].map((icon) => (
+                              <div
+                                key={icon.alt}
+                                className="bg-white border border-slate-200 rounded-md px-1.5 py-1 flex items-center justify-center h-6 w-10"
+                              >
+                                <Image
+                                  src={icon.src}
+                                  alt={icon.alt}
+                                  width={32}
+                                  height={18}
+                                  className="object-contain w-full h-full"
+                                  priority
+                                  loading="eager"
+                                  unoptimized
+                                />
+                              </div>
+                            ))}
                           </div>
-                          <div className="bg-white border border-slate-200/80 rounded-xl px-2 py-0.5 flex items-center justify-center h-7 w-[46px] shadow-[0_2px_6px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,1)]">
-                            <Image src="/icons/payment/phonepe.svg" alt="PhonePe" width={40} height={24} className="object-contain w-full h-full" priority loading="eager" unoptimized />
-                          </div>
-                          <div className="bg-white border border-slate-200/80 rounded-xl px-2 py-0.5 flex items-center justify-center h-7 w-[46px] shadow-[0_2px_6px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,1)]">
-                            <Image src="/icons/payment/paytm.svg" alt="Paytm" width={40} height={24} className="object-contain w-full h-full" priority loading="eager" unoptimized />
-                          </div>
-                          <div className="bg-white border border-slate-200/80 rounded-xl px-2 py-0.5 flex items-center justify-center h-7 w-[46px] shadow-[0_2px_6px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,1)]">
-                            <Image src="/icons/payment/visa.svg" alt="VISA" width={40} height={24} className="object-contain w-full h-full" priority loading="eager" unoptimized />
-                          </div>
-                          <div className="bg-white border border-slate-200/80 rounded-xl px-2 py-0.5 flex items-center justify-center h-7 w-[46px] shadow-[0_2px_6px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,1)]">
-                            <Image src="/icons/payment/mastercard.svg" alt="Mastercard" width={40} height={24} className="object-contain w-full h-full" priority loading="eager" unoptimized />
-                          </div>
-                          <div className="bg-white border border-slate-200/80 rounded-xl px-2 py-0.5 flex items-center justify-center h-7 w-[46px] shadow-[0_2px_6px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,1)]">
-                            <Image src="/icons/payment/rupay.svg" alt="RuPay" width={40} height={24} className="object-contain w-full h-full" priority loading="eager" unoptimized />
-                          </div>
-                        </div>
+                        )}
                       </div>
                     </div>
                   </label>
@@ -303,34 +332,31 @@ export const CheckoutPaymentStep = ({
                   <label
                     key="ccavenue"
                     onClick={() => handleSelectGateway("ccavenue")}
-                    className={`relative flex flex-col p-4 sm:p-5 rounded-2xl transition-all duration-300 overflow-hidden cursor-pointer ${
+                    className={`relative block p-3.5 sm:p-4 transition-colors duration-150 cursor-pointer ${
                       isSelected
-                        ? "border-2 border-banner bg-gradient-to-br from-[#fff7f4] via-white to-white shadow-[0_14px_30px_-6px_rgba(255,84,41,0.18),inset_0_1.5px_0_rgba(255,255,255,1),inset_0_-2px_4px_rgba(255,84,41,0.04)] -translate-y-0.5"
-                        : "border border-slate-200/80 bg-white hover:bg-slate-50/50 shadow-[0_4px_14px_-2px_rgba(0,0,0,0.04),inset_0_1.5px_0_rgba(255,255,255,1)] hover:shadow-[0_8px_22px_-4px_rgba(0,0,0,0.07)] hover:-translate-y-0.5"
+                        ? "bg-slate-50/90"
+                        : "bg-white hover:bg-slate-50/50"
                     }`}
                   >
-                    <div className="flex items-start gap-3.5">
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 mt-0.5 ${isSelected ? 'border-banner bg-banner shadow-[0_2px_6px_rgba(255,84,41,0.35),inset_0_1px_1px_rgba(255,255,255,0.4)]' : 'border-slate-300 bg-slate-50 shadow-inner'}`}>
-                        {isSelected && <div className="w-2 h-2 rounded-full bg-white shadow-xs" />}
+                    {isSelected && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-slate-900" aria-hidden="true" />}
+                    <div className="flex items-start gap-3">
+                      <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center transition-colors shrink-0 mt-0.5 ${isSelected ? "border-slate-900 bg-slate-900" : "border-slate-300 bg-white"}`}>
+                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                       </div>
 
-                      <div className="flex flex-col w-full">
-                        <div className="font-bold text-sm text-neutral-900 w-full flex items-center justify-between">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-sans font-bold">CCAvenue</span>
-                            <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full border border-slate-200/80 shadow-2xs">
-                              50+ Banks
-                            </span>
-                          </div>
-                          <div className="shrink-0 flex items-center gap-1.5">
-                            <div className="flex items-center bg-[#8f0d14] px-3 py-1 rounded-xl shadow-[0_2px_6px_rgba(143,13,20,0.35),inset_0_1px_1px_rgba(255,255,255,0.3)] h-6">
-                              <span className="text-white font-black text-[11px] tracking-tight">CCAvenue</span>
-                            </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-sans font-bold text-[13.5px] sm:text-sm text-slate-900">
+                            CCAvenue
+                          </span>
+                          <div className="flex items-center bg-[#8f0d14] px-2.5 py-0.5 rounded-md h-5 shrink-0">
+                            <span className="text-white font-black text-[10px] tracking-tight">CCAvenue</span>
                           </div>
                         </div>
-                        <span className="text-[11px] text-neutral-500 mt-0.5 pr-2">
-                          Credit Cards, Debit Cards, NetBanking (All Major Indian Banks) & Wallets
-                        </span>
+
+                        <p className="text-[11.5px] text-slate-500 mt-0.5 leading-snug">
+                          50+ Banks • Credit/Debit Cards, NetBanking &amp; Wallets
+                        </p>
                       </div>
                     </div>
                   </label>
@@ -344,60 +370,53 @@ export const CheckoutPaymentStep = ({
                   <label
                     key="snapmint"
                     onClick={() => handleSelectGateway("snapmint")}
-                    className={`relative flex flex-col p-4 sm:p-5 rounded-2xl transition-all duration-300 overflow-hidden ${
+                    className={`relative block p-3.5 sm:p-4 transition-colors duration-150 ${
                       isSnapmintIneligible
-                        ? "border border-slate-200 bg-slate-50/70 opacity-80 cursor-not-allowed"
+                        ? "bg-slate-50/70 opacity-75 cursor-not-allowed"
                         : isSelected
-                        ? "border-2 border-banner bg-gradient-to-br from-[#fff7f4] via-white to-white shadow-[0_14px_30px_-6px_rgba(255,84,41,0.18),inset_0_1.5px_0_rgba(255,255,255,1),inset_0_-2px_4px_rgba(255,84,41,0.04)] -translate-y-0.5 cursor-pointer"
-                        : "border border-slate-200/80 bg-white hover:bg-slate-50/50 shadow-[0_4px_14px_-2px_rgba(0,0,0,0.04),inset_0_1.5px_0_rgba(255,255,255,1)] hover:shadow-[0_8px_22px_-4px_rgba(0,0,0,0.07)] hover:-translate-y-0.5 cursor-pointer"
+                        ? "bg-slate-50/90 cursor-pointer"
+                        : "bg-white hover:bg-slate-50/50 cursor-pointer"
                     }`}
                   >
-                    <div className="flex items-start gap-3.5">
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 mt-0.5 ${
+                    {isSelected && !isSnapmintIneligible && (
+                      <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-slate-900" aria-hidden="true" />
+                    )}
+                    <div className="flex items-start gap-3">
+                      <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center transition-colors shrink-0 mt-0.5 ${
                         isSnapmintIneligible
-                          ? 'border-slate-300 bg-slate-200'
-                          : isSelected 
-                          ? 'border-banner bg-banner shadow-[0_2px_6px_rgba(255,84,41,0.35),inset_0_1px_1px_rgba(255,255,255,0.4)]' 
-                          : 'border-slate-300 bg-slate-50 shadow-inner'
+                          ? "border-slate-300 bg-slate-200"
+                          : isSelected
+                          ? "border-slate-900 bg-slate-900"
+                          : "border-slate-300 bg-white"
                       }`}>
-                        {isSelected && !isSnapmintIneligible && <div className="w-2 h-2 rounded-full bg-white shadow-xs" />}
+                        {isSelected && !isSnapmintIneligible && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                       </div>
 
-                      <div className="flex flex-col w-full">
-                        <div className="font-bold text-sm text-neutral-900 w-full flex items-center justify-between">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-sans font-bold">Snapmint - EMI without Credit Card</span>
-                            {snapmintMin > 0 && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-amber-50 text-amber-900 border border-amber-300/80 px-2.5 py-0.5 rounded-full shadow-2xs tracking-wide uppercase">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                                Min. Order ₹{snapmintMin.toLocaleString("en-IN")}
-                              </span>
-                            )}
-                          </div>
-                          <div className="shrink-0 scale-95 origin-right">
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <div className="flex items-center bg-[#004851] px-2.5 py-1 rounded-xl shadow-[0_2px_6px_rgba(0,72,81,0.35),inset_0_1px_1px_rgba(255,255,255,0.3)] h-7">
-                                <span className="text-[#00e396] font-bold text-xs tracking-tight">snap</span>
-                                <span className="text-white font-bold text-xs tracking-tight">mint</span>
-                              </div>
-                              <span className="text-[10px] font-extrabold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200 shadow-2xs">0% Interest</span>
-                            </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-sans font-bold text-[13.5px] sm:text-sm text-slate-900 leading-snug">
+                            Snapmint Cardless EMI
+                          </span>
+                          <div className="flex items-center bg-[#004851] px-2 py-0.5 rounded-md h-5 shrink-0">
+                            <span className="text-[#00e396] font-bold text-[10.5px] tracking-tight">snap</span>
+                            <span className="text-white font-bold text-[10.5px] tracking-tight">mint</span>
                           </div>
                         </div>
-                        <span className="text-[11px] text-neutral-500 mt-0.5 pr-2">
-                          Buy now, pay in easy monthly installments without credit card
-                        </span>
+
+                        <p className="text-[11.5px] text-slate-500 mt-0.5 leading-snug">
+                          <span className="text-emerald-700 font-semibold">0% Interest EMI</span> without Credit Card
+                          {snapmintMin > 0 ? ` • Min. ₹${snapmintMin.toLocaleString("en-IN")}` : ""}
+                        </p>
 
                         {/* Snapmint Ineligible notice */}
                         {isSnapmintIneligible && (
-                          <div className="mt-3 flex items-start gap-2.5 p-3.5 bg-amber-50/90 border border-amber-200/80 text-amber-900 rounded-2xl text-xs leading-relaxed shadow-[inset_0_1px_2px_rgba(245,158,11,0.05)]">
+                          <div className="mt-2.5 flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200/80 text-amber-900 rounded-lg text-[11px] leading-relaxed">
                             <svg className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                             </svg>
-                            <div>
-                              <span className="font-bold">Order value ₹{Number(total).toLocaleString("en-IN")} is below Snapmint&apos;s minimum limit (₹{snapmintMin.toLocaleString("en-IN")}).</span>{" "}
-                              <span className="text-neutral-700">Add <strong>₹{(snapmintMin - total).toLocaleString('en-IN')}</strong> more to your cart to unlock 0% EMI with Snapmint.</span>
-                            </div>
+                            <span>
+                              Add <strong>₹{(snapmintMin - (total || 0)).toLocaleString("en-IN")}</strong> more (min. ₹{snapmintMin.toLocaleString("en-IN")}) to unlock 0% EMI.
+                            </span>
                           </div>
                         )}
                       </div>
@@ -413,100 +432,69 @@ export const CheckoutPaymentStep = ({
                   <label
                     key="cod"
                     onClick={() => handleSelectGateway("cod")}
-                    className={`relative flex flex-col p-4 sm:p-5 rounded-2xl transition-all duration-300 overflow-hidden cursor-pointer ${
+                    className={`relative block p-3.5 sm:p-4 transition-colors duration-150 cursor-pointer ${
                       isSelected
-                        ? "border-2 border-banner bg-gradient-to-br from-[#fff7f4] via-white to-white shadow-[0_14px_30px_-6px_rgba(255,84,41,0.18),inset_0_1.5px_0_rgba(255,255,255,1),inset_0_-2px_4px_rgba(255,84,41,0.04)] -translate-y-0.5"
-                        : "border border-slate-200/80 bg-white hover:bg-slate-50/50 shadow-[0_4px_14px_-2px_rgba(0,0,0,0.04),inset_0_1.5px_0_rgba(255,255,255,1)] hover:shadow-[0_8px_22px_-4px_rgba(0,0,0,0.07)] hover:-translate-y-0.5"
+                        ? "bg-slate-50/90"
+                        : "bg-white hover:bg-slate-50/50"
                     }`}
                   >
-                    <div className="flex items-start gap-3.5">
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 mt-0.5 ${isSelected ? 'border-banner bg-banner shadow-[0_2px_6px_rgba(255,84,41,0.35),inset_0_1px_1px_rgba(255,255,255,0.4)]' : 'border-slate-300 bg-slate-50 shadow-inner'}`}>
-                        {isSelected && <div className="w-2 h-2 rounded-full bg-white shadow-xs" />}
+                    {isSelected && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-slate-900" aria-hidden="true" />}
+                    <div className="flex items-start gap-3">
+                      <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center transition-colors shrink-0 mt-0.5 ${isSelected ? "border-slate-900 bg-slate-900" : "border-slate-300 bg-white"}`}>
+                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                       </div>
 
-                      <div className="flex flex-col w-full">
-                        <div className="font-bold text-sm text-neutral-900 w-full flex items-center justify-between">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-sans font-bold">Cash on Delivery | COD</span>
-                            {isCodWithAdvance && (
-                              <span className="text-[10px] font-bold bg-[#EBF4FF] text-[#2874F0] border border-[#C7D9FF] px-2.5 py-0.5 rounded-full tracking-wide shadow-2xs">
-                                {codAdvanceText} Advance
-                              </span>
-                            )}
-                            {isCodHandlingFeeEnabled && (
-                              <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-full tracking-wide shadow-2xs">
-                                +₹{codHandlingFee} Cash Handling Fee
-                              </span>
-                            )}
-                          </div>
-                          <div className="shrink-0 scale-95 origin-right">
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <div className="flex items-center gap-1 bg-neutral-900 text-white px-2.5 py-1 rounded-xl shadow-[0_2px_6px_rgba(0,0,0,0.25),inset_0_1px_1px_rgba(255,255,255,0.25)] h-7">
-                                <svg className="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <rect x="2" y="6" width="20" height="12" rx="2" />
-                                  <circle cx="12" cy="12" r="2" />
-                                  <path d="M6 12h.01M18 12h.01" />
-                                </svg>
-                                <span className="font-extrabold text-[11px] tracking-wider uppercase">COD</span>
-                              </div>
-                              <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200/80 shadow-2xs">Doorstep</span>
-                            </div>
-                          </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-sans font-bold text-[13.5px] sm:text-sm text-slate-900">
+                            Cash on Delivery
+                          </span>
+                          {isCodWithAdvance ? (
+                            <span className="text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200 px-2 py-0.5 rounded shrink-0">
+                              {codAdvanceText} Advance
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded shrink-0">
+                              COD
+                            </span>
+                          )}
                         </div>
-                        <span className="text-[11px] text-neutral-500 mt-0.5 pr-2">
-                          Pay in cash or UPI when package is delivered at your doorstep{isCodHandlingFeeEnabled ? ` (includes ₹${codHandlingFee} courier cash handling charge)` : ""}
-                        </span>
 
-                        {/* Advance Payment Banner */}
-                        {isCodWithAdvance && (
-                          <div className="mt-3 flex items-center justify-between gap-3 px-3.5 py-2.5 bg-[#F0F5FF] border border-[#D0E1FD] rounded-2xl text-xs text-[#172337] shadow-[inset_0_1px_2px_rgba(40,116,240,0.04)]">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <svg className="w-4 h-4 text-[#2874F0] shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
-                              </svg>
-                              <p className="text-[12px] leading-snug text-[#1E293B]">
-                                for <strong className="font-bold text-[#2874F0]">{codAdvanceText} advance payment</strong> you will be directed to <strong className="font-bold text-neutral-900">Payu Payment Gateway</strong>
-                              </p>
-                            </div>
-                            <div className="shrink-0 hidden sm:flex items-center bg-white px-2 py-0.5 border border-[#D0E1FD] rounded-lg shadow-2xs h-5">
-                              <Image src="/icons/payment/payu.svg" alt="PayU" width={30} height={14} className="object-contain h-3.5 w-auto" priority loading="eager" unoptimized />
-                            </div>
-                          </div>
+                        <p className="text-[11.5px] text-slate-500 mt-0.5 leading-snug">
+                          Pay cash or UPI on delivery
+                          {isCodHandlingFeeEnabled && (
+                            <span className="text-slate-700 font-medium"> • +₹{codHandlingFee} handling fee</span>
+                          )}
+                        </p>
+
+                        {/* Compact hint when not selected, rich split breakdown when selected */}
+                        {isCodWithAdvance && !isSelected && (
+                          <p className="text-[11px] text-slate-600 font-medium mt-1">
+                            Pay {codAdvanceText} advance via PayU now, balance on delivery
+                          </p>
                         )}
 
-                        {/* COD Advance payment live breakdown (when selected) */}
-                        {isCodWithAdvance && isSelected && total !== undefined && total > 0 && advanceAmount > 0 && (
-                          <div className="mt-3 p-3.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl text-xs text-neutral-800 flex flex-wrap items-center justify-between gap-3 shadow-[inset_0_2px_4px_rgba(15,23,42,0.02)] animate-in fade-in duration-200">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-7 h-7 rounded-xl bg-[#F0F5FF] border border-[#D0E1FD] flex items-center justify-center shrink-0 shadow-2xs">
-                                <svg className="w-4 h-4 text-[#2874F0]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <rect x="2" y="5" width="20" height="14" rx="2" />
-                                  <line x1="2" y1="10" x2="22" y2="10" />
-                                </svg>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] text-neutral-500 uppercase font-semibold">Advance via PayU</span>
-                                <strong className="text-banner font-black text-sm">₹{advanceAmount.toLocaleString("en-IN")}</strong>
-                              </div>
+                        {isCodWithAdvance && isSelected && (
+                          <div className="mt-3 p-3 bg-white border border-slate-200 rounded-lg space-y-2.5 animate-in fade-in duration-150">
+                            <div className="flex items-center justify-between gap-2 text-[11.5px] text-slate-700">
+                              <span>
+                                Pay <strong className="font-bold text-slate-900">{codAdvanceText} advance</strong> via <strong>PayU</strong> to confirm COD
+                              </span>
+                              <Image src="/icons/payment/payu.svg" alt="PayU" width={30} height={14} className="object-contain h-3.5 w-auto shrink-0" priority loading="eager" unoptimized />
                             </div>
 
-                            <div className="text-slate-300 font-light text-base hidden sm:block">→</div>
-
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-7 h-7 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0 shadow-2xs">
-                                <svg className="w-4 h-4 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M6 3h12" />
-                                  <path d="M6 8h12" />
-                                  <path d="m6 13 8.5 8" />
-                                  <path d="M6 13h3" />
-                                  <path d="M9 13c6.667 0 6.667-10 0-10" />
-                                </svg>
+                            {total !== undefined && total > 0 && advanceAmount > 0 && (
+                              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                                <div className="bg-slate-50 border border-slate-200/70 rounded-lg px-2.5 py-1.5">
+                                  <span className="text-[10px] text-slate-500 font-semibold uppercase block">Pay Now (PayU)</span>
+                                  <strong className="text-slate-900 font-black text-sm">₹{advanceAmount.toLocaleString("en-IN")}</strong>
+                                </div>
+                                <div className="bg-emerald-50/70 border border-emerald-200/70 rounded-lg px-2.5 py-1.5">
+                                  <span className="text-[10px] text-slate-500 font-semibold uppercase block">Pay on Delivery</span>
+                                  <strong className="text-emerald-700 font-black text-sm">₹{balanceDue.toLocaleString("en-IN")}</strong>
+                                </div>
                               </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] text-neutral-500 uppercase font-semibold">Balance on Delivery</span>
-                                <strong className="text-emerald-700 font-black text-sm">₹{balanceDue.toLocaleString("en-IN")}</strong>
-                              </div>
-                            </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -516,16 +504,16 @@ export const CheckoutPaymentStep = ({
               }
 
               return null;
-            })
-          )}
-        </div>
+            })}
+          </div>
+        )}
 
         {/* Desktop Navigation & Place Order */}
-        <div className="hidden lg:flex items-center justify-between gap-4 pt-4 mt-2 border-t border-slate-100">
+        <div className="hidden lg:flex items-center justify-between gap-4 pt-3 mt-1 border-t border-slate-100">
           <button
             type="button"
             onClick={() => setCurrentStep(1)}
-            className="border border-slate-200 hover:border-slate-800 bg-white text-slate-700 hover:text-slate-900 text-xs uppercase font-bold px-5 py-3 rounded-xl transition-all flex items-center gap-2 shadow-[0_2px_6px_rgba(0,0,0,0.03),inset_0_1px_0_rgba(255,255,255,1)] active:translate-y-0.5 cursor-pointer"
+            className="border border-slate-300 hover:border-slate-900 bg-white text-slate-700 hover:text-slate-950 text-xs uppercase font-bold px-5 py-3 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
           >
             ← Back to Shipping Details
           </button>
@@ -534,7 +522,7 @@ export const CheckoutPaymentStep = ({
             type="button"
             onClick={handleAgreeToPay}
             disabled={isProcessing || !paymentOption}
-            className="bg-gradient-to-r from-banner to-[#ea4719] hover:from-[#f04f25] hover:to-[#d83c12] text-white font-black tracking-wider text-xs uppercase py-3.5 px-8 rounded-xl shadow-[0_8px_20px_-4px_rgba(255,84,41,0.45),inset_0_1.5px_1px_rgba(255,255,255,0.4),inset_0_-2px_4px_rgba(0,0,0,0.15)] transition-all active:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+            className="bg-banner hover:bg-[#e8451c] text-white font-bold tracking-wider text-xs uppercase py-3.5 px-8 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
           >
             {isProcessing ? "PROCESSING..." : "PLACE ORDER"}
           </button>
@@ -542,27 +530,20 @@ export const CheckoutPaymentStep = ({
       </div>
 
       {/* Mobile Fixed Sticky Bottom Bar */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 pb-6 bg-white/95 backdrop-blur-md border-t border-slate-200/80 z-[60] flex flex-col gap-2.5 shadow-[0_-10px_30px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,1)] lg:hidden">
-        {paymentOption === "cod" && Boolean(settings?.codPartialPaymentEnabled) && (settings?.codPartialPaymentValue || 0) > 0 && (
-          <div className="w-full text-xs text-[#172337] bg-[#F0F5FF] border border-[#D0E1FD] px-3.5 py-2.5 rounded-2xl flex items-center justify-between gap-2 shadow-2xs leading-snug">
-            <div className="flex items-center gap-2 min-w-0">
-              <svg className="w-4 h-4 text-[#2874F0] shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
-              </svg>
-              <span className="text-[11.5px] text-[#1E293B]">
-                for <strong className="font-bold text-[#2874F0]">{codAdvanceText} advance payment</strong> you will be directed to <strong className="font-bold text-neutral-900">Payu Payment Gateway</strong>
-              </span>
-            </div>
-            <div className="shrink-0 flex items-center bg-white px-2 py-0.5 border border-[#D0E1FD] rounded shadow-2xs h-5">
-              <Image src="/icons/payment/payu.svg" alt="PayU" width={26} height={12} className="object-contain h-3 w-auto" priority loading="eager" unoptimized />
-            </div>
+      <div className="fixed bottom-0 left-0 right-0 px-4 py-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white/95 backdrop-blur-md border-t border-slate-200 z-[60] flex flex-col gap-2 shadow-[0_-4px_16px_rgba(15,23,42,0.06)] lg:hidden">
+        {paymentOption === "cod" && isCodWithAdvance && advanceAmount > 0 && (
+          <div className="w-full text-[11px] text-slate-700 bg-slate-100/90 border border-slate-200 px-3 py-1.5 rounded-lg flex items-center justify-between gap-2">
+            <span className="truncate">
+              Pay <strong className="text-slate-900">₹{advanceAmount.toLocaleString("en-IN")}</strong> now via <strong>PayU</strong> • ₹{balanceDue.toLocaleString("en-IN")} on delivery
+            </span>
+            <Image src="/icons/payment/payu.svg" alt="PayU" width={26} height={12} className="object-contain h-3 w-auto shrink-0" priority loading="eager" unoptimized />
           </div>
         )}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-3">
           {/* Mobile Total Display */}
           <div className="flex flex-col min-w-0">
-            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Total</span>
-            <span className="text-xl font-black text-banner leading-none line-clamp-1">
+            <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Total Payable</span>
+            <span className="text-base sm:text-lg font-black text-slate-900 leading-tight">
               {total !== undefined ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(total) : "₹0.00"}
             </span>
           </div>
@@ -572,9 +553,13 @@ export const CheckoutPaymentStep = ({
             type="button"
             onClick={handleAgreeToPay}
             disabled={isProcessing || !paymentOption}
-            className="flex-1 bg-gradient-to-r from-banner to-[#ea4719] hover:from-[#f04f25] hover:to-[#d83c12] text-white font-black tracking-wider text-xs uppercase py-3.5 px-6 rounded-xl shadow-[0_8px_20px_-4px_rgba(255,84,41,0.45),inset_0_1.5px_1px_rgba(255,255,255,0.4),inset_0_-2px_4px_rgba(0,0,0,0.15)] transition-all active:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+            className="shrink-0 h-10 bg-banner hover:bg-[#e8451c] text-white font-bold tracking-wider text-[11px] sm:text-xs uppercase px-5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
           >
-            {isProcessing ? "PROCESSING..." : "PLACE ORDER"}
+            {isProcessing
+              ? "PROCESSING..."
+              : paymentOption === "cod" && isCodWithAdvance && advanceAmount > 0
+              ? `PAY ₹${advanceAmount.toLocaleString("en-IN")} ADVANCE`
+              : "PLACE ORDER"}
           </button>
         </div>
       </div>

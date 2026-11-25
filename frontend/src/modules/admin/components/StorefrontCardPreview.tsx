@@ -207,11 +207,6 @@ export const StorefrontCardPreview: React.FC<StorefrontCardPreviewProps> = ({
                 <span>Catalog Cover</span>
               </div>
 
-              {/* Rating Badge */}
-              <div className="absolute top-2 right-2 bg-brand text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-2xs flex items-center gap-0.5">
-                <span>★ 4.8</span>
-              </div>
-
               {/* Discount Tag */}
               {hasDiscount && (
                 <div className="absolute bottom-2 left-2 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-2xs">

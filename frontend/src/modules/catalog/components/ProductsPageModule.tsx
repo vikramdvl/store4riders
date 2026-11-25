@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useEffect, useCallback } from "react";
 import { useSearchParams, useParams } from "next/navigation";
-import { useProducts } from "@/core/hooks/useProducts";
+import { useProducts, usePrefetchProducts } from "@/core/hooks/useProducts";
 import { useCategoryTree } from "@/core/hooks/useCategories";
 import { useBrand } from "@/core/hooks/useBrands";
 import { CatalogModule } from "@/modules/catalog";
@@ -113,31 +113,56 @@ export const ProductsPageModule = ({ initialCategoryNode }: { initialCategoryNod
     return categoryNode;
   }, [categoryNode, catTreeData, category]);
 
-  const { data, isLoading, isFetching, error } = useProducts({ 
-    category, 
-    brand, 
-    search, 
-    page, 
-    limit: 12,
-    minPrice,
-    maxPrice,
-    sort,
-    ...dynamicParams
-  });
+  const dynamicParamsKey = DYNAMIC_FILTER_KEYS.map((key) => `${key}:${searchParams.get(key) || ""}`).join("|");
 
-  if (error) return <div className="text-center py-32 text-red-500 font-bold">Failed to load products</div>;
+  const productQueryParams = useMemo(
+    () => ({
+      category,
+      brand,
+      search,
+      page,
+      limit: 12,
+      minPrice,
+      maxPrice,
+      sort,
+      ...dynamicParams,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [category, brand, search, page, minPrice, maxPrice, sort, dynamicParamsKey]
+  );
 
-  const productsList = data?.items || [];
-  
-  // Secondary client-side deduplication shield by product _id
-  const seen = new Set<string>();
-  const uniqueProducts = productsList.filter(p => {
-    if (!p?._id || seen.has(p._id)) return false;
-    seen.add(p._id);
-    return true;
-  });
+  const { data, isLoading, isFetching, error } = useProducts(productQueryParams);
+  const prefetchProducts = usePrefetchProducts();
 
-  const mappedProducts: CatalogProduct[] = uniqueProducts.map((p) => {
+  // Prefetch next page in background once current page loads so clicking Next/Page 2 is instant
+  useEffect(() => {
+    const totalPages = data?.totalPages || Math.ceil((data?.totalCount || 0) / 12) || 1;
+    if (!isLoading && data && page < totalPages) {
+      prefetchProducts({ ...productQueryParams, page: page + 1 });
+    }
+  }, [data, isLoading, page, prefetchProducts, productQueryParams]);
+
+  const handlePrefetchPage = useCallback(
+    (targetPage: number) => {
+      if (targetPage >= 1 && targetPage !== page) {
+        prefetchProducts({ ...productQueryParams, page: targetPage });
+      }
+    },
+    [page, prefetchProducts, productQueryParams]
+  );
+
+  const mappedProducts: CatalogProduct[] = useMemo(() => {
+    const productsList = data?.items || [];
+
+    // Secondary client-side deduplication shield by product _id
+    const seen = new Set<string>();
+    const uniqueProducts = productsList.filter(p => {
+      if (!p?._id || seen.has(p._id)) return false;
+      seen.add(p._id);
+      return true;
+    });
+
+    return uniqueProducts.map((p) => {
     let cleanCat = "ACCESSORIES";
     const pAny = p as any;
     const BROAD_ROOT_SLUGS = new Set([
@@ -207,7 +232,12 @@ export const ProductsPageModule = ({ initialCategoryNode }: { initialCategoryNod
           : undefined;
         return getProductThumbnailUrl(p, explicitColor);
       })(),
-      rating: p.avgRating ? Number(Number(p.avgRating).toFixed(1)) : 4.9,
+      rating:
+        p.avgRating &&
+        Number(p.avgRating) > 0 &&
+        (p.reviewCount === undefined || Number(p.reviewCount) > 0)
+          ? Number(Number(p.avgRating).toFixed(1))
+          : 0,
       isFeatured: Boolean(p.isFeatured),
       showFeaturedBadge: Boolean(p.isFeatured && ((p as any).showFeaturedBadge || p.attributes?.show_featured_badge === "true" || p.attributes?.showFeaturedBadge === "true")),
       productUrl: (() => {
@@ -361,6 +391,9 @@ export const ProductsPageModule = ({ initialCategoryNode }: { initialCategoryNod
       })(),
     };
   });
+  }, [data?.items, activeColorParam]);
+
+  if (error) return <div className="text-center py-32 text-red-500 font-bold">Failed to load products</div>;
 
   return (
     <CatalogModule 
@@ -369,6 +402,7 @@ export const ProductsPageModule = ({ initialCategoryNode }: { initialCategoryNod
       isLoading={isLoading && !data}
       isFetching={isFetching}
       categoryNode={finalCategoryNode}
+      onPrefetchPage={handlePrefetchPage}
     />
   );
 };

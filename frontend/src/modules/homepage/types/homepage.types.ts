@@ -129,7 +129,7 @@ export interface BrowseProductData {
   name: string;
   priceFormatted: string;
   imageUrl: string;
-  rating: number;
+  rating?: number;
   productUrl: string;
 }
 
@@ -187,6 +187,7 @@ export interface RidersFavouritesProductData {
   brand?: string;
   priceFormatted: string;
   imageUrl?: string;
+  rating?: number;
   productUrl: string;
 }
 

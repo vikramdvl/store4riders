@@ -11,7 +11,7 @@ import { useAuthStore } from "@/stores/useAuthStore";
 export const AccountLayoutModule = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname() || "";
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isLoggingOut } = useAuthStore();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -19,10 +19,10 @@ export const AccountLayoutModule = ({ children }: { children: React.ReactNode })
   }, []);
 
   useEffect(() => {
-    if (mounted && !isAuthenticated) {
+    if (mounted && !isAuthenticated && !isLoggingOut) {
       router.replace(`/login?redirect=${encodeURIComponent(pathname || "/account")}`);
     }
-  }, [mounted, isAuthenticated, pathname, router]);
+  }, [mounted, isAuthenticated, isLoggingOut, pathname, router]);
 
   const paths = pathname.split("/").filter(Boolean);
   

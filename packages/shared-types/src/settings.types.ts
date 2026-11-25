@@ -81,6 +81,7 @@ export interface ISetting {
   youtubeUrl?: string;
   twitterUrl?: string;
   returnWindowDays?: number;
+  exchangeShippingFee?: number;
   popularSearches?: string[];
   footerConfig?: IFooterConfig;
   policyPages?: IPolicyPageConfig[];
@@ -135,6 +136,7 @@ export interface IPublicSettings {
   youtubeUrl?: string;
   twitterUrl?: string;
   returnWindowDays?: number;
+  exchangeShippingFee?: number;
   packagePresets?: IPackagePreset[];
   footerConfig?: IFooterConfig;
   policyPages?: IPolicyPageConfig[];

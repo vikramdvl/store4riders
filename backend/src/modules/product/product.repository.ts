@@ -36,7 +36,9 @@ export class ProductRepository {
     sort: Record<string, 1 | -1> = { createdAt: -1, _id: -1 }
   ): Promise<IProduct[]> {
     return ProductModel.find(filters)
-      .select("-description -configurableVariations -shortDescription -metaDescription -metaKeywords")
+      .select(
+        "-description -configurableVariations -shortDescription -metaDescription -metaKeywords -faqs -relatedSkus -upsellSkus -crosssellSkus -documents -sizeChart -size_chart"
+      )
       .sort(sort)
       .skip(skip)
       .limit(limit)

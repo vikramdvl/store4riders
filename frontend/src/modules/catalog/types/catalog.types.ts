@@ -19,5 +19,6 @@ export interface CatalogProps {
   isLoading?: boolean;
   isFetching?: boolean;
   categoryNode?: any;
+  onPrefetchPage?: (page: number) => void;
 }
 

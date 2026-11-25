@@ -4,3 +4,5 @@ export * from "./math";
 export * from "./shipping";
 export * from "./google-taxonomy";
 export * from "./dimension-parser";
+export * from "./exchange";
+

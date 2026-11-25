@@ -7,6 +7,9 @@ import { errorHandler } from "@/core/middlewares/errorHandler";
 import { connectToDatabase } from "@/core/database/connection";
 import { logger } from "@/core/utils/logger";
 import { checkGeneralApiRateLimit } from "@/core/middlewares/rateLimiter";
+import { ApiResponse } from "@/core/response/ApiResponse";
+import { BlockedIpService } from "@/modules/blocked-ip/blocked-ip.service";
+import { AuditLogService } from "@/modules/audit-log/audit-log.service";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +51,20 @@ const handleRequest = async (
     if (!isInternalLocal || !routePath.includes('products')) {
       await checkGeneralApiRateLimit(ip);
     }
+
+    // Fast cached IP blocklist check (skips health checks and gateway webhooks)
+    const isExemptFromIpBlock =
+      routePath[0] === "health" ||
+      (routePath[0] === "orders" && routePath[1] === "webhook") ||
+      (routePath[0] === "payments" && routePath[1] === "webhook");
+
+    if (!isExemptFromIpBlock && (await BlockedIpService.isIpBlocked(ip))) {
+      const blockedRes = ApiResponse.error(
+        "Access denied: your IP address has been blocked",
+        403
+      );
+      return applyHeaders(blockedRes, req);
+    }
     
     // Route to Central Router
     let res = await centralRouter(req, routePath);
@@ -60,6 +77,20 @@ const handleRequest = async (
     return applyHeaders(res, req);
   } catch (error) {
     const errorRes = errorHandler(error);
+    // Record ONLY true 500+ server crashes into Audit Logs (ignore 4xx auth/validation errors)
+    const isUnexpected500 = errorRes.status >= 500;
+    if (isUnexpected500) {
+      const msg = error instanceof Error ? error.message : "Unhandled internal error";
+      void AuditLogService.record({
+        category: "SYSTEM",
+        action: "UNHANDLED_API_ERROR",
+        severity: "critical",
+        status: "failure",
+        resource: { type: "API", label: req.nextUrl?.pathname || "/api" },
+        req,
+        message: `Unhandled server error on ${req.method} ${req.nextUrl?.pathname || "/api"}: ${msg}`,
+      });
+    }
     return applyHeaders(errorRes, req);
   }
 };

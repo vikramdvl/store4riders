@@ -423,7 +423,7 @@ export function AdminContactSettings() {
                 <input
                   type="number"
                   min={0}
-                  max={90}
+                  max={365}
                   value={settings.returnWindowDays ?? 7}
                   onKeyDown={(e) => {
                     if (e.key === "-" || e.key === "e" || e.key === "E" || e.key === "+") {
@@ -432,7 +432,7 @@ export function AdminContactSettings() {
                   }}
                   onChange={(e) => {
                     const parsed = parseInt(e.target.value, 10);
-                    const clamped = isNaN(parsed) ? 0 : Math.min(90, Math.max(0, parsed));
+                    const clamped = isNaN(parsed) ? 0 : Math.min(365, Math.max(0, parsed));
                     setSettings({ ...settings, returnWindowDays: clamped });
                   }}
                   className="w-32 text-sm border border-neutral-300 rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand font-mono"

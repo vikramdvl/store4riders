@@ -14,28 +14,45 @@ import { SidebarFilters } from "./components/SidebarFilters";
 import { CatalogGrid } from "./components/CatalogGrid";
 import { StoreReviews } from "@/modules/product-detail/components/StoreReviews";
 import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
+import { useStoreReviews } from "@/core/hooks/useStoreReviews";
+import { useUIStore } from "@/stores/useUIStore";
 import { SizeChartModal } from "@/modules/product-detail/components/SizeChartModal";
 import { Suspense, useState } from "react";
-import { useSearchParams, useRouter, useParams, usePathname } from "next/navigation";
+import { useSearchParams, useParams } from "next/navigation";
+import { updateQueryUrlShallow } from "@/core/utils/shallowUrl";
 
 /**
  * CatalogContent
  * Inner component to handle searchParams safely within Suspense
  */
-const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading?: boolean; isFetching?: boolean; categoryNode?: any }> = ({ 
+const CatalogContent: React.FC<{
+  products: any[];
+  totalCount?: number;
+  isLoading?: boolean;
+  isFetching?: boolean;
+  categoryNode?: any;
+  onPrefetchPage?: (page: number) => void;
+}> = ({ 
   products, 
   totalCount,
   isLoading,
   isFetching,
-  categoryNode
+  categoryNode,
+  onPrefetchPage
 }) => {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams();
   const [showSizeChart, setShowSizeChart] = useState(false);
   
   const { data: publicSettings } = usePublicSettings();
-  const dynamicRating = publicSettings?.googleRating ?? 4.8;
+  const homepageReviewIds = useUIStore((state) => state.homepageReviewIds);
+  const { data: storeReviewsData } = useStoreReviews({
+    random: true,
+    limit: 10,
+    excludeIds: homepageReviewIds,
+  });
+  const hasStoreReviews = (storeReviewsData?.pages.flatMap((p) => p.data) || []).length > 0;
+  const dynamicRating = publicSettings?.googleRating;
   const dynamicReviewCount = publicSettings?.googleReviewCount;
 
   const activeSizeChart = categoryNode?.sizeChart || categoryNode?.size_chart || "";
@@ -129,7 +146,7 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
     }
     current.set("page", "1");
     const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-    router.push(`${pathname}?${current.toString()}`, { scroll: false });
+    updateQueryUrlShallow(`${pathname}?${current.toString()}`, { replace: true });
   };
 
   return (
@@ -216,7 +233,7 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
                 title: categoryParam ? 'Category Description' : (brandParam ? 'Brand Description' : 'Description'),
                 content: <CategoryDescriptionBlock description={categoryNode.description} pageTitle={pageTitle} />
               }] : []),
-              {
+              ...(hasStoreReviews ? [{
                 id: 'google-reviews',
                 title: (
                   <div className="flex items-center gap-2 flex-wrap">
@@ -231,14 +248,16 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
                     <span className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-neutral-900">
                       STORE REVIEWS
                     </span>
-                    <span className="inline-flex items-center gap-1 bg-white border border-neutral-200/80 px-2 py-0.5 rounded-full text-[10px] font-bold text-neutral-800 shadow-2xs ml-0.5">
-                      <span suppressHydrationWarning className="text-amber-500">★ {dynamicRating}</span>
-                    </span>
+                    {dynamicRating && dynamicRating > 0 ? (
+                      <span className="inline-flex items-center gap-1 bg-white border border-neutral-200/80 px-2 py-0.5 rounded-full text-[10px] font-bold text-neutral-800 shadow-2xs ml-0.5">
+                        <span suppressHydrationWarning className="text-amber-500">★ {dynamicRating}</span>
+                      </span>
+                    ) : null}
                   </div>
                 ),
                 content: <StoreReviews hideHeader={true} />,
                 className: 'hidden md:block'
-              }
+              }] : [])
             ]}
           />
         </div>
@@ -297,6 +316,7 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
               totalCount={totalCount} 
               isLoading={isLoading}
               isFetching={isFetching}
+              onPrefetchPage={onPrefetchPage}
             />
           </section>
         </div>
@@ -348,7 +368,7 @@ const CatalogContent: React.FC<{ products: any[]; totalCount?: number; isLoading
  * 
  * Semantic, SEO-friendly layout for the Product Listing Page.
  */
-export const CatalogModule: React.FC<CatalogProps> = ({ products, totalCount, isLoading, isFetching, categoryNode }) => {
+export const CatalogModule: React.FC<CatalogProps> = ({ products, totalCount, isLoading, isFetching, categoryNode, onPrefetchPage }) => {
   return (
     <div className="w-full flex flex-col font-sans bg-white relative min-h-screen">
       
@@ -370,6 +390,7 @@ export const CatalogModule: React.FC<CatalogProps> = ({ products, totalCount, is
           isLoading={isLoading}
           isFetching={isFetching}
           categoryNode={categoryNode}
+          onPrefetchPage={onPrefetchPage}
         />
       </div>
 

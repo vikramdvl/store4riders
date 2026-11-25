@@ -60,7 +60,7 @@ export const browseProductItemSchema = z.object({
   imageUrl: z.string().default(""),
   category: z.string().max(100).optional().default("RIDING GEAR"),
   productUrl: z.string().max(500).default("/products"),
-  rating: z.number().optional().default(4.8),
+  rating: z.number().optional().default(0),
 });
 
 export const browseCategoriesSectionSchema = z.object({

@@ -25,6 +25,8 @@ import { migrationRouter } from "./modules/migration/migration.route";
 import { homepageRouter } from "./modules/homepage/homepage.route";
 import { contactRouter } from "./modules/contact/contact.route";
 import { blogRouter } from "./modules/blog/blog.route";
+import { auditLogRouter } from "./modules/audit-log/audit-log.route";
+import { blockedIpRouter } from "./modules/blocked-ip/blocked-ip.route";
 
 export async function centralRouter(req: NextRequest, routePath: string[]) {
   const [module, ...rest] = routePath;
@@ -59,6 +61,8 @@ export async function centralRouter(req: NextRequest, routePath: string[]) {
     case "support": return contactRouter(req, rest);
     case "blog":
     case "blogs": return blogRouter(req, rest);
+    case "audit-logs": return auditLogRouter(req, rest);
+    case "blocked-ips": return blockedIpRouter(req, rest);
     default: return null;
   }
 }

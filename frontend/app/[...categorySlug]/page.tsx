@@ -348,7 +348,9 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
     resolvedSearchParams.color ||
     resolvedSearchParams.size ||
     resolvedSearchParams.minPrice ||
-    resolvedSearchParams.maxPrice
+    resolvedSearchParams.maxPrice ||
+    resolvedSearchParams.sort ||
+    (resolvedSearchParams.page && resolvedSearchParams.page !== "1")
   );
 
   // Fetch sample products for CollectionPage ItemList schema (only on initial view, skip on filter clicks)

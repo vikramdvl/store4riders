@@ -18,3 +18,5 @@ export * from "./homepage.types";
 export * from "./contact.types";
 export * from "./newsletter.types";
 export * from "./search.types";
+export * from "./audit-log.types";
+export * from "./blocked-ip.types";

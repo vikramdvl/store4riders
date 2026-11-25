@@ -5,19 +5,22 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { CatalogProductCard } from "./CatalogProductCard";
 import { CatalogProduct } from "../types/catalog.types";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { updateQueryUrlShallow } from "@/core/utils/shallowUrl";
 
 interface CatalogGridProps {
   products: CatalogProduct[];
   totalCount?: number;
   isLoading?: boolean;
   isFetching?: boolean;
+  onPrefetchPage?: (page: number) => void;
 }
 
 export const CatalogGrid: React.FC<CatalogGridProps> = ({ 
   products, 
   totalCount = 0,
   isLoading = false,
-  isFetching = false
+  isFetching = false,
+  onPrefetchPage
 }) => {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -31,7 +34,7 @@ export const CatalogGrid: React.FC<CatalogGridProps> = ({
     if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
     const current = new URLSearchParams(Array.from(searchParams.entries()));
     current.set("page", newPage.toString());
-    router.push(`${pathname}?${current.toString()}`, { scroll: false });
+    updateQueryUrlShallow(`${pathname}?${current.toString()}`);
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 120, behavior: "smooth" });
     }
@@ -145,6 +148,12 @@ export const CatalogGrid: React.FC<CatalogGridProps> = ({
                   <button
                     key={pageNum}
                     onClick={() => handlePageChange(pageNum)}
+                    onMouseEnter={() => {
+                      if (pageNum !== currentPage) onPrefetchPage?.(pageNum);
+                    }}
+                    onFocus={() => {
+                      if (pageNum !== currentPage) onPrefetchPage?.(pageNum);
+                    }}
                     aria-current={isActive ? "page" : undefined}
                     className={`w-8 h-8 rounded-lg text-[13px] sm:w-10 sm:h-10 sm:rounded-xl sm:text-[15px] font-bold transition-all cursor-pointer flex items-center justify-center ${
                       isActive
@@ -163,6 +172,8 @@ export const CatalogGrid: React.FC<CatalogGridProps> = ({
               {currentPage > 1 && (
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
+                  onMouseEnter={() => onPrefetchPage?.(currentPage - 1)}
+                  onFocus={() => onPrefetchPage?.(currentPage - 1)}
                   aria-label="Previous page"
                   className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-lg sm:rounded-xl bg-white border border-neutral-200 text-neutral-700 hover:border-neutral-300 hover:text-neutral-900 transition-all cursor-pointer shadow-xs"
                 >
@@ -174,6 +185,8 @@ export const CatalogGrid: React.FC<CatalogGridProps> = ({
               {currentPage < totalPages && (
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
+                  onMouseEnter={() => onPrefetchPage?.(currentPage + 1)}
+                  onFocus={() => onPrefetchPage?.(currentPage + 1)}
                   aria-label="Next page"
                   className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-lg sm:rounded-xl bg-white border border-neutral-200 text-neutral-700 hover:border-neutral-300 hover:text-neutral-900 transition-all cursor-pointer shadow-xs"
                 >

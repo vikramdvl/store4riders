@@ -2,9 +2,9 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { UserRepository } from "../user/user.repository";
 import { UserModel } from "../user/user.model";
-import { generateTokens, verifyToken } from "../../core/utils/jwt";
+import { generateTokens, verifyToken, getSessionConfigForRole } from "../../core/utils/jwt";
 import { UnauthorizedError, ConflictError, AppError } from "../../core/errors/AppError";
-import { setCache } from "../../core/cache/redis";
+import { setCache, deleteCache } from "../../core/cache/redis";
 import { RegisterInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from "@store4riders/shared-validation";
 import { sendSmtpEmail } from "../../core/email/smtp";
 
@@ -23,7 +23,14 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(data.password, 12);
     const user = await UserRepository.create({ ...data, password: hashedPassword });
     const userId = (user as any)._id?.toString() || user.id;
-    const tokens = generateTokens(userId);
+    const role = user.role || "customer";
+    try {
+      await deleteCache(`blacklist:${userId}`);
+    } catch {
+      // Cache unavailability should not block registration
+    }
+    const tokens = generateTokens(userId, role);
+    const { refreshMaxAgeSeconds } = getSessionConfigForRole(role);
     
     // Auto-link any past guest orders made with this email
     try {
@@ -36,13 +43,14 @@ export class AuthService {
 
     return {
       tokens,
+      sessionMaxAgeSeconds: refreshMaxAgeSeconds,
       user: {
         id: userId,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
         name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-        role: user.role || "customer",
+        role,
         phone: user.phone || "",
         addresses: user.addresses || [],
       }
@@ -61,7 +69,14 @@ export class AuthService {
     if (!isMatch) throw new UnauthorizedError("Invalid credentials");
 
     const userId = (user as any)._id?.toString() || user.id;
-    const tokens = generateTokens(userId);
+    const role = user.role || "customer";
+    try {
+      await deleteCache(`blacklist:${userId}`);
+    } catch {
+      // Cache unavailability should not block registration
+    }
+    const tokens = generateTokens(userId, role);
+    const { refreshMaxAgeSeconds } = getSessionConfigForRole(role);
 
     // Auto-link any past guest orders made with this email
     try {
@@ -74,13 +89,14 @@ export class AuthService {
 
     return {
       tokens,
+      sessionMaxAgeSeconds: refreshMaxAgeSeconds,
       user: {
         id: userId,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
         name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-        role: user.role || "customer",
+        role,
         phone: user.phone || "",
         addresses: user.addresses || [],
       }
@@ -94,10 +110,20 @@ export class AuthService {
       // Verify blacklisting from Redis
       try {
         const { getCache } = await import("../../core/cache/redis");
-        const isUserBlacklisted = await getCache(`blacklist:${decoded.userId}`);
+        const userBlacklistVal = await getCache(`blacklist:${decoded.userId}`);
         const isTokenBlacklisted = await getCache(`bl_token_${oldToken}`);
-        if (isUserBlacklisted || isTokenBlacklisted) {
+        if (isTokenBlacklisted) {
           throw new UnauthorizedError("Session has expired or was logged out");
+        }
+        if (userBlacklistVal) {
+          if (userBlacklistVal === "true") {
+            throw new UnauthorizedError("Session has expired or was logged out");
+          }
+          const logoutTimestampMs = Number(userBlacklistVal);
+          const tokenIssuedAtMs = (decoded.iat || 0) * 1000;
+          if (!Number.isNaN(logoutTimestampMs) && tokenIssuedAtMs <= Math.floor(logoutTimestampMs / 1000) * 1000) {
+            throw new UnauthorizedError("Session has expired or was logged out");
+          }
         }
       } catch (e: any) {
         if (e instanceof UnauthorizedError) throw e;
@@ -107,7 +133,10 @@ export class AuthService {
       if (!user || user.isActive === false) {
         throw new UnauthorizedError("Account has been disabled");
       }
-      return generateTokens(decoded.userId);
+      const role = user.role || "customer";
+      const tokens = generateTokens(decoded.userId, role);
+      const { refreshMaxAgeSeconds } = getSessionConfigForRole(role);
+      return { ...tokens, sessionMaxAgeSeconds: refreshMaxAgeSeconds };
     } catch (err: any) {
       if (err instanceof UnauthorizedError) throw err;
       throw new UnauthorizedError("Invalid refresh token");
@@ -115,8 +144,8 @@ export class AuthService {
   }
 
   static async logout(userId: string) {
-    // Blacklist refresh tokens in Redis
-    await setCache(`blacklist:${userId}`, "true", 7 * 24 * 60 * 60);
+    // Store logout timestamp so only refresh tokens issued prior to logout are invalidated
+    await setCache(`blacklist:${userId}`, String(Date.now()), 7 * 24 * 60 * 60);
   }
 
   static async syncUserFromLinkedOrders(userId: string, user?: any) {
@@ -294,5 +323,25 @@ export class AuthService {
     (user as any).resetPasswordExpire = undefined;
     
     await user.save();
+
+    const resetUserId = (user as any)._id?.toString() || user.id;
+    if (resetUserId) {
+      try {
+        await setCache(`blacklist:${resetUserId}`, String(Date.now()), 7 * 24 * 60 * 60);
+      } catch {
+        // Cache unavailability should not block password reset
+      }
+      try {
+        const { AuditLogService } = await import("../audit-log/audit-log.service");
+        await AuditLogService.record({
+          category: "AUTH",
+          action: "PASSWORD_RESET",
+          severity: "warning",
+          actor: { userId: resetUserId, email: user.email, role: user.role || "customer" },
+          resource: { type: "User", id: resetUserId, label: user.email },
+          message: `Password was reset for ${user.email} and prior sessions were revoked`,
+        });
+      } catch {}
+    }
   }
 }

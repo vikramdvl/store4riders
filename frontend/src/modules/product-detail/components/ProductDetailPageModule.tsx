@@ -966,13 +966,20 @@ export const ProductDetailPageModule = ({ slug: propSlug, initialProduct }: Prod
       const imageUrl = getProductThumbnailUrl(product, preferredColor || undefined);
       const productUrl = preferredColor ? `/${product.slug}?color=${encodeURIComponent(preferredColor)}` : `/${product.slug}`;
 
+      const recentRating =
+        product.avgRating &&
+        Number(product.avgRating) > 0 &&
+        (product.reviewCount === undefined || Number(product.reviewCount) > 0)
+          ? Number(Number(product.avgRating).toFixed(1))
+          : 0;
+
       addRecentView({
         id: product._id,
         name: product.name,
         category: extractCategoryName(product),
         priceFormatted: finalPrice > 0 ? formatINR(finalPrice) : "Contact for Price",
         imageUrl,
-        rating: 4.95,
+        rating: recentRating,
         productUrl,
       });
     }

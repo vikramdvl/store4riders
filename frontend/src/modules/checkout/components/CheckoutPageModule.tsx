@@ -54,7 +54,8 @@ import {
   CheckIcon,
   ShieldCheckIcon,
   LockClosedIcon,
-  TagIcon
+  TagIcon,
+  ShoppingBagIcon
 } from "@heroicons/react/24/outline";
 import { COUNTRIES } from "@/core/utils/countries";
 
@@ -90,6 +91,7 @@ export const CheckoutPageModule = () => {
   // Promo Coupon state
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number } | null>(null);
+  const [isMobileSummaryOpen, setIsMobileSummaryOpen] = useState(false);
   const validateCouponMutation = useValidateCoupon();
   const { data: publicCoupons = [] } = usePublicCoupons();
 
@@ -960,6 +962,202 @@ export const CheckoutPageModule = () => {
     }
   };
 
+  const totalItemCount = items.reduce((s, it) => s + it.quantity, 0);
+
+  const renderOrderSummaryDetails = () => (
+    <>
+      {/* Promo Coupon Input / Applied Box */}
+      <div className="mb-2.5">
+        {!user ? (
+          <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2 text-xs transition-all shadow-[inset_0_1px_2px_rgba(245,158,11,0.04)]">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <TagIcon className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+              <span className="text-[11px] text-neutral-700 font-medium truncate">
+                Have promo? <strong className="font-semibold text-neutral-900">Sign in for discounts</strong>
+              </span>
+            </div>
+            <Link
+              href="/login?redirect=/checkout"
+              className="shrink-0 px-2.5 py-1 bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-[10px] rounded-lg shadow-xs transition-all whitespace-nowrap"
+            >
+              Sign In →
+            </Link>
+          </div>
+        ) : appliedCoupon ? (
+          <div className="bg-emerald-50/90 border border-emerald-200/90 text-emerald-800 px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-between shadow-[inset_0_1px_2px_rgba(16,185,129,0.04)]">
+            <div className="flex items-center gap-1.5 truncate">
+              <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span className="truncate">Coupon <strong>{appliedCoupon.code}</strong> applied!</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRemoveCoupon}
+              className="text-emerald-700 hover:text-emerald-900 font-bold text-xs ml-2 underline cursor-pointer shrink-0"
+            >
+              Remove
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                placeholder="Promo coupon code"
+                value={couponInput}
+                onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleApplyCoupon();
+                  }
+                }}
+                className="flex-1 min-w-0 px-2.5 py-2 lg:py-1.5 text-xs border border-slate-300 rounded-lg font-mono uppercase bg-white focus:outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => handleApplyCoupon()}
+                disabled={validateCouponMutation.isPending || !couponInput.trim()}
+                className="px-3.5 py-2 lg:py-1.5 bg-slate-900 hover:bg-black disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shrink-0"
+              >
+                {validateCouponMutation.isPending ? "..." : "Apply"}
+              </button>
+            </div>
+
+            {/* Quick-apply active offers */}
+            {publicCoupons.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Offers:</span>
+                {publicCoupons.slice(0, 3).map((pc) => (
+                  <button
+                    key={pc._id || pc.code}
+                    type="button"
+                    onClick={() => {
+                      const itemsPayload = items.map((it) => ({
+                        productId: it.productId,
+                        variantId: it.variantId || null,
+                        quantity: it.quantity,
+                      }));
+                      validateCouponMutation.mutateAsync({
+                        code: pc.code,
+                        items: itemsPayload,
+                        cartTotal: subtotal,
+                      }).then((res) => {
+                        setAppliedCoupon({
+                          code: res.code,
+                          discountAmount: res.discountAmount,
+                        });
+                        localStorage.setItem("s4r_checkout_coupon", JSON.stringify({ code: res.code, discountAmount: res.discountAmount }));
+                        toast.success(res.message || `Coupon "${res.code}" applied!`);
+                        setCouponInput("");
+                      }).catch((err: any) => {
+                        toast.error(err.response?.data?.error || `Coupon "${pc.code}" cannot be applied to current cart`);
+                      });
+                    }}
+                    disabled={validateCouponMutation.isPending}
+                    className="text-[9.5px] bg-slate-100 hover:bg-slate-200 text-slate-800 font-mono font-bold px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <TagIcon className="w-2.5 h-2.5 text-slate-600" />
+                    <span>{pc.code}</span>
+                    <span className="text-slate-500 font-sans font-normal">
+                      ({pc.discountType === "percent" ? `${pc.discountValue}%` : `₹${pc.discountValue}`})
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Items Mini List */}
+      <div className="flex flex-col gap-2 mb-2.5 max-h-[165px] lg:max-h-[145px] overflow-y-auto pr-1.5 custom-scrollbar">
+        {items.map((item) => {
+          const product = item.product || {};
+          const name = product.name || "Riding Gear";
+          const price = item.price ?? product.price ?? product.specialPrice ?? product.basePrice ?? 0;
+          const rawImg = getCartItemImage(item, FALLBACK_IMAGE);
+
+          return (
+            <div key={`${item.productId}-${item.variantId}`} className="flex items-center gap-2.5 group py-0.5">
+              <div className="relative w-10 h-10 lg:w-9 lg:h-9 bg-slate-50 rounded-lg overflow-hidden shrink-0 border border-slate-200 group-hover:border-slate-300 transition-colors">
+                <Image
+                  src={rawImg}
+                  alt={name}
+                  fill
+                  className="object-contain p-0.5"
+                  sizes="40px"
+                />
+              </div>
+
+              <div className="flex flex-col flex-1 min-w-0">
+                <span className="font-bold text-[11px] text-slate-900 uppercase line-clamp-1 leading-snug">
+                  {name}
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium">
+                  Qty: {item.quantity}
+                </span>
+              </div>
+              
+              <div className="text-xs font-bold text-slate-900 shrink-0">
+                {formatPrice(price * item.quantity)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Cost Breakdown */}
+      <div className="flex flex-col gap-1.5 p-3 bg-slate-50 border border-slate-200/80 rounded-lg">
+        <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+          <span>Subtotal</span>
+          <span className="text-slate-900 font-semibold">{formatPrice(subtotal)}</span>
+        </div>
+
+        {couponDiscount > 0 && appliedCoupon && (
+          <div className="flex items-center justify-between text-xs font-medium">
+            <span className="text-emerald-700 flex items-center gap-1">
+              Coupon ({appliedCoupon.code})
+            </span>
+            <span className="text-emerald-700 font-bold">-{formatPrice(couponDiscount)}</span>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+          <span>Shipping</span>
+          <span className={shippingCost === 0 ? 'text-emerald-700 font-bold uppercase' : 'text-slate-900 font-semibold'}>
+            {shippingCost === 0 ? "Free" : formatPrice(shippingCost)}
+          </span>
+        </div>
+
+        {paymentOption === "cod" && codHandlingFee > 0 && (
+          <div className="flex items-center justify-between text-xs font-medium text-slate-700">
+            <span>COD Handling Fee</span>
+            <span className="text-slate-900 font-bold">+{formatPrice(codHandlingFee)}</span>
+          </div>
+        )}
+
+        {isGstExclusive ? (
+          <div className="flex items-center justify-between text-xs font-medium text-slate-600">
+            <span>GST ({defaultTaxRate === 0 ? "0% - Exempt" : `${defaultTaxRate}%`})</span>
+            <span className="text-slate-900 font-bold">+{formatPrice(estimatedTax)}</span>
+          </div>
+        ) : (
+          <div className="text-xs font-medium text-slate-500">
+            GST (Included in price)
+          </div>
+        )}
+      </div>
+
+      {/* Total */}
+      <div className="flex items-center justify-between pt-2.5 mt-0.5">
+        <span className="text-sm font-bold text-slate-900">Total Payable</span>
+        <span className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+          {formatPrice(total)}
+        </span>
+      </div>
+    </>
+  );
+
   return (
     <div className="w-full min-h-screen bg-[#f6f8fb] flex flex-col font-sans relative">
       
@@ -984,31 +1182,31 @@ export const CheckoutPageModule = () => {
       ]} />
 
       {/* Main Content */}
-      <main className="max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-1.5 pb-20 md:pt-2 md:pb-8 flex-1">
+      <main className="max-w-[1400px] w-full mx-auto px-3 sm:px-6 lg:px-8 pt-2 pb-36 lg:pt-2 lg:pb-8 flex-1">
         
         {/* ========================================================================= */}
         {/* SCREEN 3: SUCCESS */}
         {/* ========================================================================= */}
         {currentStep === 3 ? (
-          <div className="max-w-xl mx-auto py-8 sm:py-10 px-6 sm:px-8 text-center flex flex-col items-center bg-white rounded-3xl shadow-[0_16px_40px_-6px_rgba(15,23,42,0.06),0_4px_16px_-2px_rgba(15,23,42,0.02),inset_0_1.5px_0_rgba(255,255,255,1),inset_0_-2px_4px_rgba(0,0,0,0.015)] border border-slate-100/90 ring-1 ring-slate-900/[0.02] animate-in fade-in zoom-in-95 duration-400 my-6">
+          <div className="max-w-xl mx-auto py-7 sm:py-10 px-4 sm:px-8 text-center flex flex-col items-center bg-white rounded-xl sm:rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.04)] border border-slate-200/90 animate-in fade-in zoom-in-95 duration-300 my-4 sm:my-6">
             {/* Green Checkmark Badge */}
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white flex items-center justify-center mb-4 shadow-[0_8px_20px_rgba(16,185,129,0.35),inset_0_1.5px_1px_rgba(255,255,255,0.4),inset_0_-2px_4px_rgba(0,0,0,0.15)] ring-4 ring-emerald-100/70">
-              <CheckIcon className="w-7 h-7 stroke-[2.5]" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-emerald-600 text-white flex items-center justify-center mb-4">
+              <CheckIcon className="w-6 h-6 sm:w-7 sm:h-7 stroke-[2.5]" />
             </div>
 
             {/* Modern Heading: ORDER CONFIRMED! / PAYMENT SUCCESS! */}
-            <h1 className="font-sans text-2xl sm:text-3xl font-black text-neutral-900 tracking-tight uppercase mb-2">
+            <h1 className="font-sans text-2xl sm:text-3xl font-black text-slate-900 tracking-tight uppercase mb-2">
               {paymentOption === "cod" ? "ORDER CONFIRMED!" : "PAYMENT SUCCESS!"}
             </h1>
 
-            <p className="text-neutral-500 text-xs sm:text-sm max-w-md mb-4 leading-relaxed font-sans">
+            <p className="text-slate-500 text-xs sm:text-sm max-w-md mb-4 leading-relaxed font-sans">
               Thank you for shopping with Store4Riders. Your order <strong>#{generatedOrderNumber}</strong> has been confirmed. A receipt and tracking details have been sent to {formData.email || user?.email ? <strong>{formData.email || user?.email}</strong> : "your registered email address"}.
             </p>
 
             {/* Payment Method Badge on Confirmation */}
-            <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 my-3 text-xs text-neutral-700 flex items-center justify-between w-full max-w-md font-sans shadow-[inset_0_1px_2px_rgba(15,23,42,0.02)]">
-              <span className="font-semibold text-neutral-500">Payment Method:</span>
-              <span className="font-black text-neutral-900 uppercase">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 my-3 text-xs text-slate-700 flex items-center justify-between w-full max-w-md font-sans">
+              <span className="font-semibold text-slate-500">Payment Method:</span>
+              <span className="font-black text-slate-900 uppercase">
                 {paymentOption.toUpperCase()}
               </span>
             </div>
@@ -1032,7 +1230,7 @@ export const CheckoutPageModule = () => {
             
             <Link
               href="/"
-              className="mt-2 bg-gradient-to-r from-banner to-[#ea4719] hover:from-[#f04f25] hover:to-[#d83c12] text-white font-black tracking-widest text-xs uppercase px-8 py-4 rounded-xl shadow-[0_8px_20px_-4px_rgba(255,84,41,0.4),inset_0_1.5px_1px_rgba(255,255,255,0.4)] transition-all active:translate-y-0.5"
+              className="mt-3 bg-banner hover:bg-[#e8451c] text-white font-bold tracking-wider text-xs uppercase px-7 py-3 rounded-lg transition-colors"
             >
               BACK TO HOME
             </Link>
@@ -1042,8 +1240,55 @@ export const CheckoutPageModule = () => {
           /* SCREENS 1 & 2: 2-STEP CHECKOUT FLOW */
           /* ========================================================================= */
           <>
+            {/* Mobile Collapsible Order Summary Bar */}
+            <div className="lg:hidden mb-3.5">
+              <div className="bg-white rounded-xl border border-slate-200/90 shadow-[0_1px_3px_rgba(15,23,42,0.04)] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setIsMobileSummaryOpen((prev) => !prev)}
+                  aria-expanded={isMobileSummaryOpen}
+                  className="w-full px-3.5 py-3 flex items-center justify-between gap-3 text-left cursor-pointer active:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 text-slate-800 flex items-center justify-center shrink-0">
+                      <ShoppingBagIcon className="w-4 h-4 stroke-[2]" />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900 tracking-tight">
+                          Order Summary
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                          {totalItemCount} {totalItemCount === 1 ? "item" : "items"}
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1 mt-0.5">
+                        {isMobileSummaryOpen ? "Hide details & promo" : appliedCoupon ? `Coupon ${appliedCoupon.code} applied • View details` : "View items & apply promo"}
+                        {isMobileSummaryOpen ? (
+                          <ChevronUpIcon className="w-3.5 h-3.5 stroke-[2.2]" />
+                        ) : (
+                          <ChevronDownIcon className="w-3.5 h-3.5 stroke-[2.2]" />
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-base font-black text-slate-900 tracking-tight">
+                      {formatPrice(total)}
+                    </span>
+                  </div>
+                </button>
+
+                {isMobileSummaryOpen && (
+                  <div className="px-3.5 pb-3.5 pt-2.5 border-t border-slate-100 animate-in fade-in duration-150">
+                    {renderOrderSummaryDetails()}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Two Column Layout */}
-            <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 items-start">
+            <div className="flex flex-col lg:flex-row gap-4 lg:gap-10 items-start">
               
               {/* Left Column: Form Steps */}
               <div className="w-full lg:w-[62%]">
@@ -1115,223 +1360,40 @@ export const CheckoutPageModule = () => {
                   />
                 )}
 
+                {/* Mobile Trust Badges Footer */}
+                <div className="lg:hidden mt-4 flex items-center justify-center gap-2.5 py-2 px-3 rounded-lg bg-white border border-slate-200/80 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                  <span className="flex items-center gap-1.5"><ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-600"/> Secure Checkout</span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1.5"><LockClosedIcon className="w-3.5 h-3.5 text-slate-600"/> 256-Bit Encrypted</span>
+                </div>
+
               </div>
 
               {/* Right Column: ORDER SUMMARY (Sticky on desktop) */}
-              <div className="w-full lg:w-[38%] lg:sticky lg:top-3 z-20">
-                <div className="flex flex-col bg-white border border-slate-100/90 ring-1 ring-slate-900/[0.03] shadow-[0_16px_40px_-6px_rgba(15,23,42,0.06),0_4px_16px_-2px_rgba(15,23,42,0.02),inset_0_1.5px_0_rgba(255,255,255,1),inset_0_-2px_4px_rgba(0,0,0,0.015)] rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 lg:max-h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
+              <div className="hidden lg:block w-full lg:w-[38%] lg:sticky lg:top-3 z-20">
+                <div className="flex flex-col bg-white border border-slate-200/90 shadow-[0_1px_3px_rgba(15,23,42,0.04)] rounded-2xl p-4 lg:max-h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
                   
                   {/* Heading */}
-                  <div className="flex items-center justify-between mb-2">
-                    <h2 className="font-sans font-bold text-sm sm:text-base text-neutral-900 tracking-tight">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <h2 className="font-sans font-bold text-sm sm:text-base text-slate-900 tracking-tight">
                       Order Summary
                     </h2>
-                    <span className="text-[11px] font-semibold text-neutral-500">
-                      {items.reduce((s, it) => s + it.quantity, 0)} {items.reduce((s, it) => s + it.quantity, 0) === 1 ? "item" : "items"}
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {totalItemCount} {totalItemCount === 1 ? "item" : "items"}
                     </span>
                   </div>
 
-                  {/* Promo Coupon Input / Applied Box */}
-                  <div className="mb-2">
-                    {!user ? (
-                      <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2 text-xs transition-all shadow-[inset_0_1px_2px_rgba(245,158,11,0.04)]">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <TagIcon className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                          <span className="text-[11px] text-neutral-700 font-medium truncate">
-                            Have promo? <strong className="font-semibold text-neutral-900">Sign in for discounts</strong>
-                          </span>
-                        </div>
-                        <Link
-                          href="/login?redirect=/checkout"
-                          className="shrink-0 px-2.5 py-1 bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-[10px] rounded-lg shadow-xs transition-all whitespace-nowrap"
-                        >
-                          Sign In →
-                        </Link>
-                      </div>
-                    ) : appliedCoupon ? (
-                      <div className="bg-emerald-50/90 border border-emerald-200/90 text-emerald-800 px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-between shadow-[inset_0_1px_2px_rgba(16,185,129,0.04)]">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span className="truncate">Coupon <strong>{appliedCoupon.code}</strong> applied!</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleRemoveCoupon}
-                          className="text-emerald-700 hover:text-emerald-900 font-bold text-xs ml-2 underline cursor-pointer shrink-0"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="text"
-                            placeholder="Promo coupon code"
-                            value={couponInput}
-                            onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                handleApplyCoupon();
-                              }
-                            }}
-                            className="flex-1 px-2.5 py-1.5 text-xs border border-slate-200/90 rounded-xl font-mono uppercase bg-slate-50/80 hover:bg-white focus:bg-white focus:outline-none focus:border-banner focus:ring-2 focus:ring-banner/10 shadow-[inset_0_2px_4px_rgba(15,23,42,0.03)] transition-all"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleApplyCoupon()}
-                            disabled={validateCouponMutation.isPending || !couponInput.trim()}
-                            className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-xs active:translate-y-0.5 cursor-pointer shrink-0"
-                          >
-                            {validateCouponMutation.isPending ? "..." : "Apply"}
-                          </button>
-                        </div>
-
-                        {/* Quick-apply active offers */}
-                        {publicCoupons.length > 0 && (
-                          <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Offers:</span>
-                            {publicCoupons.slice(0, 3).map((pc) => (
-                              <button
-                                key={pc._id || pc.code}
-                                type="button"
-                                onClick={() => {
-                                  const itemsPayload = items.map((it) => ({
-                                    productId: it.productId,
-                                    variantId: it.variantId || null,
-                                    quantity: it.quantity,
-                                  }));
-                                  validateCouponMutation.mutateAsync({
-                                    code: pc.code,
-                                    items: itemsPayload,
-                                    cartTotal: subtotal,
-                                  }).then((res) => {
-                                    setAppliedCoupon({
-                                      code: res.code,
-                                      discountAmount: res.discountAmount,
-                                    });
-                                    localStorage.setItem("s4r_checkout_coupon", JSON.stringify({ code: res.code, discountAmount: res.discountAmount }));
-                                    toast.success(res.message || `Coupon "${res.code}" applied!`);
-                                    setCouponInput("");
-                                  }).catch((err: any) => {
-                                    toast.error(err.response?.data?.error || `Coupon "${pc.code}" cannot be applied to current cart`);
-                                  });
-                                }}
-                                disabled={validateCouponMutation.isPending}
-                                className="text-[9.5px] bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-mono font-bold px-2 py-0.5 rounded-full border border-slate-200/80 shadow-2xs flex items-center gap-1 transition-all cursor-pointer"
-                              >
-                                <TagIcon className="w-2.5 h-2.5 text-banner" />
-                                <span>{pc.code}</span>
-                                <span className="text-slate-500 font-sans font-normal">
-                                  ({pc.discountType === "percent" ? `${pc.discountValue}%` : `₹${pc.discountValue}`})
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Items Mini List */}
-                  <div className="flex flex-col gap-2 mb-2.5 max-h-[145px] overflow-y-auto pr-1.5 custom-scrollbar">
-                    {items.map((item) => {
-                      const product = item.product || {};
-                      const name = product.name || "Riding Gear";
-                      const price = item.price ?? product.price ?? product.specialPrice ?? product.basePrice ?? 0;
-                      const rawImg = getCartItemImage(item, FALLBACK_IMAGE);
-
-                      return (
-                        <div key={`${item.productId}-${item.variantId}`} className="flex items-center gap-2.5 group py-0.5">
-                          <div className="relative w-9 h-9 bg-slate-50 rounded-lg overflow-hidden shrink-0 border border-slate-200/70 shadow-[inset_0_1px_2px_rgba(15,23,42,0.04)] group-hover:border-slate-300 transition-colors">
-                            <Image
-                              src={rawImg}
-                              alt={name}
-                              fill
-                              className="object-contain p-0.5"
-                              sizes="36px"
-                            />
-                          </div>
-
-                          <div className="flex flex-col flex-1 min-w-0">
-                            <span className="font-bold text-[11px] text-neutral-900 uppercase line-clamp-1 leading-snug">
-                              {name}
-                            </span>
-                            <span className="text-[10px] text-neutral-500 font-medium">
-                              Qty: {item.quantity}
-                            </span>
-                          </div>
-                          
-                          <div className="text-xs font-bold text-neutral-900 shrink-0">
-                            {formatPrice(price * item.quantity)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Cost Breakdown (Inset Clay Box) */}
-                  <div className="flex flex-col gap-1.5 p-3 bg-slate-50/70 border border-slate-200/70 rounded-xl shadow-[inset_0_2px_4px_rgba(15,23,42,0.02)]">
-                    <div className="flex items-center justify-between text-xs text-neutral-500 font-medium">
-                      <span>Subtotal</span>
-                      <span className="text-neutral-900 font-semibold">{formatPrice(subtotal)}</span>
-                    </div>
-
-                    {couponDiscount > 0 && appliedCoupon && (
-                      <div className="flex items-center justify-between text-xs font-medium">
-                        <span className="text-emerald-600 flex items-center gap-1">
-                          Coupon ({appliedCoupon.code})
-                        </span>
-                        <span className="text-emerald-600 font-bold">-{formatPrice(couponDiscount)}</span>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between text-xs font-medium text-neutral-500">
-                      <span>Shipping</span>
-                      <span className={shippingCost === 0 ? 'text-emerald-600 font-bold uppercase' : 'text-neutral-900 font-semibold'}>
-                        {shippingCost === 0 ? "Free" : formatPrice(shippingCost)}
-                      </span>
-                    </div>
-
-                    {paymentOption === "cod" && codHandlingFee > 0 && (
-                      <div className="flex items-center justify-between text-xs font-medium text-amber-900">
-                        <span className="flex items-center gap-1 text-amber-800">
-                          COD Handling Fee
-                        </span>
-                        <span className="text-amber-900 font-bold">+{formatPrice(codHandlingFee)}</span>
-                      </div>
-                    )}
-
-                    {isGstExclusive ? (
-                      <div className="flex items-center justify-between text-xs font-medium text-neutral-600">
-                        <span>GST ({defaultTaxRate === 0 ? "0% - Exempt" : `${defaultTaxRate}%`})</span>
-                        <span className="text-neutral-900 font-bold">+{formatPrice(estimatedTax)}</span>
-                      </div>
-                    ) : (
-                      <div className="text-xs font-medium text-neutral-500">
-                        GST (Included in price)
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Total */}
-                  <div className="flex items-center justify-between pt-2 mt-0.5">
-                    <span className="text-sm font-bold text-neutral-900">Total</span>
-                    <span className="text-lg sm:text-xl font-black text-banner tracking-tight">
-                      {formatPrice(total)}
-                    </span>
-                  </div>
+                  {renderOrderSummaryDetails()}
 
                   {/* Desktop Step 2 Place Order Button - positioned directly below Total in Order Summary */}
                   {currentStep === 2 && (
-                    <div className="hidden lg:flex flex-col gap-1.5 mt-2">
+                    <div className="hidden lg:flex flex-col gap-1.5 mt-3">
                       {isCodWithAdvance && (
-                        <div className="px-2.5 py-1.5 bg-[#F0F5FF] border border-[#D0E1FD] rounded-lg text-[10.5px] leading-tight text-[#172337] flex items-center justify-between gap-1 shadow-2xs">
-                          <span className="text-[#1E293B] truncate">
-                            Requires <strong className="font-bold text-[#2874F0]">{settings?.codPartialPaymentType === "fixed" ? `₹${Number(settings?.codPartialPaymentValue || 0).toLocaleString("en-IN")}` : `${settings?.codPartialPaymentValue ?? 10}%`} advance</strong> via PayU
+                        <div className="px-2.5 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-[10.5px] leading-tight text-slate-700 flex items-center justify-between gap-1">
+                          <span className="truncate">
+                            Requires <strong className="font-bold text-slate-900">{settings?.codPartialPaymentType === "fixed" ? `₹${Number(settings?.codPartialPaymentValue || 0).toLocaleString("en-IN")}` : `${settings?.codPartialPaymentValue ?? 10}%`} advance</strong> via PayU
                           </span>
-                          <span className="text-[10px] text-[#2874F0] font-bold uppercase shrink-0">PayU</span>
+                          <span className="text-[10px] text-slate-700 font-bold uppercase shrink-0">PayU</span>
                         </div>
                       )}
 
@@ -1339,7 +1401,7 @@ export const CheckoutPageModule = () => {
                         type="button"
                         onClick={handleAgreeToPay}
                         disabled={isProcessing || isPlacingOrder || !paymentOption}
-                        className="w-full bg-gradient-to-r from-banner to-[#ea4719] hover:from-[#f04f25] hover:to-[#d83c12] text-white font-black tracking-wider text-xs uppercase py-3 px-5 rounded-xl shadow-[0_6px_16px_-4px_rgba(255,84,41,0.4),inset_0_1.5px_1px_rgba(255,255,255,0.4),inset_0_-2px_4px_rgba(0,0,0,0.15)] transition-all active:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                        className="w-full bg-banner hover:bg-[#e8451c] text-white font-bold tracking-wider text-xs uppercase py-3.5 px-5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                       >
                         {isProcessing || isPlacingOrder ? (
                           <>
@@ -1368,7 +1430,7 @@ export const CheckoutPageModule = () => {
                   )}
 
                   {/* Trust Badges */}
-                  <div className="flex items-center justify-center gap-2.5 mt-2.5 py-1 px-3 rounded-full bg-slate-50/80 border border-slate-200/60 shadow-[inset_0_1px_2px_rgba(15,23,42,0.02)] text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                  <div className="flex items-center justify-center gap-2.5 mt-3 py-1.5 px-3 rounded-lg bg-slate-50 border border-slate-200/70 text-[9.5px] text-slate-500 font-bold uppercase tracking-wider">
                     <span className="flex items-center gap-1.5"><ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-600"/> Secure Checkout</span>
                     <span>•</span>
                     <span className="flex items-center gap-1.5"><LockClosedIcon className="w-3.5 h-3.5 text-slate-600"/> 256-Bit Encrypted</span>

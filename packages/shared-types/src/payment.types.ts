@@ -11,6 +11,8 @@ export interface IRefund {
   createdAt: Date;
 }
 
+export type PaymentPurpose = "order" | "exchange_fee";
+
 export interface IPayment {
   id?: string;
   orderId: string;
@@ -20,6 +22,7 @@ export interface IPayment {
   gatewayPaymentId?: string;
   method: PaymentMethodType;
   gateway: PaymentGatewayType;
+  paymentPurpose?: PaymentPurpose;
   refunds: IRefund[];
   webhookEvents: string[]; // event_ids for deduplication
   idempotencyKey?: string;

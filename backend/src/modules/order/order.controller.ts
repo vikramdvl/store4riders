@@ -127,6 +127,19 @@ export class OrderController {
       let webhookResult: any = null;
       if (gatewayType && gatewayType !== "unknown") {
         webhookResult = await OrderService.handleWebhook(rawBody, headers, gatewayType);
+        const orderRef = webhookResult?.orderNumber || webhookResult?.orderId || getOrderId();
+        const isWebhookSuccess = Boolean(webhookResult?.success);
+        const { AuditLogService } = await import("../audit-log/audit-log.service");
+        await AuditLogService.record({
+          category: "PAYMENT",
+          action: "PAYMENT_WEBHOOK_PROCESSED",
+          severity: isWebhookSuccess ? "info" : "warning",
+          status: isWebhookSuccess ? "success" : "failure",
+          resource: { type: "Payment", id: orderRef || undefined, label: orderRef || gatewayType.toUpperCase() },
+          req,
+          message: `Processed ${gatewayType.toUpperCase()} payment webhook${orderRef ? ` for ${orderRef}` : ""}: ${isWebhookSuccess ? "success" : "failed/cancelled"}`,
+          metadata: { gateway: gatewayType, isExchangeFee: Boolean(webhookResult?.isExchangeFee) },
+        });
       }
       
       // Redirect user back to frontend after webhook processing
@@ -137,6 +150,14 @@ export class OrderController {
         // True success requires both verification success and non-failure route
         const isFailureRoute = routePath && routePath[2] === "failure";
         const isSuccess = Boolean(webhookResult?.success) && !isFailureRoute;
+
+        if (webhookResult?.isExchangeFee && webhookResult?.orderId) {
+          const feeStatus = isSuccess ? "true" : "false";
+          return NextResponse.redirect(
+            `${frontendUrl}/account/orders/${encodeURIComponent(String(webhookResult.orderId))}?exchangeFeePaid=${feeStatus}`,
+            303
+          );
+        }
 
         if (isSuccess) {
           return NextResponse.redirect(`${frontendUrl}/checkout?success=true${orderParam}`, 303);
@@ -167,8 +188,22 @@ export class OrderController {
 
       return ApiResponse.success(webhookResult, "Webhook processed");
     } catch (err: any) {
+      const orderRef = getOrderId();
+      try {
+        const { AuditLogService } = await import("../audit-log/audit-log.service");
+        await AuditLogService.record({
+          category: "PAYMENT",
+          action: "PAYMENT_WEBHOOK_ERROR",
+          severity: "critical",
+          status: "failure",
+          resource: { type: "Payment", id: orderRef || undefined, label: orderRef || gatewayType.toUpperCase() },
+          req,
+          message: `${gatewayType.toUpperCase()} payment webhook error${orderRef ? ` for ${orderRef}` : ""}: ${err?.message || "Verification error"}`,
+          metadata: { gateway: gatewayType },
+        });
+      } catch {}
       if (isRedirect) {
-        const orderId = getOrderId();
+        const orderId = orderRef;
         const orderParam = orderId ? `&orderId=${encodeURIComponent(orderId)}` : "";
         return NextResponse.redirect(`${frontendUrl}/checkout?failed=true${orderParam}`, 303);
       }
@@ -231,7 +266,24 @@ export class OrderController {
       throw new ForbiddenError("Customer Care can only cancel orders");
     }
 
+    let prevOrder: any = null;
+    try {
+      prevOrder = await OrderRepository.findById(id);
+    } catch {}
     const updated = await OrderService.adminUpdateStatus(id, status);
+    try {
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      await AuditLogService.record({
+        category: "ADMIN",
+        action: "ORDER_STATUS_UPDATED",
+        severity: status === "cancelled" ? "warning" : "info",
+        actorUserId: userId,
+        resource: { type: "Order", id, label: (updated as any)?.orderNumber || prevOrder?.orderNumber || id },
+        changes: { before: { status: prevOrder?.status }, after: { status } },
+        req,
+        message: `Updated order ${(updated as any)?.orderNumber || id} status from ${prevOrder?.status || "unknown"} to ${status}`,
+      });
+    } catch {}
     return ApiResponse.success(updated, "Order status updated");
   }
 
@@ -241,7 +293,24 @@ export class OrderController {
     if (role !== "admin" && role !== "super_admin") {
       throw new ForbiddenError("Only Admins can delete orders");
     }
+    let prevOrder: any = null;
+    try {
+      prevOrder = await OrderRepository.findById(id);
+    } catch {}
     await OrderService.adminDeleteOrder(id);
+    try {
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      await AuditLogService.record({
+        category: "ADMIN",
+        action: "ORDER_DELETED",
+        severity: "critical",
+        actorUserId: userId,
+        resource: { type: "Order", id, label: prevOrder?.orderNumber || id },
+        changes: prevOrder ? { before: { orderNumber: prevOrder.orderNumber, status: prevOrder.status } } : undefined,
+        req,
+        message: `Deleted order ${prevOrder?.orderNumber || id}`,
+      });
+    } catch {}
     return ApiResponse.success(null, "Order deleted successfully");
   }
 
@@ -254,20 +323,109 @@ export class OrderController {
 
   static async requestReturn(req: NextRequest, id: string) {
     const userId = OrderValidator.extractUserId(req);
-    const { reason, images } = await OrderValidator.validateRequestReturn(req);
-    const updated = await OrderService.requestReturn(id, userId, reason, images);
+    const { reason, images, items } = await OrderValidator.validateRequestReturn(req);
+    const updated = await OrderService.requestReturn(id, userId, reason, images, items);
     return ApiResponse.success(updated, "Exchange requested successfully");
   }
 
   static async adminHandleReturn(req: NextRequest, id: string) {
     const userId = OrderValidator.extractUserId(req);
     const role = await UserService.getRole(userId);
-    if (role === "customer_care") {
-      throw new ForbiddenError("Customer Care cannot handle exchange requests");
+    const allowed = ["super_admin", "admin", "logistic", "order_manager"];
+    if (!allowed.includes(role)) {
+      throw new ForbiddenError("Staff logistics/admin access required to manage exchanges");
     }
-    const { action, adminNote } = await OrderValidator.validateAdminHandleReturn(req);
-    const updated = await OrderService.adminHandleReturn(id, action, adminNote);
-    return ApiResponse.success(updated, `Exchange ${action}d successfully`);
+    const data = await OrderValidator.validateAdminHandleReturn(req);
+    const updated = await OrderService.adminHandleReturn(id, data.action, data.adminNote, {
+      exchangeId: data.exchangeId,
+      shippingFee: data.shippingFee,
+      reverseCourier: data.reverseCourier,
+      reverseAwb: data.reverseAwb,
+      reverseTrackingUrl: data.reverseTrackingUrl,
+      warehouseId: data.warehouseId,
+      triggerCourier: data.triggerCourier,
+    });
+    try {
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      await AuditLogService.record({
+        category: "ADMIN",
+        action: `EXCHANGE_${data.action.toUpperCase()}D`,
+        severity: "warning",
+        actorUserId: userId,
+        resource: { type: "OrderExchange", id, label: (updated as any)?.orderNumber || id },
+        changes: { after: { action: data.action, shippingFee: data.shippingFee, triggerCourier: data.triggerCourier } },
+        req,
+        message: `${data.action === "approve" ? "Approved" : "Rejected"} exchange request for order ${(updated as any)?.orderNumber || id}`,
+      });
+    } catch {}
+    return ApiResponse.success(updated, `Exchange ${data.action}d successfully`);
+  }
+
+  static async adminExchangePickup(req: NextRequest, id: string) {
+    const userId = OrderValidator.extractUserId(req);
+    const role = await UserService.getRole(userId);
+    const allowed = ["super_admin", "admin", "logistic", "order_manager"];
+    if (!allowed.includes(role)) {
+      throw new ForbiddenError("Staff logistics/admin access required");
+    }
+    const data = await OrderValidator.validateExchangePickup(req);
+    const updated = await OrderService.adminExchangePickup(id, data);
+    return ApiResponse.success(updated, "Reverse pickup details updated");
+  }
+
+  static async adminSubmitExchangeQc(req: NextRequest, id: string) {
+    const userId = OrderValidator.extractUserId(req);
+    const role = await UserService.getRole(userId);
+    const allowed = ["super_admin", "admin", "logistic", "order_manager"];
+    if (!allowed.includes(role)) {
+      throw new ForbiddenError("Staff logistics/admin access required to submit QC");
+    }
+    const data = await OrderValidator.validateExchangeQc(req);
+    const updated = await OrderService.adminSubmitExchangeQc(id, userId, data);
+    return ApiResponse.success(updated, `Exchange QC marked as ${data.result.toUpperCase()}`);
+  }
+
+  static async adminSettleExchangeFee(req: NextRequest, id: string) {
+    const userId = OrderValidator.extractUserId(req);
+    const role = await UserService.getRole(userId);
+    const allowed = ["super_admin", "admin", "logistic", "order_manager"];
+    if (!allowed.includes(role)) {
+      throw new ForbiddenError("Staff logistics/admin access required");
+    }
+    const data = await OrderValidator.validateExchangeFeeStatus(req);
+    const updated = await OrderService.adminSettleExchangeFee(id, userId, data);
+    return ApiResponse.success(updated, "Exchange shipping fee updated");
+  }
+
+  static async initiateExchangeFeePayment(req: NextRequest, id: string) {
+    const userId = OrderValidator.extractUserId(req);
+    const data = await OrderValidator.validateExchangeFeePay(req);
+    const result = await OrderService.initiateExchangeFeePayment(id, userId, data.paymentMethod, data.exchangeId);
+    return ApiResponse.success(result, "Exchange shipping fee payment session initialized");
+  }
+
+  static async adminDispatchReplacement(req: NextRequest, id: string) {
+    const userId = OrderValidator.extractUserId(req);
+    const role = await UserService.getRole(userId);
+    const allowed = ["super_admin", "admin", "logistic", "order_manager"];
+    if (!allowed.includes(role)) {
+      throw new ForbiddenError("Staff logistics/admin access required to dispatch replacement");
+    }
+    const data = await OrderValidator.validateExchangeDispatch(req);
+    const updated = await OrderService.adminDispatchReplacement(id, userId, data);
+    return ApiResponse.success(updated, "Replacement shipment dispatched successfully");
+  }
+
+  static async adminCompleteExchange(req: NextRequest, id: string) {
+    const userId = OrderValidator.extractUserId(req);
+    const role = await UserService.getRole(userId);
+    const allowed = ["super_admin", "admin", "logistic", "order_manager"];
+    if (!allowed.includes(role)) {
+      throw new ForbiddenError("Staff logistics/admin access required");
+    }
+    const data = await OrderValidator.validateExchangeComplete(req);
+    const updated = await OrderService.adminCompleteExchange(id, userId, data.exchangeId);
+    return ApiResponse.success(updated, "Exchange marked as completed");
   }
 
   static async generateInvoice(req: NextRequest, id: string) {

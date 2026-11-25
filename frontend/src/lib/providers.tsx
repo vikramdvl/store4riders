@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { Toaster } from "sonner";
 
 import { useCartStore } from "@/stores/useCartStore";
+import { initSessionLifecycle } from "@/core/api/client";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -22,6 +23,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
+    initSessionLifecycle();
     try {
       const authData = localStorage.getItem("auth-storage");
       let initialUserId: string | null = null;

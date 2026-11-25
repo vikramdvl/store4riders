@@ -4,6 +4,7 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { PaymentMethodType } from "@store4riders/shared-types";
+import { submitGatewayPaymentForm } from "../utils/paymentSubmit";
 
 declare global {
   interface Window {}
@@ -79,99 +80,9 @@ export function useCheckout() {
         return;
       }
 
-      // Handle PayU and COD partial payment with PayU
-      if ((method === "payu" || (method === "cod" && gatewayOrderId)) && gatewayResponse) {
-        toast.success("Redirecting to PayU Payment Gateway...");
-
-        // If backend already resolved the sanitized redirect URL (bypassing PayU space bug)
-        if (gatewayResponse.redirectUrl) {
-          window.location.href = gatewayResponse.redirectUrl;
-          return;
-        }
-
-        // Standard PayU India form submit redirect
-        // Backend provides actionUrl based on PAYU_MODE ("live" vs "test"); fallback to NEXT_PUBLIC_PAYU_MODE
-        const isPayuLive = process.env.NEXT_PUBLIC_PAYU_MODE === "live";
-        const payuAction = gatewayResponse.actionUrl || (isPayuLive ? "https://secure.payu.in/_payment" : "https://test.payu.in/_payment");
-
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = payuAction;
-
-        Object.entries(gatewayResponse).forEach(([key, value]) => {
-          if (value !== undefined && value !== null && key !== "redirectUrl" && key !== "actionUrl") {
-            const input = document.createElement("input");
-            input.type = "hidden";
-            input.name = key;
-            input.value = String(value);
-            form.appendChild(input);
-          }
-        });
-
-        document.body.appendChild(form);
-        form.submit();
-        return;
-      }
-
-      // Handle CCAvenue — form POST with encrypted request
-      if (method === "ccavenue" && gatewayResponse) {
-        toast.success("Redirecting to CCAvenue...");
-
-        const isLive = process.env.NEXT_PUBLIC_CCAVENUE_MODE === "live";
-        const ccavAction = gatewayResponse.actionUrl || (isLive
-          ? "https://secure.ccavenue.com/transaction/transaction.do?command=initiateTransaction"
-          : "https://test.ccavenue.com/transaction/transaction.do?command=initiateTransaction");
-
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = ccavAction;
-        form.setAttribute("referrerpolicy", "no-referrer");
-
-        // CCAvenue officially requires ONLY encRequest and access_code as POST form inputs
-        const encInput = document.createElement("input");
-        encInput.type = "hidden";
-        encInput.name = "encRequest";
-        encInput.value = String(gatewayResponse.encRequest || "");
-        form.appendChild(encInput);
-
-        const accessInput = document.createElement("input");
-        accessInput.type = "hidden";
-        accessInput.name = "access_code";
-        accessInput.value = String(gatewayResponse.access_code || "");
-        form.appendChild(accessInput);
-
-        document.body.appendChild(form);
-        form.submit();
-        return;
-      }
-
-      // Handle Snapmint — Checkout 3.0 S2S redirect
-      if (method === "snapmint" && gatewayResponse) {
-        toast.success("Redirecting to Snapmint...");
-
-        if (gatewayResponse.redirectUrl) {
-          window.location.href = gatewayResponse.redirectUrl;
-          return;
-        }
-
-        const snapmintAction = gatewayResponse.actionUrl || "https://checkout.snapmint.com/pay";
-
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = snapmintAction;
-
-        Object.entries(gatewayResponse).forEach(([key, value]) => {
-          if (value !== undefined && value !== null && key !== "actionUrl" && key !== "redirectUrl") {
-            const input = document.createElement("input");
-            input.type = "hidden";
-            input.name = key;
-            input.value = typeof value === "object" ? JSON.stringify(value) : String(value);
-            form.appendChild(input);
-          }
-        });
-
-        document.body.appendChild(form);
-        form.submit();
+      // Handle PayU, CCAvenue, Snapmint, and COD partial payment with PayU
+      if ((method === "payu" || method === "ccavenue" || method === "snapmint" || (method === "cod" && gatewayOrderId)) && gatewayResponse) {
+        submitGatewayPaymentForm(method, gatewayResponse);
         return;
       }
     },

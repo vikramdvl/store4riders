@@ -51,8 +51,8 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
 }) => {
   const router = useRouter();
   const { data: publicSettings } = usePublicSettings();
-  const googleRating = propGoogleRating ?? publicSettings?.googleRating ?? 4.8;
-  const googleReviewCount = propGoogleReviewCount ?? publicSettings?.googleReviewCount;
+  const googleRating = propGoogleRating ?? publicSettings?.googleRating;
+  const googleReviewCount = propGoogleRating ? propGoogleReviewCount : publicSettings?.googleReviewCount;
   const [hasAdded, setHasAdded] = useState(false);
   const [showSizeChart, setShowSizeChart] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<"color" | "size" | null>(null);
@@ -122,7 +122,8 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
       }`}
     >
       
-      {/* Top Floating Mini-Bar (Google Reviews - Matching Category Page) */}
+      {/* Top Floating Mini-Bar (Google Reviews - Matching Category Page, only shown when rating exists) */}
+      {googleRating && googleRating > 0 ? (
       <div className="w-full bg-white border-b border-neutral-200/80 py-2.5 px-4 shadow-[0_-4px_15px_rgba(0,0,0,0.02)]">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <a
@@ -169,6 +170,7 @@ export const StickyFooterBar: React.FC<StickyFooterBarProps> = React.memo(({
           </a>
         </div>
       </div>
+      ) : null}
 
       <div className="max-w-[1400px] mx-auto px-3 lg:px-6 pt-2 pb-5 md:py-3 relative" ref={dropdownRef}>
         

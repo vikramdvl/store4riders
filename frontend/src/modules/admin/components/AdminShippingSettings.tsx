@@ -6,6 +6,9 @@ import { apiClient } from "@/core/api/client";
 import { toast } from "sonner";
 import Button from "@/components/ui/Button";
 import Link from "next/link";
+import { useWarehouses, useSetDefaultWarehouse, useSyncShiprocketWarehouses } from "@/core/hooks/useWarehouses";
+import { CheckBadgeIcon } from "@heroicons/react/24/solid";
+import { BuildingStorefrontIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import {
   Truck,
   Package,
@@ -30,6 +33,7 @@ interface IShippingSettings {
   storeOriginAddress?: string;
   storeOriginPhone?: string;
   returnWindowDays?: number | string;
+  exchangeShippingFee?: number | string;
   packagePresets?: { _id?: string; name: string; length: number; breadth: number; height: number }[];
 }
 
@@ -39,9 +43,52 @@ export function AdminShippingSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const { data: warehouses, isLoading: isWarehousesLoading } = useWarehouses();
+  const setDefaultWarehouseMutation = useSetDefaultWarehouse();
+  const syncShiprocketMutation = useSyncShiprocketWarehouses();
+
+  const defaultWarehouse = warehouses?.find((w) => w.isDefault) || (warehouses && warehouses.length > 0 ? warehouses[0] : null);
+
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  const handleWarehouseSelect = (whId: string) => {
+    if (!whId) return;
+    const selectedWh = warehouses?.find((w) => String(w.id || (w as any)._id) === whId);
+    if (!selectedWh) return;
+
+    setDefaultWarehouseMutation.mutate(whId, {
+      onSuccess: () => {
+        toast.success(`"${selectedWh.name}" set as Primary Dispatch & Exchange Warehouse`);
+      },
+      onError: (err: any) => {
+        toast.error(err.response?.data?.message || "Failed to update default warehouse");
+      }
+    });
+
+    if (settings) {
+      setSettings({
+        ...settings,
+        storeOriginPincode: selectedWh.pincode || settings.storeOriginPincode || "",
+        storeOriginCity: selectedWh.city || settings.storeOriginCity || "",
+        storeOriginState: selectedWh.state || settings.storeOriginState || "",
+        storeOriginAddress: [selectedWh.addressLine1, selectedWh.addressLine2].filter(Boolean).join(", ") || settings.storeOriginAddress || "",
+        storeOriginPhone: selectedWh.phone || settings.storeOriginPhone || "",
+      });
+    }
+  };
+
+  const handleSyncShiprocketWarehouses = () => {
+    syncShiprocketMutation.mutate(undefined, {
+      onSuccess: (data: any) => {
+        toast.success(data?.message || "Successfully synced warehouses from Shiprocket!");
+      },
+      onError: (err: any) => {
+        toast.error(err.response?.data?.message || "Failed to sync warehouses from Shiprocket");
+      }
+    });
+  };
 
   const fetchSettings = async () => {
     try {
@@ -70,7 +117,18 @@ export function AdminShippingSettings() {
         storeOriginState: settings.storeOriginState,
         storeOriginAddress: settings.storeOriginAddress,
         storeOriginPhone: settings.storeOriginPhone,
-        returnWindowDays: Number(settings.returnWindowDays) >= 0 ? Number(settings.returnWindowDays) : 7,
+        returnWindowDays:
+          settings.returnWindowDays !== "" &&
+          settings.returnWindowDays !== undefined &&
+          settings.returnWindowDays !== null &&
+          !isNaN(Number(settings.returnWindowDays)) &&
+          Number(settings.returnWindowDays) >= 0
+            ? Math.min(365, Number(settings.returnWindowDays))
+            : 7,
+        exchangeShippingFee:
+          settings.exchangeShippingFee !== "" && Number(settings.exchangeShippingFee) >= 0
+            ? Number(settings.exchangeShippingFee)
+            : 299,
         packagePresets: settings.packagePresets?.map(({ _id, ...rest }: any) => rest),
       };
       await apiClient.put("/admin/settings", payload);
@@ -227,14 +285,83 @@ export function AdminShippingSettings() {
 
         {/* 2. Warehouse Origin & Dispatch Location */}
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs space-y-4">
-          <div className="border-b border-slate-100 pb-3">
-            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
-              <MapPin size={16} className="text-[#FF5429]" />
-              Store Origin & Dispatch Location
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Primary warehouse origin used for Courier rate estimates and Shiprocket pickup schedules.
-            </p>
+          <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                <MapPin size={16} className="text-[#FF5429]" />
+                Store Origin & Dispatch Location
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Primary warehouse origin used for Courier rate estimates, Shiprocket pickup schedules, and return routing.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSyncShiprocketWarehouses}
+                disabled={syncShiprocketMutation.isPending}
+                className="inline-flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-[11px] font-bold px-3 py-1.5 rounded transition-colors shadow-2xs cursor-pointer"
+                title="Import registered pickup locations directly from your Shiprocket account"
+              >
+                <ArrowPathIcon className={`w-3.5 h-3.5 ${syncShiprocketMutation.isPending ? "animate-spin" : ""}`} />
+                <span>{syncShiprocketMutation.isPending ? "Syncing..." : "Sync from Shiprocket"}</span>
+              </button>
+              <Link
+                href="/admin/shipping"
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded transition-colors"
+              >
+                <span>Manage Hubs</span>
+                <ExternalLink size={11} />
+              </Link>
+            </div>
+          </div>
+
+          {/* Primary Warehouse Selector */}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-800">
+                Primary Warehouse / Default Dispatch Origin:
+              </label>
+              {defaultWarehouse && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                  <CheckBadgeIcon className="w-3.5 h-3.5 text-emerald-600" />
+                  Active Origin: {defaultWarehouse.name} {defaultWarehouse.shiprocketLocationId ? `(Shiprocket: ${defaultWarehouse.shiprocketLocationId})` : ""}
+                </span>
+              )}
+            </div>
+
+            <div className="relative">
+              <select
+                value={defaultWarehouse ? String(defaultWarehouse.id || (defaultWarehouse as any)._id) : ""}
+                onChange={(e) => handleWarehouseSelect(e.target.value)}
+                disabled={isWarehousesLoading || setDefaultWarehouseMutation.isPending}
+                className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-900 font-semibold focus:outline-none focus:border-brand shadow-2xs cursor-pointer"
+              >
+                <option value="" disabled>
+                  {isWarehousesLoading ? "Loading warehouses..." : warehouses && warehouses.length > 0 ? "Select Primary Warehouse" : "No warehouses configured (Sync from Shiprocket or enter below)"}
+                </option>
+                {warehouses?.map((wh) => {
+                  const whId = String(wh.id || (wh as any)._id);
+                  return (
+                    <option key={whId} value={whId}>
+                      {wh.name} {wh.warehouseCode ? `[${wh.warehouseCode}]` : ""} — {wh.city}, {wh.state} ({wh.pincode}) {wh.shiprocketLocationId ? `• Shiprocket: "${wh.shiprocketLocationId}"` : ""} {wh.isDefault ? "★ (Current Default)" : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div className="text-[11px] text-slate-600 space-y-1 pt-1 border-t border-slate-200/60">
+              <p className="flex items-center gap-1.5 font-medium">
+                <span className="text-emerald-600 font-bold">✓ Forward Pickups:</span> Couriers (Shiprocket, Delhivery) arrive at this warehouse to collect outbound orders.
+              </p>
+              <p className="flex items-center gap-1.5 font-medium">
+                <span className="text-blue-600 font-bold">✓ Return Origin (RTO & Exchanges):</span> Undelivered parcels (RTO) and customer exchange returns are routed back to this exact registered warehouse.
+              </p>
+              <p className="flex items-center gap-1.5 text-slate-500">
+                <span className="text-amber-600 font-bold">ℹ Per-Shipment Override:</span> When fulfilling orders in Courier Operations, you can select any active warehouse per shipment.
+              </p>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -333,33 +460,70 @@ export function AdminShippingSettings() {
             </p>
           </div>
 
-          <div className="max-w-xs">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-              Exchange Request Window (Days)
-            </label>
-            <input
-              type="number"
-              min={0}
-              max={60}
-              value={settings.returnWindowDays ?? ""}
-              onChange={(e) => {
-                const raw = e.target.value;
-                if (raw === "") {
-                  setSettings({ ...settings, returnWindowDays: "" });
-                  return;
-                }
-                const num = Number(raw);
-                setSettings({
-                  ...settings,
-                  returnWindowDays: isNaN(num) ? "" : Math.max(0, num),
-                });
-              }}
-              className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-900 font-semibold focus:outline-none focus:border-brand shadow-2xs"
-              placeholder="7"
-            />
-            <p className="text-[11px] text-slate-500 mt-1">
-              Store4Riders standard window after delivery date for size/fit exchanges.
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                Exchange Request Window (Days)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={365}
+                value={settings.returnWindowDays ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    setSettings({ ...settings, returnWindowDays: "" });
+                    return;
+                  }
+                  const num = Number(raw);
+                  setSettings({
+                    ...settings,
+                    returnWindowDays: isNaN(num) ? "" : Math.min(365, Math.max(0, num)),
+                  });
+                }}
+                className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-900 font-semibold focus:outline-none focus:border-brand shadow-2xs"
+                placeholder="7"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Store4Riders standard window after delivery date for size/fit exchanges.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                Standard Exchange 2-Way Shipping Fee (₹)
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold text-xs pointer-events-none">
+                  ₹
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={10000}
+                  step={1}
+                  value={settings.exchangeShippingFee ?? ""}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      setSettings({ ...settings, exchangeShippingFee: "" });
+                      return;
+                    }
+                    const num = Number(raw);
+                    setSettings({
+                      ...settings,
+                      exchangeShippingFee: isNaN(num) ? "" : Math.max(0, num),
+                    });
+                  }}
+                  className="w-full bg-white border border-slate-300 rounded-md pl-7 pr-3 py-2 text-sm text-slate-900 font-semibold focus:outline-none focus:border-brand shadow-2xs"
+                  placeholder="299"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Combined reverse pickup + replacement shipping fee borne by customer after QC passes (set 0 for free exchanges).
+              </p>
+            </div>
           </div>
         </div>
 

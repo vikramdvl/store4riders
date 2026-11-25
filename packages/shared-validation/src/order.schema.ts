@@ -76,5 +76,86 @@ export const verifyPaymentSchema = z.object({
   utr: z.string().optional(),
 });
 
+export const exchangeRequestItemSchema = z.object({
+  orderItemId: z.string().max(100).optional(),
+  productId: z.string().min(1).max(100),
+  variantId: z.string().max(150).optional(),
+  sku: z.string().max(150).optional(),
+  name: z.string().max(300).optional(),
+  quantity: z.number().int().min(1).max(99).optional(),
+  desiredReplacement: z.string().max(150).optional(),
+});
+
+export const adminHandleReturnSchema = z.object({
+  exchangeId: z.string().max(100).optional(),
+  action: z.enum(["approve", "reject"]),
+  adminNote: z.string().max(1000).optional(),
+  shippingFee: z.number().min(0).max(10000).optional(),
+  reverseCourier: z.string().max(100).optional(),
+  reverseAwb: z.string().max(100).optional(),
+  reverseTrackingUrl: z.string().max(500).optional(),
+  warehouseId: z.string().optional(),
+  triggerCourier: z.enum(["none", "shiprocket", "delhivery", "xpressbees", "manual"]).optional(),
+});
+
+export const exchangePickupSchema = z.object({
+  exchangeId: z.string().max(100).optional(),
+  action: z.enum(["schedule_reverse", "mark_picked_up", "update_tracking"]),
+  provider: z.enum(["shiprocket", "delhivery", "xpressbees", "manual"]).optional(),
+  reverseCourier: z.string().max(100).optional(),
+  reverseAwb: z.string().max(100).optional(),
+  reverseTrackingUrl: z.string().max(500).optional(),
+  warehouseId: z.string().optional(),
+  weightKg: z.number().positive().optional(),
+  length: z.number().positive().optional(),
+  breadth: z.number().positive().optional(),
+  height: z.number().positive().optional(),
+});
+
+export const exchangeQcSchema = z.object({
+  exchangeId: z.string().max(100).optional(),
+  result: z.enum(["passed", "failed"]),
+  tagsIntact: z.boolean(),
+  unusedCondition: z.boolean(),
+  packagingIntact: z.boolean(),
+  qcNotes: z.string().trim().min(2, "QC inspection notes are required").max(1000),
+  shippingFee: z.number().min(0).max(10000).optional(),
+  feeCollectionMode: z.enum(["online", "cod", "waived"]).optional(),
+});
+
+export const exchangeFeeStatusSchema = z.object({
+  exchangeId: z.string().max(100).optional(),
+  settlementMode: z.enum(["online_pending", "paid_manual", "cod_on_replacement", "waived"]),
+  paymentRef: z.string().max(150).optional(),
+  shippingFee: z.number().min(0).max(10000).optional(),
+  note: z.string().max(500).optional(),
+});
+
+export const exchangeFeePaySchema = z.object({
+  exchangeId: z.string().max(100).optional(),
+  paymentMethod: z.enum(["payu", "ccavenue", "upi"]),
+});
+
+export const exchangeDispatchSchema = z.object({
+  exchangeId: z.string().max(100).optional(),
+  provider: z.enum(["shiprocket", "delhivery", "xpressbees", "manual"]),
+  warehouseId: z.string().optional(),
+  courierName: z.string().max(100).optional(),
+  awb: z.string().max(100).optional(),
+  trackingUrl: z.string().max(500).optional(),
+  replacementVariant: z.string().max(200).optional(),
+  weightKg: z.number().positive().optional(),
+  length: z.number().positive().optional(),
+  breadth: z.number().positive().optional(),
+  height: z.number().positive().optional(),
+  autoAssignAwb: z.boolean().optional(),
+});
+
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>;
+export type AdminHandleReturnInput = z.infer<typeof adminHandleReturnSchema>;
+export type ExchangePickupInput = z.infer<typeof exchangePickupSchema>;
+export type ExchangeQcInput = z.infer<typeof exchangeQcSchema>;
+export type ExchangeFeeStatusInput = z.infer<typeof exchangeFeeStatusSchema>;
+export type ExchangeFeePayInput = z.infer<typeof exchangeFeePaySchema>;
+export type ExchangeDispatchInput = z.infer<typeof exchangeDispatchSchema>;

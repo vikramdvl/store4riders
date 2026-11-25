@@ -16,6 +16,7 @@ interface DirectUpiModalProps {
   upiUri: string;
   payeeName?: string;
   payeeVpa?: string;
+  skipCartClear?: boolean;
   onSuccess: (orderNumber: string) => void;
 }
 
@@ -27,6 +28,7 @@ export const DirectUpiModal: React.FC<DirectUpiModalProps> = ({
   upiUri,
   payeeName = "Store4Riders",
   payeeVpa,
+  skipCartClear = false,
   onSuccess,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -46,6 +48,17 @@ export const DirectUpiModal: React.FC<DirectUpiModalProps> = ({
       setIsMobileDevice(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
     }
   }, []);
+
+  // Reset modal timer and UTR state cleanly whenever a new UPI payment session opens
+  useEffect(() => {
+    if (isOpen) {
+      setTimeLeft(600);
+      setIsPolling(true);
+      setIsCaptured(false);
+      setManualUtr("");
+      setIsVerifyingUtr(false);
+    }
+  }, [isOpen, orderNumber]);
 
   // Generate QR code onto canvas
   useEffect(() => {
@@ -97,8 +110,10 @@ export const DirectUpiModal: React.FC<DirectUpiModalProps> = ({
       if (data?.isConfirmed) {
         setIsCaptured(true);
         setIsPolling(false);
-        useCartStore.getState().clearCart();
-        toast.success("Payment received! Confirming your order...");
+        if (!skipCartClear) {
+          useCartStore.getState().clearCart();
+        }
+        toast.success(skipCartClear ? "Payment received! Updating your exchange status..." : "Payment received! Confirming your order...");
         setTimeout(() => {
           onSuccess(data.orderNumber || orderNumber);
         }, 800);
@@ -159,8 +174,10 @@ export const DirectUpiModal: React.FC<DirectUpiModalProps> = ({
       if (res.data?.success) {
         setIsCaptured(true);
         setIsPolling(false);
-        useCartStore.getState().clearCart();
-        toast.success("Payment verified! Your order is placed.");
+        if (!skipCartClear) {
+          useCartStore.getState().clearCart();
+        }
+        toast.success(skipCartClear ? "Exchange shipping fee verified!" : "Payment verified! Your order is placed.");
         setTimeout(() => {
           onSuccess(orderNumber);
         }, 800);

@@ -2,23 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthService } from "./auth.service";
 import { ApiResponse } from "../../core/response/ApiResponse";
 import { AuthValidator } from "./auth.validator";
+import { CUSTOMER_REFRESH_TTL_SECONDS } from "../../core/utils/jwt";
 
 const isProd = process.env.NODE_ENV === "production";
 
-const setCookies = (res: NextResponse, accessToken: string, refreshToken: string) => {
+const setCookies = (
+  res: NextResponse,
+  accessToken: string,
+  refreshToken: string,
+  maxAgeSeconds: number = CUSTOMER_REFRESH_TTL_SECONDS
+) => {
   res.cookies.set("accessToken", accessToken, {
     httpOnly: true,
     secure: isProd,
     sameSite: isProd ? "strict" : "lax",
     path: "/",
-    maxAge: 7 * 24 * 60 * 60, // 7 days
+    maxAge: maxAgeSeconds,
   });
   res.cookies.set("refreshToken", refreshToken, {
     httpOnly: true,
     secure: isProd,
     sameSite: isProd ? "strict" : "lax",
     path: "/",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: maxAgeSeconds,
   });
 };
 
@@ -61,21 +67,55 @@ export class AuthController {
       refreshToken: result.tokens.refreshToken,
       user: result.user 
     }, "Registered successfully", 201);
-    setCookies(res, result.tokens.accessToken, result.tokens.refreshToken);
+    setCookies(res, result.tokens.accessToken, result.tokens.refreshToken, result.sessionMaxAgeSeconds);
     return res;
   }
 
   static async login(req: NextRequest) {
     const validatedData = await AuthValidator.validateLogin(req);
-    const result = await AuthService.login(validatedData);
+    try {
+      const result = await AuthService.login(validatedData);
 
-    const res = ApiResponse.success({ 
-      accessToken: result.tokens.accessToken, 
-      refreshToken: result.tokens.refreshToken,
-      user: result.user 
-    }, "Logged in successfully");
-    setCookies(res, result.tokens.accessToken, result.tokens.refreshToken);
-    return res;
+      if (result.user.role && result.user.role !== "customer") {
+        const { AuditLogService } = await import("../audit-log/audit-log.service");
+        await AuditLogService.record({
+          category: "AUTH",
+          action: "ADMIN_LOGIN_SUCCESS",
+          severity: "info",
+          status: "success",
+          actor: {
+            userId: result.user.id,
+            email: result.user.email,
+            name: result.user.name,
+            role: result.user.role,
+          },
+          resource: { type: "Session", id: result.user.id, label: result.user.email },
+          req,
+          message: `Staff login succeeded for ${result.user.email} (${result.user.role})`,
+        });
+      }
+
+      const res = ApiResponse.success({ 
+        accessToken: result.tokens.accessToken, 
+        refreshToken: result.tokens.refreshToken,
+        user: result.user 
+      }, "Logged in successfully");
+      setCookies(res, result.tokens.accessToken, result.tokens.refreshToken, result.sessionMaxAgeSeconds);
+      return res;
+    } catch (err: any) {
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      await AuditLogService.record({
+        category: "AUTH",
+        action: "LOGIN_FAILED",
+        severity: "warning",
+        status: "failure",
+        actor: { email: validatedData.email },
+        resource: { type: "Session", label: validatedData.email },
+        req,
+        message: `Failed login attempt for ${validatedData.email}: ${err?.message || "Invalid credentials"}`,
+      });
+      throw err;
+    }
   }
 
   static async refresh(req: NextRequest) {
@@ -87,34 +127,81 @@ export class AuthController {
       } catch (e) {}
     }
 
-    if (!oldRefreshToken) return ApiResponse.error("No refresh token", 401);
+    if (!oldRefreshToken) {
+      const res = ApiResponse.error("No refresh token", 401);
+      clearCookies(res);
+      return res;
+    }
 
-    const tokens = await AuthService.refreshToken(oldRefreshToken);
-    
-    const res = ApiResponse.success({ 
-      accessToken: tokens.accessToken, 
-      refreshToken: tokens.refreshToken 
-    }, "Token refreshed");
-    setCookies(res, tokens.accessToken, tokens.refreshToken);
-    return res;
+    try {
+      const tokens = await AuthService.refreshToken(oldRefreshToken);
+
+      const res = ApiResponse.success({
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      }, "Token refreshed");
+      setCookies(res, tokens.accessToken, tokens.refreshToken, tokens.sessionMaxAgeSeconds);
+      return res;
+    } catch (error: any) {
+      const status = typeof error?.statusCode === "number" ? error.statusCode : 401;
+      const message = error?.message || "Invalid refresh token";
+      const res = ApiResponse.error(message, status);
+      if (status === 401 || status === 403) {
+        clearCookies(res);
+      }
+      return res;
+    }
   }
 
   static async logout(req: NextRequest) {
+    let refreshToken = req.cookies.get("refreshToken")?.value;
+    if (!refreshToken) {
+      try {
+        const body = await req.json();
+        refreshToken = body?.refreshToken;
+      } catch {}
+    }
+
+    let loggedOutUserId: string | undefined;
     try {
       const { extractUserFromAuth } = await import("../../core/middlewares/auth");
       const userId = extractUserFromAuth(req);
       if (userId) {
+        loggedOutUserId = userId;
         await AuthService.logout(userId);
       }
     } catch {
-      // Session may already be expired, proceed to clear cookies
+      // Access token may already be expired; fall back to refresh token subject if present
+      if (refreshToken) {
+        try {
+          const { verifyToken } = await import("../../core/utils/jwt");
+          const decoded = verifyToken(refreshToken, true);
+          if (decoded?.userId) {
+            loggedOutUserId = decoded.userId;
+            await AuthService.logout(decoded.userId);
+          }
+        } catch {}
+      }
     }
 
-    const refreshToken = req.cookies.get("refreshToken")?.value;
+    if (loggedOutUserId) {
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      await AuditLogService.record({
+        category: "AUTH",
+        action: "USER_LOGOUT",
+        severity: "info",
+        status: "success",
+        actorUserId: loggedOutUserId,
+        resource: { type: "Session", id: loggedOutUserId },
+        req,
+        message: "User signed out and session tokens were revoked",
+      });
+    }
+
     if (refreshToken) {
       try {
         const { setCache } = await import("../../core/cache/redis");
-        await setCache(`bl_token_${refreshToken}`, "1", 30 * 24 * 60 * 60);
+        await setCache(`bl_token_${refreshToken}`, "1", CUSTOMER_REFRESH_TTL_SECONDS);
       } catch {}
     }
 

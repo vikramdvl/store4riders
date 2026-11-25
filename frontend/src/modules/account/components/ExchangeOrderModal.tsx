@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { formatPrice } from "@store4riders/shared-utils";
+import { formatPrice, findExchangeForOrderItem } from "@store4riders/shared-utils";
 import { useRequestReturn } from "@/core/hooks/useOrderActions";
+import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
 import { 
   X, 
   RefreshCw, 
@@ -19,6 +20,7 @@ interface ExchangeOrderModalProps {
   order: any;
   isOpen: boolean;
   onClose: () => void;
+  preselectedItemId?: string | null;
 }
 
 interface ExchangeReasonOption {
@@ -88,6 +90,7 @@ export const ExchangeOrderModal: React.FC<ExchangeOrderModalProps> = ({
   order,
   isOpen,
   onClose,
+  preselectedItemId,
 }) => {
   const [mounted, setMounted] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
@@ -98,18 +101,45 @@ export const ExchangeOrderModal: React.FC<ExchangeOrderModalProps> = ({
   const [errors, setErrors] = useState<FormErrors>({});
 
   const { mutate: requestReturn, isPending } = useRequestReturn();
+  const { data: publicSettings } = usePublicSettings();
+  const activeExchangeDays =
+    typeof publicSettings?.returnWindowDays === "number" ? publicSettings.returnWindowDays : undefined;
+  const activeExchangeFee =
+    typeof publicSettings?.exchangeShippingFee === "number" ? publicSettings.exchangeShippingFee : undefined;
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Pre-select first item when order opens
+  // Pre-select preselected item (or first eligible item) when order opens
   useEffect(() => {
     if (order?.items && order.items.length > 0) {
-      setSelectedItemIds([order.items[0]._id || order.items[0].productId || "0"]);
+      const getItemKey = (item: any, idx: number) => String(item._id || item.id || item.productId || idx);
+      const isItemBlocked = (item: any) => {
+        const matched = findExchangeForOrderItem(order, item);
+        return Boolean(matched && !["rejected", "qc_failed"].includes(matched.stage));
+      };
+
+      if (preselectedItemId) {
+        const targetIdx = order.items.findIndex(
+          (item: any, idx: number) => getItemKey(item, idx) === preselectedItemId && !isItemBlocked(item)
+        );
+        if (targetIdx >= 0) {
+          setSelectedItemIds([getItemKey(order.items[targetIdx], targetIdx)]);
+          setErrors({});
+          return;
+        }
+      }
+
+      const firstEligibleIdx = order.items.findIndex((item: any) => !isItemBlocked(item));
+      if (firstEligibleIdx >= 0) {
+        setSelectedItemIds([getItemKey(order.items[firstEligibleIdx], firstEligibleIdx)]);
+      } else {
+        setSelectedItemIds([]);
+      }
     }
     setErrors({});
-  }, [order, isOpen]);
+  }, [order, isOpen, preselectedItemId]);
 
   if (!isOpen || !order || !mounted || typeof document === "undefined") {
     return null;
@@ -206,9 +236,15 @@ export const ExchangeOrderModal: React.FC<ExchangeOrderModalProps> = ({
     const cleanReq = sanitizeText(desiredRequirement);
     const cleanDetails = sanitizeText(details);
 
-    // Build item names summary
-    const selectedItemNames = order.items
-      ?.filter((item: any) => selectedItemIds.includes(item._id || item.productId || "0"))
+    // Build selected items payload and summary
+    const selectedOrderItems = (order.items || []).filter((item: any, idx: number) => {
+      const key = String(item._id || item.id || item.productId || idx);
+      const matched = findExchangeForOrderItem(order, item);
+      const blocked = Boolean(matched && !["rejected", "qc_failed"].includes(matched.stage));
+      return selectedItemIds.includes(key) && !blocked;
+    });
+
+    const selectedItemNames = selectedOrderItems
       .map((item: any) => `${item.name}${item.variantId ? ` [${item.variantId}]` : ""}`)
       .join(", ");
 
@@ -220,6 +256,15 @@ export const ExchangeOrderModal: React.FC<ExchangeOrderModalProps> = ({
       {
         orderId: orderIdToSubmit,
         reason: formattedPayload,
+        items: selectedOrderItems.map((item: any) => ({
+          orderItemId: item._id || item.id ? String(item._id || item.id) : undefined,
+          productId: String(item.productId),
+          ...(item.variantId ? { variantId: String(item.variantId) } : {}),
+          ...(item.sku ? { sku: String(item.sku) } : {}),
+          name: item.name,
+          quantity: item.quantity || 1,
+          desiredReplacement: cleanReq,
+        })),
       },
       {
         onSuccess: () => {
@@ -278,6 +323,18 @@ export const ExchangeOrderModal: React.FC<ExchangeOrderModalProps> = ({
                 Store4Riders Replacement Policy
               </p>
               <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-amber-900 leading-relaxed">
+                {typeof activeExchangeDays === "number" && activeExchangeDays > 0 && (
+                  <li>
+                    Eligible within <strong>{activeExchangeDays} days</strong> from order delivery date.
+                  </li>
+                )}
+                {typeof activeExchangeFee === "number" && (
+                  <li>
+                    {activeExchangeFee > 0
+                      ? `2-way pickup & replacement shipping charge (${formatPrice(activeExchangeFee)}) applies post QC inspection.`
+                      : "Exchange pickup & replacement shipping is complimentary for eligible requests."}
+                  </li>
+                )}
                 <li>Size and color replacements are facilitated subject to stock availability.</li>
                 <li>Riding gear must be <strong>100% unused</strong>, unridden, with original manufacturer tags intact in brand packaging box.</li>
                 <li>Per policy, exchanges cannot be accepted for items with removed tags, signs of wear, or perfume/sweat odours.</li>
@@ -292,26 +349,37 @@ export const ExchangeOrderModal: React.FC<ExchangeOrderModalProps> = ({
             </label>
             <div className="space-y-2">
               {order.items?.map((item: any, idx: number) => {
-                const itemId = item._id || item.productId || idx.toString();
-                const isSelected = selectedItemIds.includes(itemId);
+                const itemId = String(item._id || item.id || item.productId || idx);
+                const matchedExchange = findExchangeForOrderItem(order, item);
+                const isAlreadyExchanged = Boolean(
+                  matchedExchange && !["rejected", "qc_failed"].includes(matchedExchange.stage)
+                );
+                const isSelected = !isAlreadyExchanged && selectedItemIds.includes(itemId);
                 const itemImg = item.image || item.product?.images?.[0]?.url || item.product?.image || "/no-image.svg";
                 const unitPrice = item.price ?? item.unitPrice ?? 0;
 
                 return (
                   <div
                     key={itemId}
-                    onClick={() => toggleItemSelection(itemId)}
-                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
-                      isSelected
-                        ? "border-neutral-900 bg-neutral-50 shadow-2xs"
-                        : "border-neutral-200 bg-white hover:border-neutral-300"
+                    onClick={() => {
+                      if (!isAlreadyExchanged) toggleItemSelection(itemId);
+                    }}
+                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                      isAlreadyExchanged
+                        ? "border-neutral-200 bg-neutral-100/70 opacity-70 cursor-not-allowed"
+                        : isSelected
+                        ? "border-neutral-900 bg-neutral-50 shadow-2xs cursor-pointer"
+                        : "border-neutral-200 bg-white hover:border-neutral-300 cursor-pointer"
                     } ${errors.items ? "border-brand/60" : ""}`}
                   >
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      onChange={() => toggleItemSelection(itemId)}
-                      className="w-4 h-4 text-brand rounded focus:ring-brand accent-brand cursor-pointer"
+                      disabled={isAlreadyExchanged}
+                      onChange={() => {
+                        if (!isAlreadyExchanged) toggleItemSelection(itemId);
+                      }}
+                      className="w-4 h-4 text-brand rounded focus:ring-brand accent-brand cursor-pointer disabled:cursor-not-allowed"
                     />
 
                     <div className="relative w-12 h-12 bg-white border border-neutral-200 rounded-lg shrink-0 overflow-hidden p-1">
@@ -325,9 +393,16 @@ export const ExchangeOrderModal: React.FC<ExchangeOrderModalProps> = ({
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-neutral-900 line-clamp-1">
-                        {item.name}
-                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-bold text-neutral-900 line-clamp-1">
+                          {item.name}
+                        </p>
+                        {isAlreadyExchanged && (
+                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+                            {String(matchedExchange.stage || "requested").replace(/_/g, " ")}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 text-[11px] text-neutral-500 mt-0.5">
                         {item.variantId && <span>Variant: <strong className="text-neutral-700">{item.variantId}</strong></span>}
                         <span>Qty: {item.quantity}</span>

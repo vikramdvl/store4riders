@@ -17,7 +17,28 @@ export class PaymentRepository {
   }
 
   static async findByOrderId(orderId: string, session?: ClientSession): Promise<PaymentDocument | null> {
-    return PaymentModel.findOne({ orderId }).session(session || null).exec();
+    return PaymentModel.findOne({
+      orderId,
+      paymentPurpose: { $ne: "exchange_fee" },
+    })
+      .sort({ createdAt: -1 })
+      .session(session || null)
+      .exec();
+  }
+
+  static async findByOrderIdAndPurpose(
+    orderId: string,
+    purpose: "order" | "exchange_fee",
+    session?: ClientSession
+  ): Promise<PaymentDocument | null> {
+    const query =
+      purpose === "order"
+        ? { orderId, paymentPurpose: { $ne: "exchange_fee" } }
+        : { orderId, paymentPurpose: "exchange_fee" };
+    return PaymentModel.findOne(query)
+      .sort({ createdAt: -1 })
+      .session(session || null)
+      .exec();
   }
 
   static async findByIdempotencyKey(idempotencyKey: string, session?: ClientSession): Promise<PaymentDocument | null> {
