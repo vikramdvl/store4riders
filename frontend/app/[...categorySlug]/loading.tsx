@@ -5,6 +5,31 @@ import ProductsLoading from "../products/loading";
 import ProductDetailLoading from "../products/[slug]/loading";
 import { ALL_CATEGORY_SLUGS, isKnownCategorySlug } from "@/core/utils/navCategories";
 
+const NON_CATCHALL_PREFIXES = [
+  "/guides",
+  "/blog",
+  "/brands",
+  "/products",
+  "/search",
+  "/cart",
+  "/checkout",
+  "/account",
+  "/admin",
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/sale",
+];
+
+function isNonCatchAllRoute(pathname: string): boolean {
+  if (!pathname || pathname === "/") return true;
+  const lower = pathname.toLowerCase();
+  return NON_CATCHALL_PREFIXES.some(
+    (prefix) => lower === prefix || lower.startsWith(`${prefix}/`)
+  );
+}
+
 function isCategoryRoute(pathname: string): boolean {
   if (!pathname) return false;
   const segments = pathname.split("/").filter(Boolean);
@@ -27,9 +52,13 @@ function isCategoryRoute(pathname: string): boolean {
 
 export default function CategoryOrProductLoading() {
   const pathname = usePathname() || (typeof window !== "undefined" ? window.location.pathname : "");
-  const isCategory = isCategoryRoute(pathname);
 
-  if (isCategory) {
+  // Never flash ProductDetailLoading if pathname has already transitioned to a dedicated route like /guides
+  if (isNonCatchAllRoute(pathname)) {
+    return null;
+  }
+
+  if (isCategoryRoute(pathname)) {
     return <ProductsLoading />;
   }
 

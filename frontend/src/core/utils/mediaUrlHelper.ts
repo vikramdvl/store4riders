@@ -752,10 +752,67 @@ export function getProductCandidateImages(product: any): string[] {
 }
 
 export const S3_MEDIA_BASE = "https://store4riders.s3.ap-south-2.amazonaws.com";
+export const CDN_MEDIA_BASE = "https://d2zuvpvc0pfkya.cloudfront.net";
+
+function encodeMediaPathSegments(pathStr: string): string {
+  return pathStr
+    .split("/")
+    .map((seg: string) => {
+      try {
+        return encodeURIComponent(decodeURIComponent(seg));
+      } catch {
+        return encodeURIComponent(seg);
+      }
+    })
+    .join("/");
+}
+
+function resolveStore4RidersMediaSubpath(rawSubpath: string): string {
+  let cleanPath = rawSubpath.replace(/&quot;/g, "").replace(/^["'\\]+|["'\\]+$/g, "").trim();
+  cleanPath = cleanPath.replace(/^\/+/, "");
+  if (cleanPath.startsWith("pub/media/")) {
+    cleanPath = cleanPath.substring(10);
+  } else if (cleanPath.startsWith("media/")) {
+    cleanPath = cleanPath.substring(6);
+  }
+
+  // Magento blog (Magefan) assets: stored as WebP under magefan_blog/ on active CloudFront CDN
+  const magefanMatch = cleanPath.match(/(?:^|\/)magefan_blog\/(.+)$/i);
+  if (magefanMatch && magefanMatch[1]) {
+    const webpBlogPath = magefanMatch[1].replace(/\.(jpe?g|png)$/i, ".webp");
+    return `${CDN_MEDIA_BASE}/magefan_blog/${encodeMediaPathSegments(webpBlogPath)}`;
+  }
+
+  // Product catalog shard paths (including /catalog/product/cache/<md5>/a/b/img.jpg): served as WebP from CloudFront
+  if (/^catalog\/product\//i.test(cleanPath)) {
+    const withoutPrefix = cleanPath
+      .replace(/^catalog\/product\//i, "")
+      .replace(/^cache\/[a-f0-9]+\//i, "");
+    if (/^[a-z0-9_-]\/[a-z0-9_-]\//i.test(withoutPrefix)) {
+      const webpCatalogPath = withoutPrefix.replace(/\.(jpe?g|png)$/i, ".webp");
+      return `${CDN_MEDIA_BASE}/catalog/product/${encodeMediaPathSegments(webpCatalogPath)}`;
+    }
+    const strippedWysiwyg = withoutPrefix.replace(/^wysiwyg\//i, "");
+    return `${S3_MEDIA_BASE}/wysiwyg/${encodeMediaPathSegments(strippedWysiwyg)}`;
+  }
+
+  const wysiwygRel = cleanPath.replace(/^wysiwyg\//i, "");
+  if (wysiwygRel === "helmets.jpg") {
+    return `${CDN_MEDIA_BASE}/wysiwyg/helmets.webp`;
+  }
+  if (/^axxis-draken-s-cougar-motorcycle-helmet\.jpe?g$/i.test(wysiwygRel)) {
+    return `${CDN_MEDIA_BASE}/wysiwyg/axxis-draken-s-cougar-motorcycle-helmet.webp`;
+  }
+  if (wysiwygRel.toLowerCase().endsWith("2-shells.jpg")) {
+    return `${S3_MEDIA_BASE}/wysiwyg/${encodeMediaPathSegments(wysiwygRel.replace(/\.jpg$/i, ".png"))}`;
+  }
+
+  return `${S3_MEDIA_BASE}/wysiwyg/${encodeMediaPathSegments(wysiwygRel)}`;
+}
 
 /**
  * Resolves legacy Magento media directives, wysiwyg paths, and corrupted image URLs
- * into valid, high-resolution direct AWS S3 URLs.
+ * into valid, high-resolution direct AWS S3 / CloudFront URLs.
  */
 export function resolveMagentoMediaUrls(html: string): string {
   if (!html) return "";
@@ -776,83 +833,45 @@ export function resolveMagentoMediaUrls(html: string): string {
   // Strips quadruple and doubled quotes so attributes don't become src=""
   clean = clean.replace(/""+/g, '"');
 
-  // 3. Fix broken /catalog/product/ URLs in S3 image paths for description/wysiwyg images.
-  // In the imported catalog, CMS/wysiwyg images were mistakenly prefixed with /catalog/product/.
-  // S3 stores all CMS description images under /wysiwyg/ (e.g. wysiwyg/smk-twister-specification.JPG).
+  // 3. Fix broken /catalog/product/ URLs in S3/CloudFront image paths while keeping valid x/y/file.webp shards
   clean = clean.replace(
     /https?:\/\/(?:store4riders\.s3[^\/]*\.amazonaws\.com|store4riders-media\.s3[^\/]*\.amazonaws\.com|d2zuvpvc0pfkya\.cloudfront\.net)\/catalog\/product\/([^"'>]+)/gi,
     (_match, filePath) => {
-      let cleanPath = filePath
+      const cleanPath = String(filePath || "")
         .replace(/&quot;/g, "")
         .replace(/^["']|["']$/g, "")
-        .replace(/^wysiwyg\//i, "")
+        .replace(/^cache\/[a-f0-9]+\//i, "")
         .trim();
-      const encoded = cleanPath
-        .split("/")
-        .map((seg: string) => encodeURIComponent(decodeURIComponent(seg)))
-        .join("/");
-      return `${S3_MEDIA_BASE}/wysiwyg/${encoded}`;
+      if (/^[a-z0-9_-]\/[a-z0-9_-]\//i.test(cleanPath)) {
+        const webpPath = cleanPath.replace(/\.(jpe?g|png)$/i, ".webp");
+        return `${CDN_MEDIA_BASE}/catalog/product/${encodeMediaPathSegments(webpPath)}`;
+      }
+      const normalizedWysiwyg = cleanPath.replace(/^wysiwyg\//i, "");
+      return `${S3_MEDIA_BASE}/wysiwyg/${encodeMediaPathSegments(normalizedWysiwyg)}`;
     }
   );
 
   // 4. Resolve Magento {{media url="..."}} tokens (with spaces, quotes, and directives)
   clean = clean.replace(
     /\{\{media\s+url=(?:&quot;|""|"|'|\\")?(.*?)(?:&quot;|""|"|'|\\")?\}\}/gi,
-    (_match, rawPath) => {
-      let cleanPath = rawPath
-        .replace(/&quot;/g, "")
-        .replace(/^["'\\]+|["'\\]+$/g, "")
-        .trim();
-
-      if (cleanPath.startsWith("pub/media/")) {
-        cleanPath = cleanPath.substring(10);
-      } else if (cleanPath.startsWith("media/")) {
-        cleanPath = cleanPath.substring(6);
-      }
-
-      // If it doesn't already start with wysiwyg/ or catalog/, CMS media belongs under wysiwyg/
-      if (!cleanPath.startsWith("wysiwyg/") && !cleanPath.startsWith("catalog/")) {
-        cleanPath = `wysiwyg/${cleanPath}`;
-      }
-
-      // Handle known Magento extension mismatch (e.g. 2-Shells.jpg -> 2-Shells.png)
-      if (cleanPath.toLowerCase().endsWith("2-shells.jpg")) {
-        cleanPath = cleanPath.replace(/\.jpg$/i, ".png");
-      }
-
-      const encoded = cleanPath
-        .split("/")
-        .map((seg: string) => encodeURIComponent(decodeURIComponent(seg)))
-        .join("/");
-      return `${S3_MEDIA_BASE}/${encoded}`;
-    }
+    (_match, rawPath) => resolveStore4RidersMediaSubpath(String(rawPath || ""))
   );
 
   // 5. Resolve legacy mmpl.store4riders.com or store4riders.com media domains in img src
   clean = clean.replace(
-    /src=(?:(["'])(?:https?:\/\/(?:www\.)?(?:mmpl\.)?store4riders\.com\/(?:pub\/)?media\/(?:wysiwyg\/)?([^"'>]+))\1|https?:\/\/(?:www\.)?(?:mmpl\.)?store4riders\.com\/(?:pub\/)?media\/(?:wysiwyg\/)?([^\s>]+))/gi,
+    /src=(?:(["'])(?:https?:\/\/(?:www\.)?(?:mmpl\.)?store4riders\.com\/(?:pub\/)?media\/([^"'>]+))\1|https?:\/\/(?:www\.)?(?:mmpl\.)?store4riders\.com\/(?:pub\/)?media\/([^\s>]+))/gi,
     (_match, _q, quotedPath, unquotedPath) => {
       const raw = quotedPath || unquotedPath || "";
-      const cleanPath = raw.replace(/&quot;/g, "").trim();
-      const encoded = cleanPath
-        .split("/")
-        .map((seg: string) => encodeURIComponent(decodeURIComponent(seg)))
-        .join("/");
-      return `src="${S3_MEDIA_BASE}/wysiwyg/${encoded}"`;
+      return `src="${resolveStore4RidersMediaSubpath(raw)}"`;
     }
   );
 
   // 6. Resolve raw relative media paths: src="/media/...", src="/pub/media/...", src="media/..."
   clean = clean.replace(
-    /src=(?:(["'])\/?(?:pub\/)?media\/(?:wysiwyg\/)?([^"'>]+)\1|\/?(?:pub\/)?media\/(?:wysiwyg\/)?([^\s>]+))/gi,
+    /src=(?:(["'])\/?(?:pub\/)?media\/([^"'>]+)\1|\/?(?:pub\/)?media\/([^\s>]+))/gi,
     (_match, _q, quotedPath, unquotedPath) => {
       const raw = quotedPath || unquotedPath || "";
-      const cleanPath = raw.replace(/&quot;/g, "").trim();
-      const encoded = cleanPath
-        .split("/")
-        .map((seg: string) => encodeURIComponent(decodeURIComponent(seg)))
-        .join("/");
-      return `src="${S3_MEDIA_BASE}/wysiwyg/${encoded}"`;
+      return `src="${resolveStore4RidersMediaSubpath(raw)}"`;
     }
   );
 
@@ -861,12 +880,7 @@ export function resolveMagentoMediaUrls(html: string): string {
     /src=(?:(["'])\/?wysiwyg\/([^"'>]+)\1|\/?wysiwyg\/([^\s>]+))/gi,
     (_match, _q, quotedPath, unquotedPath) => {
       const raw = quotedPath || unquotedPath || "";
-      const cleanPath = raw.replace(/&quot;/g, "").trim();
-      const encoded = cleanPath
-        .split("/")
-        .map((seg: string) => encodeURIComponent(decodeURIComponent(seg)))
-        .join("/");
-      return `src="${S3_MEDIA_BASE}/wysiwyg/${encoded}"`;
+      return `src="${resolveStore4RidersMediaSubpath(`wysiwyg/${raw}`)}"`;
     }
   );
 
@@ -876,11 +890,8 @@ export function resolveMagentoMediaUrls(html: string): string {
     (_match, quote, fullUrl) => {
       try {
         const urlObj = new URL(fullUrl);
-        const encodedPath = urlObj.pathname
-          .split("/")
-          .map((seg: string) => encodeURIComponent(decodeURIComponent(seg)))
-          .join("/");
-        return `src=${quote}${urlObj.origin}${encodedPath}${urlObj.search}${quote}`;
+        const encodedPath = encodeMediaPathSegments(urlObj.pathname.replace(/^\/+/, ""));
+        return `src=${quote}${urlObj.origin}/${encodedPath}${urlObj.search}${quote}`;
       } catch {
         return `src=${quote}${encodeURI(fullUrl)}${quote}`;
       }

@@ -13,6 +13,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { createBrandSchema } from "@store4riders/shared-validation";
 import { compressImageToWebP, uploadImageToS3 } from "@/core/utils/imageCompressor";
 import { downloadBrandProductCsv } from "@/core/utils/exportCsv";
+import { revalidateStorefrontPaths } from "@/core/utils/revalidateStorefront";
 import { apiClient } from "@/core/api/client";
 import { toast } from "sonner";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
@@ -117,6 +118,7 @@ export function AdminBrands() {
     try {
       setIsSavingPageSeo(true);
       await apiClient.put("/brands/page-seo", pageSeo);
+      revalidateStorefrontPaths(["/brands"]);
       toast.success("Shop by Brand directory (/brands) content and SEO updated successfully!");
       setIsPageSeoModalOpen(false);
     } catch (err: any) {

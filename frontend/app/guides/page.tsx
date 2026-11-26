@@ -9,7 +9,7 @@ import {
   buildBreadcrumbSchema,
 } from "@/modules/guides";
 
-export const revalidate = 30;
+export const revalidate = 3600;
 
 export async function generateMetadata(): Promise<Metadata> {
   const seo = await fetchGuidesPageSeo();

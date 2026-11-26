@@ -85,9 +85,21 @@ export class CategoryService {
     if (data.bannerImage === "" || data.bannerImage === null) {
       delete data.bannerImage;
     }
+    const previousCategory = data.slug
+      ? await Promise.resolve(CategoryRepository.findById(id)).catch(() => null)
+      : null;
     const category = await CategoryRepository.update(id, data);
     if (!category) throw new NotFoundError("Category not found");
     await this.invalidateCache();
+    if (previousCategory?.slug && category.slug && previousCategory.slug !== category.slug) {
+      const { UrlRedirectService } = await import("../url-redirect/url-redirect.service");
+      await UrlRedirectService.recordSlugChange(
+        `/${previousCategory.slug}`,
+        `/${category.slug}`,
+        "auto_category",
+        `Category "${category.name}" slug updated`
+      );
+    }
     return category;
   }
 
@@ -156,6 +168,7 @@ export class CategoryService {
 
   static async invalidateCache() {
     await deleteCache(CACHE_KEY);
+    await deleteCache("search_trending_v1");
     try {
       const { clearProductCaches } = await import("../../core/cache/redis");
       await clearProductCaches();

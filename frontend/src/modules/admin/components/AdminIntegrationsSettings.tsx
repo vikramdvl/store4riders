@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { revalidateStorefrontPaths } from "@/core/utils/revalidateStorefront";
 import { toast } from "sonner";
 import { LockClosedIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 
@@ -24,6 +25,8 @@ export function AdminIntegrationsSettings() {
     onSuccess: () => {
       toast.success("Integrations updated successfully!");
       queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
+      revalidateStorefrontPaths(["/"]);
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || "Failed to update settings");

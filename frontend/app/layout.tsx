@@ -80,7 +80,7 @@ async function getLayoutPublicSettings() {
   const settingsUrl = baseUrl.includes("/v1") ? `${baseUrl}/settings/public` : `${baseUrl}/v1/settings/public`;
   try {
     const res = await fetch(settingsUrl, {
-      next: { revalidate: 60 },
+      next: { revalidate: 3600 },
       signal: AbortSignal.timeout(2000),
     });
     if (res.ok) {

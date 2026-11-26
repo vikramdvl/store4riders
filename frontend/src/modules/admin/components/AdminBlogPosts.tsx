@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { revalidateStorefrontPaths } from "@/core/utils/revalidateStorefront";
 import {
   Plus,
   Edit2,
@@ -89,6 +90,7 @@ export function AdminBlogPosts() {
     try {
       setIsSavingPageSeo(true);
       await apiClient.put("/blog/page-seo", pageSeo);
+      revalidateStorefrontPaths(["/guides"]);
       toast.success("Blog homepage (/guides) content & SEO updated successfully!");
       setIsPageSeoModalOpen(false);
     } catch (err: any) {

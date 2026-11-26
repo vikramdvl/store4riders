@@ -32,7 +32,11 @@ import {
 import { useBrands } from "@/core/hooks/useBrands";
 import { downloadBrandProductCsv } from "@/core/utils/exportCsv";
 import { apiClient } from "@/core/api/client";
-import { isLegacyNonMenuCategory } from "@/core/utils/navCategories";
+import {
+  areCategorySlugsEquivalent,
+  getStoreNavbarCategoryTree,
+  isLegacyNonMenuCategory,
+} from "@/core/utils/navCategories";
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -77,20 +81,45 @@ export function AdminProducts() {
   const { data: categoryTree = [] } = useCategoryTree();
 
   const flatCategoryOptions: Option[] = useMemo(() => {
-    const flatten = (nodes: ICategoryTree[], depth = 0): (ICategoryTree & { depth: number })[] => {
-      let result: (ICategoryTree & { depth: number })[] = [];
+    const canonicalTree = getStoreNavbarCategoryTree(categoryTree as ICategoryTree[]);
+    const seenSlugs: string[] = [];
+    const seenNames = new Set<string>();
+    const list: (ICategoryTree & { depth: number })[] = [];
+
+    const isTestSlug = (slug: string) =>
+      /^(?:test(?:[-_]|$)|root[-_]test)|[-_]test(?:[-_]|$)/.test(slug);
+
+    const traverse = (nodes: ICategoryTree[], depth = 0) => {
       for (const node of nodes) {
-        if (!isLegacyNonMenuCategory(node.slug) && node.includeInMenu !== false) {
-          result.push({ ...node, depth });
+        const slug = String(node.slug || "").toLowerCase().trim();
+        const name = String(node.name || "").trim();
+        const normName = name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+        const isDupSlug =
+          Boolean(slug) &&
+          seenSlugs.some((s) => s === slug || areCategorySlugsEquivalent(s, slug));
+
+        if (
+          name &&
+          slug &&
+          !isTestSlug(slug) &&
+          !isLegacyNonMenuCategory(slug) &&
+          node.includeInMenu !== false &&
+          !isDupSlug &&
+          !(normName && seenNames.has(normName))
+        ) {
+          seenSlugs.push(slug);
+          if (normName) seenNames.add(normName);
+          list.push({ ...node, depth });
         }
         if (node.children && node.children.length > 0) {
-          result = result.concat(flatten(node.children, depth + 1));
+          traverse(node.children, depth + 1);
         }
       }
-      return result;
     };
 
-    const list = flatten(categoryTree);
+    traverse(canonicalTree as ICategoryTree[]);
+    traverse(categoryTree as ICategoryTree[]);
+
     return [
       { label: "All Categories & Submenus", value: "", description: "Show products across all categories" },
       ...list.map((c) => ({

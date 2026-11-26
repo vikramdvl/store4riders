@@ -7,6 +7,7 @@ import {
   IHomepageSectionsConfig,
 } from "@store4riders/shared-types";
 import { toast } from "sonner";
+import { revalidateStorefrontPaths } from "../utils/revalidateStorefront";
 
 export function useHomepageConfig() {
   return useQuery<IHomepageConfig>({
@@ -27,7 +28,7 @@ export function usePublicHomepageConfig(initialData?: IHomepageConfig) {
       return res.data.data;
     },
     initialData,
-    staleTime: 60 * 1000,
+    staleTime: 10 * 60 * 1000,
   });
 }
 
@@ -44,6 +45,7 @@ export function useUpdateHeroAndSeo() {
         queryClient.setQueryData(["homepage", "public"], updatedData);
       }
       queryClient.invalidateQueries({ queryKey: ["homepage"] });
+      revalidateStorefrontPaths(["/"]);
       toast.success("Hero & SEO settings saved successfully!");
     },
     onError: (err: any) => {
@@ -61,6 +63,7 @@ export function useUpdateHomepageSections() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["homepage"] });
+      revalidateStorefrontPaths(["/"]);
       toast.success("Homepage sections saved successfully!");
     },
     onError: (err: any) => {

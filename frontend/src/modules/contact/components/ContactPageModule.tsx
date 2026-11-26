@@ -28,10 +28,20 @@ export function ContactPageModule() {
   const submitMutation = useSubmitContactIssue();
 
   // Dynamic Contact & Policy Values from Admin Panel Settings
-  const returnsPolicy = settings?.policyPages?.find((p) => p.slug === "returns" || p.slug === "exchange");
+  const returnsPolicy = settings?.policyPages?.find(
+    (p) =>
+      p.slug === "returns-replacements-store4riders" ||
+      p.slug === "returns" ||
+      p.slug === "exchange"
+  );
   const exchangePolicyTitle = returnsPolicy?.title || "Size & Gear Exchange Policy";
 
-  const contactPolicy = settings?.policyPages?.find((p) => p.slug === "contact-us" || p.slug === "contact");
+  const contactPolicy = settings?.policyPages?.find(
+    (p) =>
+      p.slug === "contact-store4riders" ||
+      p.slug === "contact-us" ||
+      p.slug === "contact"
+  );
   const heroTitle = contactPolicy?.title || "How Can We Assist You Today?";
   const heroSubtitle =
     contactPolicy?.subtitle ||

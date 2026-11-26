@@ -10,6 +10,7 @@ import {
 import Button from "./Button";
 import { toast } from "sonner";
 import { compressImageToWebP, uploadImageToS3 } from "@/core/utils/imageCompressor";
+import { normalizeExternalImageUrl, resolveMagentoMediaUrls } from "@/core/utils/mediaUrlHelper";
 
 interface RichTextEditorProps {
   value: string;
@@ -575,12 +576,16 @@ export function RichTextEditor({
 
   // Sync value into contentEditable when switching modes or initial load
   useEffect(() => {
+    const hasLegacyMedia = /(?:\{\{media\s+url=|store4riders\.com\/(?:pub\/)?media\/|\/media\/wysiwyg\/)/i.test(
+      value || ""
+    );
+    const displayValue = hasLegacyMedia ? resolveMagentoMediaUrls(value || "") : value || "";
     if (!isHtmlMode && editorRef.current) {
-      if (editorRef.current.innerHTML !== (value || "")) {
-        editorRef.current.innerHTML = value || "";
+      if (editorRef.current.innerHTML !== displayValue) {
+        editorRef.current.innerHTML = displayValue;
       }
     }
-    setRawHtml(value || "");
+    setRawHtml(displayValue);
   }, [value, isHtmlMode]);
 
   const handleInput = () => {
@@ -618,9 +623,25 @@ export function RichTextEditor({
     if (editorRef.current) {
       editorRef.current.focus();
       const sel = window.getSelection();
+      let activeRange: Range | null = null;
       if (sel && sel.rangeCount > 0) {
-        const range = sel.getRangeAt(0);
-        range.deleteContents();
+        const currentRange = sel.getRangeAt(0);
+        if (editorRef.current.contains(currentRange.commonAncestorContainer)) {
+          activeRange = currentRange;
+        }
+      }
+      if (
+        !activeRange &&
+        savedSelectionRef.current &&
+        editorRef.current.contains(savedSelectionRef.current.commonAncestorContainer)
+      ) {
+        activeRange = savedSelectionRef.current;
+        sel?.removeAllRanges();
+        sel?.addRange(activeRange);
+      }
+
+      if (activeRange) {
+        activeRange.deleteContents();
         const el = document.createElement("div");
         el.innerHTML = html;
         const frag = document.createDocumentFragment();
@@ -629,13 +650,14 @@ export function RichTextEditor({
         while ((node = el.firstChild)) {
           lastNode = frag.appendChild(node);
         }
-        range.insertNode(frag);
+        activeRange.insertNode(frag);
         if (lastNode) {
-          range.setStartAfter(lastNode);
-          range.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(range);
+          activeRange.setStartAfter(lastNode);
+          activeRange.collapse(true);
+          sel?.removeAllRanges();
+          sel?.addRange(activeRange);
         }
+        savedSelectionRef.current = null;
       } else {
         editorRef.current.innerHTML += html;
       }
@@ -817,13 +839,25 @@ export function RichTextEditor({
   };
 
   // Image Upload Handling
+  const openImageModal = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      if (editorRef.current?.contains(range.commonAncestorContainer)) {
+        savedSelectionRef.current = range.cloneRange();
+      }
+    }
+    setIsImageModalOpen(true);
+  };
+
   const handleInsertImage = () => {
-    if (!imageUrl.trim()) {
+    const resolvedUrl = normalizeExternalImageUrl(imageUrl) || imageUrl.trim();
+    if (!resolvedUrl) {
       toast.error("Please enter a valid image URL");
       return;
     }
     const html = `<figure class="my-4 text-center">
-  <img src="${imageUrl.trim()}" alt="${imageAlt.trim() || "Riding Gear Image"}" class="max-w-full rounded-xl mx-auto shadow-sm inline-block" />
+  <img src="${resolvedUrl}" alt="${imageAlt.trim() || "Riding Gear Image"}" class="max-w-full rounded-xl mx-auto shadow-sm inline-block" />
   ${imageAlt.trim() ? `<figcaption class="text-xs text-slate-500 mt-1 italic">${imageAlt.trim()}</figcaption>` : ""}
 </figure><p><br></p>`;
     insertHtmlAtCursor(html);
@@ -1192,7 +1226,7 @@ export function RichTextEditor({
         {/* Media Inserts */}
         <button
           type="button"
-          onClick={() => setIsImageModalOpen(true)}
+          onClick={openImageModal}
           title="Insert Image (Upload or URL)"
           className="p-1.5 hover:bg-emerald-100 text-emerald-700 rounded flex items-center gap-1 text-xs font-semibold cursor-pointer"
         >

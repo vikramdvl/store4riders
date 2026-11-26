@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BlogService } from "../blog.service";
 import { BlogRepository } from "../blog.repository";
 import { NotFoundError, ConflictError, ValidationError } from "../../../core/errors/AppError";
+import { clearBlogCaches } from "../../../core/cache/redis";
 
 describe("BlogService", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await clearBlogCaches();
   });
 
   describe("createPost", () => {
@@ -168,6 +170,53 @@ describe("BlogService", () => {
           name: "Helmets",
         })
       ).rejects.toThrow(ConflictError);
+    });
+  });
+
+  describe("caching & invalidation", () => {
+    it("should cache public getPosts responses and invalidate cache on createPost", async () => {
+      const findPostsSpy = vi.spyOn(BlogRepository, "findPosts").mockResolvedValue({
+        items: [{ _id: "p1", title: "Cached Guide", slug: "cached-guide" } as any],
+        totalCount: 1,
+      });
+
+      const first = await BlogService.getPosts({ status: "published", page: 1, limit: 18 });
+      const second = await BlogService.getPosts({ status: "published", page: 1, limit: 18 });
+
+      expect(first.items).toHaveLength(1);
+      expect(second.items).toHaveLength(1);
+      expect(findPostsSpy).toHaveBeenCalledTimes(1);
+
+      vi.spyOn(BlogRepository, "findPostBySlug").mockResolvedValue(null);
+      vi.spyOn(BlogRepository, "createPost").mockResolvedValue({
+        _id: "p2",
+        title: "Fresh Guide",
+        slug: "fresh-guide",
+      } as any);
+      vi.spyOn(BlogRepository, "countPostsByCategory").mockResolvedValue(1);
+      vi.spyOn(BlogRepository, "updateCategoryArticleCount").mockResolvedValue(undefined);
+
+      await BlogService.createPost({
+        title: "Fresh Guide",
+        content: "<p>Brand new riding guide content.</p>",
+      });
+
+      await BlogService.getPosts({ status: "published", page: 1, limit: 18 });
+      expect(findPostsSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it("should resolve related posts using lightweight metadata lookup without fetching full content", async () => {
+      const slugSpy = vi.spyOn(BlogRepository, "findPostBySlug").mockResolvedValue({
+        slug: "helmet-guide",
+        categorySlug: "choosing-correct-riding-gear",
+        tags: ["helmets"],
+      } as any);
+      const relatedSpy = vi.spyOn(BlogRepository, "findRelatedPosts").mockResolvedValue([]);
+
+      await BlogService.getRelatedPosts("helmet-guide", 3);
+
+      expect(slugSpy).toHaveBeenCalledWith("helmet-guide", "slug categorySlug tags");
+      expect(relatedSpy).toHaveBeenCalledWith("helmet-guide", "choosing-correct-riding-gear", ["helmets"], 3);
     });
   });
 });

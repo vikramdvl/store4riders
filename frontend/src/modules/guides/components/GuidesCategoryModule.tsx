@@ -15,6 +15,7 @@ import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
 import { syncPageQueryParam } from "@/core/utils/shallowUrl";
 import { GuideCard } from "./GuideCard";
 import { GuideAuthorCard } from "./GuideAuthorCard";
+import { GuideCardsGridSkeleton } from "./GuideCardsGridSkeleton";
 import { BookOpen } from "lucide-react";
 
 const CATEGORY_GUIDES_PER_PAGE = 18;
@@ -47,9 +48,7 @@ export const GuidesCategoryModule: React.FC<GuidesCategoryModuleProps> = ({
   }, []);
 
   const { data: categories = [] } = usePublicBlogCategories(
-    initialCategories
-      ? { initialData: initialCategories, initialDataUpdatedAt: 0 }
-      : undefined
+    initialCategories ? { initialData: initialCategories } : undefined
   );
 
   const category =
@@ -71,7 +70,7 @@ export const GuidesCategoryModule: React.FC<GuidesCategoryModuleProps> = ({
       categorySlug: category.slug,
     },
     page === initialPage && initialPostsData
-      ? { initialData: initialPostsData, initialDataUpdatedAt: 0 }
+      ? { initialData: initialPostsData }
       : undefined
   );
 
@@ -156,7 +155,6 @@ export const GuidesCategoryModule: React.FC<GuidesCategoryModuleProps> = ({
             <Link
               key={cat._id || cat.slug}
               href={`/guides/category/${cat.slug}`}
-              prefetch={false}
               className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                 cat.slug === category.slug
                   ? "bg-brand text-white shadow-sm"
@@ -170,10 +168,7 @@ export const GuidesCategoryModule: React.FC<GuidesCategoryModuleProps> = ({
 
         {/* Posts Grid */}
         {isLoading && !postsData ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-3">
-            <div className="w-10 h-10 border-4 border-brand border-t-transparent rounded-full animate-spin" />
-            <p className="text-xs font-semibold text-neutral-500">Loading guides...</p>
-          </div>
+          <GuideCardsGridSkeleton count={6} />
         ) : posts.length > 0 ? (
           <>
             <div

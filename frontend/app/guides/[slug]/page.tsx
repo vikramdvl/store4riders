@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { redirectIfMatchedOrNotFound } from "@/core/utils/urlRedirects";
 import { getRobotsMetadata } from "@/core/utils/seo-schema";
 import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
 import {
@@ -16,7 +17,7 @@ import {
   buildBreadcrumbSchema,
 } from "@/modules/guides";
 
-export const revalidate = 30;
+export const revalidate = 3600;
 export const dynamicParams = true;
 
 interface Props {
@@ -35,7 +36,10 @@ export async function generateStaticParams() {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const category = await fetchBlogCategoryBySlug(slug);
+  const [category, post] = await Promise.all([
+    fetchBlogCategoryBySlug(slug),
+    fetchGuideOrBlogPost(slug),
+  ]);
 
   if (category && category.isActive !== false) {
     const title = category.metaTitle?.trim() || `${category.name} Guides | Store4Riders`;
@@ -60,7 +64,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
-  const post = await fetchGuideOrBlogPost(slug);
   if (post) {
     const title = post.metaTitle?.trim() || `${post.title} | Store4Riders Guides`;
     const description =
@@ -114,16 +117,14 @@ export default async function GuidesDynamicSlugPage({ params }: Props) {
     process.env.NEXT_PUBLIC_APP_URL ||
     "https://www.store4riders.com";
 
-  const [category, post] = await Promise.all([
+  const [category, post, categories] = await Promise.all([
     fetchBlogCategoryBySlug(slug),
     fetchGuideOrBlogPost(slug),
+    fetchPublicBlogCategories(),
   ]);
 
   if (category && category.isActive !== false) {
-    const [postsData, categories] = await Promise.all([
-      fetchPublicBlogPosts(1, 18, category.slug),
-      fetchPublicBlogCategories(),
-    ]);
+    const postsData = await fetchPublicBlogPosts(1, 18, category.slug);
 
     const collectionSchema = buildBlogCollectionSchema(
       `${category.name} Guides`,
@@ -200,5 +201,6 @@ export default async function GuidesDynamicSlugPage({ params }: Props) {
     );
   }
 
+  await redirectIfMatchedOrNotFound(`/guides/${slug}`);
   notFound();
 }

@@ -17,3 +17,4 @@ export * from "./newsletter.schema";
 export * from "./search.schema";
 export * from "./audit-log.schema";
 export * from "./blocked-ip.schema";
+export * from "./url-redirect.schema";

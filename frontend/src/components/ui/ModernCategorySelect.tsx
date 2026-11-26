@@ -2,13 +2,156 @@
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDown, Search, Check, Folder, FolderTree, X } from "lucide-react";
-import { DEFAULT_NAV_ITEMS } from "@/modules/homepage/components/navbar/nav.constants";
+import {
+  areCategorySlugsEquivalent,
+  getStoreNavbarCategoryTree,
+} from "@/core/utils/navCategories";
 
 export interface CategoryOption {
   id: string;
   name: string;
   slug: string;
   group: string;
+}
+
+function isTestCategory(slug?: string, name?: string): boolean {
+  const s = (slug || "").toLowerCase().trim();
+  const n = (name || "").toLowerCase().trim();
+  if (/^(?:test(?:[-_]|$)|root[-_]test)|[-_]test(?:[-_]|$)/.test(s)) return true;
+  if (/^test\b|\broot\s+test\b/.test(n)) return true;
+  return false;
+}
+
+function normalizeCategoryName(name?: string): string {
+  return (name || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function matchesCategoryValue(cat: CategoryOption, val?: string): boolean {
+  if (!val) return false;
+  const trimmed = val.trim();
+  if (!trimmed) return false;
+  if (cat.id === trimmed || cat.slug.toLowerCase() === trimmed.toLowerCase()) {
+    return true;
+  }
+  return areCategorySlugsEquivalent(cat.slug, trimmed);
+}
+
+function buildSelectCategoryOptions(dbCategories: any[] = []): CategoryOption[] {
+  const list: CategoryOption[] = [];
+  const seenSlugs: string[] = [];
+  const seenNormNames = new Set<string>();
+  const dbBySlug = new Map<string, any>();
+
+  const indexDbNodes = (nodes: any[]) => {
+    for (const n of nodes) {
+      if (!n) continue;
+      const s = String(n.slug || "").toLowerCase().trim();
+      if (s && !dbBySlug.has(s)) {
+        dbBySlug.set(s, n);
+      }
+      if (Array.isArray(n.children) && n.children.length > 0) {
+        indexDbNodes(n.children);
+      }
+    }
+  };
+  indexDbNodes(dbCategories);
+
+  const findDbMatch = (slug: string) => {
+    const lower = slug.toLowerCase().trim();
+    if (dbBySlug.has(lower)) return dbBySlug.get(lower);
+    for (const [dbSlug, dbNode] of dbBySlug.entries()) {
+      if (areCategorySlugsEquivalent(lower, dbSlug)) {
+        return dbNode;
+      }
+    }
+    return null;
+  };
+
+  const tryAddOption = (rawId: string, rawSlug: string, rawName: string, group: string) => {
+    const cleanName = (rawName || "").trim();
+    const cleanSlug = (rawSlug || "").toLowerCase().trim();
+    if (!cleanName || !cleanSlug || cleanSlug.includes("?")) return;
+    if (isTestCategory(cleanSlug, cleanName)) return;
+
+    const alreadyHasSlug = seenSlugs.some(
+      (existing) => existing === cleanSlug || areCategorySlugsEquivalent(existing, cleanSlug)
+    );
+    const normName = normalizeCategoryName(cleanName);
+    if (alreadyHasSlug || (normName && seenNormNames.has(normName))) {
+      return;
+    }
+
+    seenSlugs.push(cleanSlug);
+    if (normName) seenNormNames.add(normName);
+
+    list.push({
+      id: rawId || cleanSlug,
+      slug: cleanSlug,
+      name: cleanName,
+      group,
+    });
+  };
+
+  // 1. Authoritative storefront menu hierarchy enriched with database IDs & canonical slugs
+  const menuTree = getStoreNavbarCategoryTree(dbCategories);
+  const traverseMenuTree = (nodes: any[], parentNames: string[] = []) => {
+    for (const node of nodes) {
+      const nodeSlug = String(node.slug || "").trim();
+      const dbMatch = nodeSlug ? findDbMatch(nodeSlug) : null;
+      const resolvedSlug = String(dbMatch?.slug || nodeSlug || node._id || node.id || "").trim();
+      const resolvedId = String(dbMatch?._id || node._id || node.id || resolvedSlug);
+      const resolvedName = String(node.name || dbMatch?.name || "").trim();
+      const groupLabel =
+        parentNames.length > 0 ? parentNames.join(" > ") : resolvedName || "Storefront Menu";
+
+      if (resolvedSlug && resolvedName) {
+        tryAddOption(resolvedId, resolvedSlug, resolvedName, groupLabel);
+      }
+
+      if (Array.isArray(node.children) && node.children.length > 0) {
+        traverseMenuTree(
+          node.children,
+          resolvedName ? [...parentNames, resolvedName] : parentNames
+        );
+      }
+    }
+  };
+  traverseMenuTree(menuTree);
+
+  // 2. Remaining non-duplicate custom & SEO database categories
+  const traverseRemainingDb = (nodes: any[], parentNames: string[] = []) => {
+    for (const n of nodes) {
+      if (!n) continue;
+      const name = String(n.name || "").trim();
+      const slug = String(n.slug || n._id || "").trim();
+      const groupLabel =
+        parentNames.length > 0
+          ? parentNames.join(" > ")
+          : n.includeInMenu === false
+            ? "SEO & Special Categories"
+            : "Custom Categories";
+
+      if (name && slug) {
+        tryAddOption(String(n._id || slug), slug, name, groupLabel);
+      }
+
+      if (Array.isArray(n.children) && n.children.length > 0) {
+        traverseRemainingDb(n.children, name ? [...parentNames, name] : parentNames);
+      }
+    }
+  };
+  traverseRemainingDb(dbCategories);
+
+  return list;
+}
+
+function groupCategoryOptions(options: CategoryOption[]): Record<string, CategoryOption[]> {
+  const groups: Record<string, CategoryOption[]> = {};
+  for (const c of options) {
+    if (!groups[c.group]) groups[c.group] = [];
+    groups[c.group].push(c);
+  }
+  return groups;
 }
 
 interface ModernCategorySelectProps {
@@ -37,75 +180,26 @@ export function ModernCategorySelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Consolidate all categories from Megamenu + Database
-  const allCategories = useMemo(() => {
-    const list: CategoryOption[] = [];
-    const seenSlugs = new Set<string>();
-
-    // 1. From Megamenu Constants
-    DEFAULT_NAV_ITEMS.forEach((nav) => {
-      if (nav.megaMenuItems) {
-        nav.megaMenuItems.forEach((section) => {
-          section.items.forEach((item) => {
-            const rawSlug = item.href.split("/").filter(Boolean).pop() || "";
-            if (rawSlug && !rawSlug.includes("?") && !seenSlugs.has(rawSlug)) {
-              seenSlugs.add(rawSlug);
-              list.push({
-                id: rawSlug,
-                slug: rawSlug,
-                name: item.label,
-                group: `${nav.label} > ${section.group || ""}`,
-              });
-            }
-          });
-        });
-      }
-    });
-
-    // 2. From DB Category Tree (nested)
-    const traverseDb = (nodes: any[], parentName = "") => {
-      nodes.forEach((n) => {
-        const fullGroup = parentName ? `${parentName} > ${n.name}` : n.name;
-        const slug = n.slug || String(n._id);
-        if (!seenSlugs.has(slug)) {
-          seenSlugs.add(slug);
-          list.push({
-            id: String(n._id || slug),
-            slug: slug,
-            name: n.name,
-            group: parentName || "Custom Categories",
-          });
-        }
-        if (n.children && n.children.length > 0) {
-          traverseDb(n.children, fullGroup);
-        }
-      });
-    };
-    traverseDb(dbCategories);
-
-    return list;
-  }, [dbCategories]);
+  const allCategories = useMemo(() => buildSelectCategoryOptions(dbCategories), [dbCategories]);
 
   // Filter categories by search input
   const filteredCategories = useMemo(() => {
     if (!search.trim()) return allCategories;
     const q = search.toLowerCase();
     return allCategories.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.group.toLowerCase().includes(q) || c.slug.toLowerCase().includes(q)
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.group.toLowerCase().includes(q) ||
+        c.slug.toLowerCase().includes(q)
     );
   }, [allCategories, search]);
 
-  // Group filtered items by group name
-  const groupedCategories = useMemo(() => {
-    const groups: Record<string, CategoryOption[]> = {};
-    filteredCategories.forEach((c) => {
-      if (!groups[c.group]) groups[c.group] = [];
-      groups[c.group].push(c);
-    });
-    return groups;
-  }, [filteredCategories]);
+  const groupedCategories = useMemo(
+    () => groupCategoryOptions(filteredCategories),
+    [filteredCategories]
+  );
 
-  const selectedCategory = allCategories.find((c) => c.id === value || c.slug === value);
+  const selectedCategory = allCategories.find((c) => matchesCategoryValue(c, value));
 
   return (
     <div ref={dropdownRef} className="relative w-full">
@@ -116,12 +210,14 @@ export function ModernCategorySelect({
         className="w-full flex items-center justify-between px-3.5 py-2.5 bg-white border border-slate-300 rounded-lg text-sm shadow-2xs hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-all cursor-pointer text-left"
       >
         <div className="flex items-center gap-2 truncate">
-          <FolderTree size={16} className={selectedCategory ? "text-brand" : "text-slate-400"} />
+          <FolderTree size={16} className={selectedCategory || value ? "text-brand" : "text-slate-400"} />
           {selectedCategory ? (
             <div className="truncate">
               <span className="font-semibold text-slate-900">{selectedCategory.name}</span>
               <span className="text-[11px] text-slate-500 ml-2 font-normal">({selectedCategory.group})</span>
             </div>
+          ) : value ? (
+            <span className="font-semibold text-slate-700 truncate">{value}</span>
           ) : (
             <span className="text-slate-400">Select Category...</span>
           )}
@@ -167,10 +263,10 @@ export function ModernCategorySelect({
                     {groupName}
                   </div>
                   {items.map((cat) => {
-                    const isSelected = value === cat.id || value === cat.slug;
+                    const isSelected = matchesCategoryValue(cat, value);
                     return (
                       <button
-                        key={cat.id}
+                        key={`${groupName}::${cat.id}::${cat.slug}`}
                         type="button"
                         onClick={() => {
                           onChange(cat.slug || cat.id);
@@ -228,84 +324,47 @@ export function MultiCategorySelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const allCategories = useMemo(() => {
-    const list: CategoryOption[] = [];
-    const seenSlugs = new Set<string>();
-
-    DEFAULT_NAV_ITEMS.forEach((nav) => {
-      if (nav.megaMenuItems) {
-        nav.megaMenuItems.forEach((section) => {
-          section.items.forEach((item) => {
-            const rawSlug = item.href.split("/").filter(Boolean).pop() || "";
-            if (rawSlug && !rawSlug.includes("?") && !seenSlugs.has(rawSlug)) {
-              seenSlugs.add(rawSlug);
-              list.push({
-                id: rawSlug,
-                slug: rawSlug,
-                name: item.label,
-                group: `${nav.label} > ${section.group || ""}`,
-              });
-            }
-          });
-        });
-      }
-    });
-
-    const traverseDb = (nodes: any[], parentName = "") => {
-      nodes.forEach((n) => {
-        const fullGroup = parentName ? `${parentName} > ${n.name}` : n.name;
-        const slug = n.slug || String(n._id);
-        if (!seenSlugs.has(slug)) {
-          seenSlugs.add(slug);
-          list.push({
-            id: String(n._id || slug),
-            slug: slug,
-            name: n.name,
-            group: parentName || "Custom Categories",
-          });
-        }
-        if (n.children && n.children.length > 0) {
-          traverseDb(n.children, fullGroup);
-        }
-      });
-    };
-    traverseDb(dbCategories);
-
-    return list;
-  }, [dbCategories]);
+  const allCategories = useMemo(() => buildSelectCategoryOptions(dbCategories), [dbCategories]);
 
   const filteredCategories = useMemo(() => {
     if (!search.trim()) return allCategories;
     const q = search.toLowerCase();
     return allCategories.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.group.toLowerCase().includes(q) || c.slug.toLowerCase().includes(q)
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.group.toLowerCase().includes(q) ||
+        c.slug.toLowerCase().includes(q)
     );
   }, [allCategories, search]);
 
-  const groupedCategories = useMemo(() => {
-    const groups: Record<string, CategoryOption[]> = {};
-    filteredCategories.forEach((c) => {
-      if (!groups[c.group]) groups[c.group] = [];
-      groups[c.group].push(c);
-    });
-    return groups;
-  }, [filteredCategories]);
+  const groupedCategories = useMemo(
+    () => groupCategoryOptions(filteredCategories),
+    [filteredCategories]
+  );
 
-  const toggleCategory = (slugOrId: string) => {
-    if (values.includes(slugOrId)) {
-      onChange(values.filter((v) => v !== slugOrId));
+  const toggleCategory = (cat: CategoryOption) => {
+    const targetValue = cat.slug || cat.id;
+    const alreadySelected = values.some((v) => matchesCategoryValue(cat, v));
+    const remaining = values.filter((v) => !matchesCategoryValue(cat, v));
+    if (alreadySelected) {
+      onChange(remaining);
     } else {
-      onChange([...values, slugOrId]);
+      onChange([...remaining, targetValue]);
     }
   };
 
   const removeCategory = (slugOrId: string) => {
-    onChange(values.filter((v) => v !== slugOrId));
+    const meta = allCategories.find((c) => matchesCategoryValue(c, slugOrId));
+    onChange(
+      values.filter((v) =>
+        meta ? !matchesCategoryValue(meta, v) : v.toLowerCase() !== slugOrId.toLowerCase()
+      )
+    );
   };
 
   const getCategoryMeta = (slugOrId: string) => {
     return (
-      allCategories.find((c) => c.id === slugOrId || c.slug === slugOrId) || {
+      allCategories.find((c) => matchesCategoryValue(c, slugOrId)) || {
         id: slugOrId,
         slug: slugOrId,
         name: slugOrId,
@@ -325,7 +384,9 @@ export function MultiCategorySelect({
         ) : (
           values.map((val) => {
             const meta = getCategoryMeta(val);
-            const isPrimary = val === primaryCategory;
+            const isPrimary =
+              Boolean(primaryCategory) &&
+              (val === primaryCategory || matchesCategoryValue(meta, primaryCategory));
             return (
               <span
                 key={val}
@@ -406,12 +467,12 @@ export function MultiCategorySelect({
                       {groupName}
                     </div>
                     {items.map((cat) => {
-                      const isChecked = values.includes(cat.slug || cat.id);
+                      const isChecked = values.some((val) => matchesCategoryValue(cat, val));
                       return (
                         <button
-                          key={cat.id}
+                          key={`${groupName}::${cat.id}::${cat.slug}`}
                           type="button"
-                          onClick={() => toggleCategory(cat.slug || cat.id)}
+                          onClick={() => toggleCategory(cat)}
                           className={`w-full flex items-center justify-between px-3 py-1.5 text-xs rounded-md transition-colors cursor-pointer text-left ${
                             isChecked
                               ? "bg-slate-100 text-slate-900 font-semibold"

@@ -6,8 +6,24 @@ const REDIS_URL = process.env.REDIS_URL;
 let redisClient: Redis | null = null;
 let isRedisConnected = false;
 
-// Ultra-fast in-memory fallback cache with TTL
+// Ultra-fast in-memory fallback cache with bounded TTL store
+const MAX_MEMORY_CACHE_SIZE = 5000;
 const memoryCache = new Map<string, { value: any; expiry: number }>();
+
+const setMemoryCache = (key: string, value: any, ttlSeconds: number) => {
+  if (memoryCache.has(key)) {
+    memoryCache.delete(key);
+  } else if (memoryCache.size >= MAX_MEMORY_CACHE_SIZE) {
+    const oldestKey = memoryCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      memoryCache.delete(oldestKey);
+    }
+  }
+  memoryCache.set(key, {
+    value,
+    expiry: Date.now() + ttlSeconds * 1000,
+  });
+};
 
 if (REDIS_URL) {
   try {
@@ -44,10 +60,7 @@ if (REDIS_URL) {
  */
 export const setCache = async (key: string, value: any, ttlSeconds: number = 3600) => {
   // Always update memory cache for instant local speed
-  memoryCache.set(key, {
-    value,
-    expiry: Date.now() + ttlSeconds * 1000,
-  });
+  setMemoryCache(key, value, ttlSeconds);
 
   if (redisClient && isRedisConnected) {
     try {
@@ -78,7 +91,7 @@ export const getCache = async (key: string): Promise<any | null> => {
       if (data) {
         const parsed = JSON.parse(data);
         // Save to memory for subsequent instant lookups
-        memoryCache.set(key, { value: parsed, expiry: Date.now() + 60000 });
+        setMemoryCache(key, parsed, 60);
         return parsed;
       }
     } catch {
@@ -103,10 +116,15 @@ export const deleteCache = async (key: string) => {
   }
 };
 
-export const clearProductCaches = async () => {
-  const keysToDelete = [];
+export const clearProductCaches = async (preserveProductDetails: boolean = false) => {
+  const keysToDelete: string[] = [];
   for (const key of memoryCache.keys()) {
-    if (key.startsWith('products_') || key.startsWith('product_') || key.startsWith('aggs_') || key.startsWith('cat_slug_')) {
+    if (
+      key.startsWith('products_') ||
+      key.startsWith('aggs_') ||
+      key.startsWith('cat_slug_') ||
+      (!preserveProductDetails && key.startsWith('product_'))
+    ) {
       keysToDelete.push(key);
     }
   }
@@ -115,12 +133,98 @@ export const clearProductCaches = async () => {
   if (redisClient && isRedisConnected) {
     try {
       const keys = await redisClient.keys('products_*');
-      const slugKeys = await redisClient.keys('product_*');
+      const slugKeys = preserveProductDetails ? [] : await redisClient.keys('product_*');
       const aggsKeys = await redisClient.keys('aggs_*');
       const catKeys = await redisClient.keys('cat_slug_*');
       const allKeys = [...keys, ...slugKeys, ...aggsKeys, ...catKeys];
       if (allKeys.length > 0) {
         await redisClient.del(...allKeys);
+      }
+    } catch {
+      // Ignore
+    }
+  }
+};
+
+export const clearBlogCaches = async () => {
+  const keysToDelete: string[] = [];
+  for (const key of memoryCache.keys()) {
+    if (key.startsWith("blog_")) {
+      keysToDelete.push(key);
+    }
+  }
+  keysToDelete.forEach((k) => memoryCache.delete(k));
+
+  if (redisClient && isRedisConnected) {
+    try {
+      const keys = await redisClient.keys("blog_*");
+      if (keys.length > 0) {
+        await redisClient.del(...keys);
+      }
+    } catch {
+      // Ignore
+    }
+  }
+};
+
+export const clearBrandCaches = async () => {
+  const keysToDelete: string[] = [];
+  for (const key of memoryCache.keys()) {
+    if (key.startsWith("brands_") || key.startsWith("brand_detail_")) {
+      keysToDelete.push(key);
+    }
+  }
+  keysToDelete.forEach((k) => memoryCache.delete(k));
+
+  if (redisClient && isRedisConnected) {
+    try {
+      const listKeys = await redisClient.keys("brands_*");
+      const detailKeys = await redisClient.keys("brand_detail_*");
+      const allKeys = [...listKeys, ...detailKeys];
+      if (allKeys.length > 0) {
+        await redisClient.del(...allKeys);
+      }
+    } catch {
+      // Ignore
+    }
+  }
+};
+
+export const clearReviewCaches = async () => {
+  const keysToDelete: string[] = [];
+  for (const key of memoryCache.keys()) {
+    if (key.startsWith("reviews_")) {
+      keysToDelete.push(key);
+    }
+  }
+  keysToDelete.forEach((k) => memoryCache.delete(k));
+
+  if (redisClient && isRedisConnected) {
+    try {
+      const keys = await redisClient.keys("reviews_*");
+      if (keys.length > 0) {
+        await redisClient.del(...keys);
+      }
+    } catch {
+      // Ignore
+    }
+  }
+};
+
+export const clearUrlRedirectCaches = async () => {
+  const keysToDelete: string[] = [];
+  for (const key of memoryCache.keys()) {
+    if (key.startsWith("url_redirect_")) {
+      keysToDelete.push(key);
+    }
+  }
+  keysToDelete.forEach((k) => memoryCache.delete(k));
+
+  if (redisClient && isRedisConnected) {
+    try {
+      const keys = await redisClient.keys("url_redirect_*");
+      if (keys.length > 0) {
+        await redisClient.del(...keys);
       }
     } catch {
       // Ignore

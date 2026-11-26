@@ -3,6 +3,11 @@ import { IBlogPost, IBlogCategory, IBlogPostQuery } from "@store4riders/shared-t
 import { NotFoundError, ConflictError, ValidationError } from "../../core/errors/AppError";
 import { slugify } from "@store4riders/shared-utils";
 import { FilterQuery } from "mongoose";
+import { getCache, setCache, clearBlogCaches } from "../../core/cache/redis";
+
+const BLOG_LIST_TTL = 1800; // 30 minutes (invalidated instantly on admin blog writes)
+const BLOG_DETAIL_TTL = 3600; // 1 hour (invalidated instantly on admin blog writes)
+const BLOG_CATEGORIES_TTL = 3600; // 1 hour (invalidated instantly on admin category writes)
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -24,6 +29,19 @@ export class BlogService {
   static async getPosts(query: IBlogPostQuery = {}) {
     const page = query.page && query.page > 0 ? query.page : 1;
     const limit = query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 10;
+    const sortBy = query.sortBy || "publishedAt";
+    const sortOrder = query.sortOrder || "desc";
+    const isPublicQuery = query.status === "published";
+
+    const cacheKey = isPublicQuery
+      ? `blog_posts_v1_${page}_${limit}_${(query.categorySlug || "").toLowerCase()}_${query.categoryId || ""}_${(query.tag || "").trim().toLowerCase()}_${(query.search || "").trim().toLowerCase()}_${sortBy}_${sortOrder}`
+      : "";
+
+    if (cacheKey) {
+      const cached = await getCache(cacheKey);
+      if (cached) return cached;
+    }
+
     const filter: FilterQuery<IBlogPost> = {};
 
     // Status filter
@@ -57,25 +75,40 @@ export class BlogService {
       filter,
       page,
       limit,
-      query.sortBy || "publishedAt",
-      query.sortOrder || "desc"
+      sortBy,
+      sortOrder
     );
 
-    return {
+    const result = {
       items,
       totalCount,
       page,
       limit,
       totalPages: Math.ceil(totalCount / limit) || 1,
     };
+
+    if (cacheKey) {
+      // Memory cache updates synchronously; remote Redis write stays non-blocking
+      void setCache(cacheKey, result, BLOG_LIST_TTL).catch(() => {});
+    }
+
+    return result;
   }
 
   static async getPostBySlug(slug: string, incrementView: boolean = true): Promise<IBlogPost> {
     if (!slug) throw new ValidationError("Blog slug is required");
 
-    const post = await BlogRepository.findPostBySlug(slug);
+    const cacheKey = `blog_post_v1_${slug.toLowerCase()}`;
+    let post = (await getCache(cacheKey)) as IBlogPost | null;
+
     if (!post) {
-      throw new NotFoundError("Blog post not found");
+      post = await BlogRepository.findPostBySlug(slug);
+      if (!post) {
+        throw new NotFoundError("Blog post not found");
+      }
+      if (post.status === "published") {
+        void setCache(cacheKey, post, BLOG_DETAIL_TTL).catch(() => {});
+      }
     }
 
     if (incrementView && post._id) {
@@ -97,17 +130,27 @@ export class BlogService {
   }
 
   static async getRelatedPosts(slug: string, limit: number = 4): Promise<IBlogPost[]> {
-    const post = await BlogRepository.findPostBySlug(slug);
+    if (!slug) return [];
+    const cacheKey = `blog_related_v1_${slug.toLowerCase()}_${limit}`;
+    const cached = await getCache(cacheKey);
+    if (cached) return cached;
+
+    const postCacheKey = `blog_post_v1_${slug.toLowerCase()}`;
+    const post =
+      ((await getCache(postCacheKey)) as Pick<IBlogPost, "slug" | "categorySlug" | "tags"> | null) ||
+      (await BlogRepository.findPostBySlug(slug, "slug categorySlug tags"));
     if (!post) {
       return [];
     }
 
-    return await BlogRepository.findRelatedPosts(
+    const related = await BlogRepository.findRelatedPosts(
       post.slug,
       post.categorySlug,
       post.tags,
       limit
     );
+    void setCache(cacheKey, related, BLOG_LIST_TTL).catch(() => {});
+    return related;
   }
 
   static async createPost(data: Partial<IBlogPost>): Promise<IBlogPost> {
@@ -152,6 +195,7 @@ export class BlogService {
       await BlogRepository.updateCategoryArticleCount(categorySlug, count);
     }
 
+    await clearBlogCaches();
     return created;
   }
 
@@ -230,6 +274,22 @@ export class BlogService {
       await BlogRepository.updateCategoryArticleCount(categorySlug, count);
     }
 
+    await clearBlogCaches();
+    if (existing.slug && updated.slug && existing.slug !== updated.slug) {
+      const { UrlRedirectService } = await import("../url-redirect/url-redirect.service");
+      await UrlRedirectService.recordSlugChange(
+        `/guides/post/${existing.slug}`,
+        `/guides/post/${updated.slug}`,
+        "auto_blog",
+        `Guide "${updated.title}" slug updated`
+      );
+      await UrlRedirectService.recordSlugChange(
+        `/guides/${existing.slug}`,
+        `/guides/${updated.slug}`,
+        "auto_blog",
+        `Guide "${updated.title}" slug updated`
+      );
+    }
     return updated;
   }
 
@@ -246,12 +306,21 @@ export class BlogService {
       await BlogRepository.updateCategoryArticleCount(deleted.categorySlug, count);
     }
 
+    await clearBlogCaches();
     return deleted;
   }
 
   // ===================== CATEGORIES =====================
 
   static async getAllCategories(includeInactive: boolean = false): Promise<IBlogCategory[]> {
+    if (!includeInactive) {
+      const cacheKey = "blog_categories_public_v1";
+      const cached = await getCache(cacheKey);
+      if (cached) return cached;
+      const categories = await BlogRepository.findAllCategories(false);
+      await setCache(cacheKey, categories, BLOG_CATEGORIES_TTL);
+      return categories;
+    }
     return await BlogRepository.findAllCategories(includeInactive);
   }
 
@@ -266,9 +335,16 @@ export class BlogService {
 
   static async getCategoryBySlug(slug: string): Promise<IBlogCategory> {
     if (!slug) throw new ValidationError("Category slug is required");
+    const cacheKey = `blog_category_v1_${slug.toLowerCase()}`;
+    const cached = await getCache(cacheKey);
+    if (cached) return cached;
+
     const category = await BlogRepository.findCategoryBySlug(slug);
     if (!category) {
       throw new NotFoundError("Blog category not found");
+    }
+    if (category.isActive !== false) {
+      await setCache(cacheKey, category, BLOG_CATEGORIES_TTL);
     }
     return category;
   }
@@ -282,11 +358,13 @@ export class BlogService {
       throw new ConflictError(`Blog category with slug "${slug}" already exists`);
     }
 
-    return await BlogRepository.createCategory({
+    const created = await BlogRepository.createCategory({
       ...data,
       slug,
       articleCount: 0,
     });
+    await clearBlogCaches();
+    return created;
   }
 
   static async updateCategory(id: string, data: Partial<IBlogCategory>): Promise<IBlogCategory> {
@@ -310,6 +388,16 @@ export class BlogService {
     if (!updated) {
       throw new NotFoundError("Failed to update blog category");
     }
+    await clearBlogCaches();
+    if (existing.slug && updated.slug && existing.slug !== updated.slug) {
+      const { UrlRedirectService } = await import("../url-redirect/url-redirect.service");
+      await UrlRedirectService.recordSlugChange(
+        `/guides/category/${existing.slug}`,
+        `/guides/category/${updated.slug}`,
+        "auto_blog",
+        `Guide category "${updated.name}" slug updated`
+      );
+    }
     return updated;
   }
 
@@ -319,6 +407,7 @@ export class BlogService {
     if (!deleted) {
       throw new NotFoundError("Blog category not found");
     }
+    await clearBlogCaches();
     return deleted;
   }
 
@@ -366,6 +455,10 @@ export class BlogService {
         });
         postsSeeded++;
       }
+    }
+
+    if (categoriesSeeded > 0 || postsSeeded > 0) {
+      await clearBlogCaches();
     }
 
     return { categoriesSeeded, postsSeeded };

@@ -2,6 +2,7 @@ import { getRobotsMetadata } from "@/core/utils/seo-schema";
 import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { redirectIfMatchedOrNotFound } from "@/core/utils/urlRedirects";
 import {
   GuideDetailModule,
   fetchGuideOrBlogPost,
@@ -12,7 +13,7 @@ import {
   buildBreadcrumbSchema,
 } from "@/modules/guides";
 
-export const revalidate = 30;
+export const revalidate = 3600;
 export const dynamicParams = true;
 
 interface Props {
@@ -93,6 +94,7 @@ export default async function GuidePostPage({ params }: Props) {
   ]);
 
   if (!post) {
+    await redirectIfMatchedOrNotFound(`/guides/post/${slug}`);
     notFound();
   }
   const siteUrl =

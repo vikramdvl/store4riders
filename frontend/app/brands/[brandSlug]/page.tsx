@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 import { notFound } from "next/navigation";
+import { redirectIfMatchedOrNotFound } from "@/core/utils/urlRedirects";
 import { ProductsPageModule } from "@/modules/catalog/components/ProductsPageModule";
 import ProductsLoading from "../../products/loading";
 import {
@@ -10,17 +11,21 @@ import {
   getRobotsMetadata,
 } from "@/core/utils/seo-schema";
 
-const rawApiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+const rawApiBase = (
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:4000/api/v1"
+).replace(/\/+$/, "");
 const API_BASE = rawApiBase.includes("/v1")
   ? rawApiBase
   : rawApiBase.endsWith("/api")
   ? `${rawApiBase}/v1`
   : `${rawApiBase}/api/v1`;
 
-async function getBrand(slug: string) {
+const getBrand = cache(async (slug: string) => {
   try {
     const res = await fetch(`${API_BASE}/brands/${encodeURIComponent(slug)}`, {
-      next: { revalidate: 300 },
+      next: { revalidate: 1800 },
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
@@ -29,7 +34,33 @@ async function getBrand(slug: string) {
   } catch {
     return null;
   }
-}
+});
+
+const getBrandInitialProducts = cache(async (slug: string) => {
+  try {
+    const prodUrl = `${API_BASE}/products?brand=${encodeURIComponent(slug)}&limit=12`;
+    const prodRes = await fetch(prodUrl, {
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!prodRes.ok) return undefined;
+    const prodData = await prodRes.json();
+    const raw = prodData?.data;
+    if (!raw) return undefined;
+
+    const items = Array.isArray(raw.items) ? raw.items : Array.isArray(raw) ? raw : [];
+    const totalCount = raw.totalCount ?? items.length;
+    return {
+      items,
+      totalCount,
+      page: raw.page ?? 1,
+      limit: raw.limit ?? 12,
+      totalPages: raw.totalPages ?? Math.max(1, Math.ceil(totalCount / 12)),
+    };
+  } catch {
+    return undefined;
+  }
+});
 
 interface BrandPageProps {
   params: Promise<{ brandSlug: string }>;
@@ -84,27 +115,20 @@ export async function generateMetadata({ params }: BrandPageProps): Promise<Meta
 
 export default async function BrandPage({ params }: BrandPageProps) {
   const { brandSlug } = await params;
-  const brand = await getBrand(brandSlug);
+  const [brand, initialProductsData] = await Promise.all([
+    getBrand(brandSlug),
+    getBrandInitialProducts(brandSlug),
+  ]);
 
   if (!brand) {
+    await redirectIfMatchedOrNotFound(`/brands/${brandSlug}`);
     notFound();
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://store4riders.com";
   const formattedName = brand.name || brandSlug.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-  // Fetch sample products for CollectionPage ItemList schema
-  let collectionProducts: any[] = [];
-  try {
-    const prodUrl = `${API_BASE}/products?brand=${encodeURIComponent(brandSlug)}&limit=12`;
-    const prodRes = await fetch(prodUrl, { next: { revalidate: 60 }, signal: AbortSignal.timeout(5000) });
-    if (prodRes.ok) {
-      const prodData = await prodRes.json();
-      collectionProducts = prodData?.data?.items || prodData?.data || [];
-    }
-  } catch {
-    // Ignore
-  }
+  const collectionProducts: any[] = initialProductsData?.items || [];
 
   const cleanRawDesc = (brand.metaDescription || brand.description || "")
     .replace(/<[^>]*>?/gm, "")
@@ -154,7 +178,10 @@ export default async function BrandPage({ params }: BrandPageProps) {
         />
       )}
       <Suspense fallback={<ProductsLoading />}>
-        <ProductsPageModule initialCategoryNode={brand} />
+        <ProductsPageModule
+          initialCategoryNode={brand}
+          initialProductsData={initialProductsData}
+        />
       </Suspense>
     </>
   );

@@ -140,8 +140,9 @@ export const ProductsPageModule = ({
   );
 
   // Check if current query is the default page 1 without active filter parameters matching initialProductsData
+  const hasQueryBrand = Boolean(searchParams.get("brand"));
   const hasFilterParams = Boolean(
-    brand ||
+    (params?.brandSlug ? Boolean(category) : hasQueryBrand) ||
     search ||
     activeColorParam ||
     minPrice !== undefined ||

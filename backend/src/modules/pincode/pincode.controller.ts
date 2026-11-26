@@ -1,29 +1,29 @@
 import { NextRequest } from "next/server";
-import { PincodeRepository } from "./pincode.repository";
+import { PincodeService } from "./pincode.service";
+import { PincodeValidator } from "./pincode.validator";
 import { ApiResponse } from "../../core/response/ApiResponse";
-import { NotFoundError } from "../../core/errors/AppError";
 
 export class PincodeController {
   static async getPincodeDetails(req: NextRequest, pincode: string) {
-    const data = await PincodeRepository.findByPincode(pincode);
-    if (!data) {
-      throw new NotFoundError("Pincode not found");
-    }
-    
-    return ApiResponse.success(data, "Pincode details fetched successfully");
+    const cleanPin = PincodeValidator.validatePincode(pincode);
+    const data = await PincodeService.getPincodeDetails(cleanPin);
+
+    const response = ApiResponse.success(data, "Pincode details fetched successfully");
+    response.headers.set(
+      "Cache-Control",
+      "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800"
+    );
+    return response;
   }
 
   static async getDistinctStates(req: NextRequest) {
-    const states = await PincodeRepository.getDistinctStates();
-    
-    // Sort alphabetically and title case them to look nice in UI
-    const formattedStates = states
-      .map(state => state.trim().toLowerCase().replace(/\b\w/g, s => s.toUpperCase()))
-      .sort((a, b) => a.localeCompare(b));
-      
-    // Remove duplicates that might arise from formatting
-    const uniqueStates = [...new Set(formattedStates)];
+    const uniqueStates = await PincodeService.getDistinctStates();
 
-    return ApiResponse.success(uniqueStates, "States fetched successfully");
+    const response = ApiResponse.success(uniqueStates, "States fetched successfully");
+    response.headers.set(
+      "Cache-Control",
+      "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800"
+    );
+    return response;
   }
 }

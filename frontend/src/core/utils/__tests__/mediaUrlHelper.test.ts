@@ -226,6 +226,31 @@ describe("mediaUrlHelper - Enterprise Gallery & Color Swapping", () => {
       const output = resolveMagentoMediaUrls(input);
       expect(output).toContain("2-Shells.png");
     });
+
+    it("resolves Magento magefan_blog URLs and directives to CloudFront WebP without prefixing wysiwyg/", () => {
+      const input = `
+        <img src="https://www.store4riders.com/media/magefan_blog/1 liners.jpg" alt="Helmet liner">
+        <img src="{{media url="magefan_blog/motocycle-01.jpg"}}" alt="Motorcycle">
+      `;
+      const output = resolveMagentoMediaUrls(input);
+      expect(output).toContain("https://d2zuvpvc0pfkya.cloudfront.net/magefan_blog/1%20liners.webp");
+      expect(output).toContain("https://d2zuvpvc0pfkya.cloudfront.net/magefan_blog/motocycle-01.webp");
+      expect(output).not.toContain("/wysiwyg/magefan_blog");
+    });
+
+    it("resolves Magento catalog/product/cache URLs inside blog posts to CloudFront WebP shard paths", () => {
+      const input = '<img src="https://www.store4riders.com/media/catalog/product/cache/b8958a45423e3b20ccfd5339ad7730a0/s/m/smk-gullwing-kresto-black-green-matt_1.jpg" />';
+      const output = resolveMagentoMediaUrls(input);
+      expect(output).toBe('<img src="https://d2zuvpvc0pfkya.cloudfront.net/catalog/product/s/m/smk-gullwing-kresto-black-green-matt_1.webp" />');
+      // Remains idempotent on second pass
+      expect(resolveMagentoMediaUrls(output)).toBe(output);
+    });
+
+    it("resolves lowercase wysiwyg/helmets.jpg to CloudFront wysiwyg/helmets.webp", () => {
+      const input = '<img src="https://www.store4riders.com/media/wysiwyg/helmets.jpg" alt="Helmets">';
+      const output = resolveMagentoMediaUrls(input);
+      expect(output).toBe('<img src="https://d2zuvpvc0pfkya.cloudfront.net/wysiwyg/helmets.webp" alt="Helmets">');
+    });
   });
 
   describe("getProductThumbnailUrl & getProductCandidateImages", () => {

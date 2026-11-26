@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ReviewService } from '../review.service';
 import { ReviewRepository } from '../review.repository';
 import { ConflictError } from '../../../core/errors/AppError';
+import { clearReviewCaches } from '../../../core/cache/redis';
 
 describe('ReviewService', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.restoreAllMocks();
+    await clearReviewCaches();
   });
 
   it('should successfully add a review and update product stats', async () => {
@@ -70,5 +72,23 @@ describe('ReviewService', () => {
     const stats = await ReviewRepository.calculateRatingStats('prod_456');
     expect(stats.avgRating).toBe(4.5);
     expect(stats.reviewCount).toBe(2);
+  });
+
+  it('should serve randomized and filtered store reviews from cached pool without repeating DB calls', async () => {
+    const mockPool = [
+      { _id: 'rev-1', externalId: 'ext-1', author: 'A', rating: 5, date: '2026', text: 'Great' },
+      { _id: 'rev-2', externalId: 'ext-2', author: 'B', rating: 5, date: '2026', text: 'Awesome' },
+      { _id: 'rev-3', externalId: 'ext-3', author: 'C', rating: 4, date: '2026', text: 'Solid' },
+    ] as any[];
+
+    const dbSpy = vi.spyOn(ReviewRepository, 'getStoreReviews').mockResolvedValue(mockPool);
+
+    const first = await ReviewService.getStoreReviews(2, true, ['rev-1']);
+    const second = await ReviewService.getStoreReviews(2, false, ['ext-2']);
+
+    expect(dbSpy).toHaveBeenCalledTimes(1);
+    expect(first.every((r: any) => r._id !== 'rev-1')).toBe(true);
+    expect(first).toHaveLength(2);
+    expect(second.every((r: any) => r.externalId !== 'ext-2')).toBe(true);
   });
 });

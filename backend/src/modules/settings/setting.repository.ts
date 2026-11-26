@@ -236,6 +236,7 @@ export class SettingRepository {
     // Invalidate and refresh cache immediately on update
     try {
       await deleteCache(SETTINGS_CACHE_KEY);
+      await deleteCache("search_trending_v1");
       await setCache(SETTINGS_CACHE_KEY, updated, 3600);
     } catch {}
 

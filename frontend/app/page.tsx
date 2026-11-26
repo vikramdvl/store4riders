@@ -6,7 +6,7 @@ import { buildOrganizationSchema } from "@/core/utils/seo-schema";
 const getHomepagePublicConfig = cache(async (url: string) => {
   try {
     const res = await fetch(url, {
-      next: { revalidate: 60 },
+      next: { revalidate: 1800 },
       signal: AbortSignal.timeout(3000),
     });
     if (res.ok) {
@@ -87,16 +87,16 @@ export default async function Home() {
 
     const [prodResult, settingsResult, hConfig, reviewsResult] = await Promise.allSettled([
       fetch(`${fetchUrl}?limit=50`, { 
-        next: { revalidate: 60 },
+        next: { revalidate: 300 },
         signal: AbortSignal.timeout(3500),
       }),
       fetch(settingsUrl, {
-        next: { revalidate: 60 },
+        next: { revalidate: 3600 },
         signal: AbortSignal.timeout(3500),
       }),
       getHomepagePublicConfig(homepageUrl),
       fetch(reviewsUrl, {
-        next: { revalidate: 60 },
+        next: { revalidate: 1800 },
         signal: AbortSignal.timeout(3500),
       }),
     ]);

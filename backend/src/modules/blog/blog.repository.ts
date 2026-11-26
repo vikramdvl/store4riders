@@ -38,11 +38,19 @@ export class BlogRepository {
     return BlogPostModel.findOne({ slug: id.toLowerCase() }).lean().exec() as unknown as Promise<IBlogPost | null>;
   }
 
-  static async findPostBySlug(slug: string): Promise<IBlogPost | null> {
-    const post = await BlogPostModel.findOne({ slug: slug.toLowerCase() }).lean().exec();
+  static async findPostBySlug(slug: string, selectFields?: string): Promise<IBlogPost | null> {
+    const query = BlogPostModel.findOne({ slug: slug.toLowerCase() });
+    if (selectFields) {
+      query.select(selectFields);
+    }
+    const post = await query.lean().exec();
     if (post) return post as unknown as IBlogPost;
     if (mongoose.Types.ObjectId.isValid(slug)) {
-      return BlogPostModel.findById(slug).lean().exec() as unknown as Promise<IBlogPost | null>;
+      const idQuery = BlogPostModel.findById(slug);
+      if (selectFields) {
+        idQuery.select(selectFields);
+      }
+      return idQuery.lean().exec() as unknown as Promise<IBlogPost | null>;
     }
     return null;
   }

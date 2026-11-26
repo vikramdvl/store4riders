@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { ProductsPageModule } from "@/modules/catalog/components/ProductsPageModule";
+import { getApiBaseUrl } from "@/core/utils/urlRedirects";
 
 interface SearchPageProps {
   searchParams: Promise<{ q?: string; search?: string }>;
@@ -31,7 +32,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   // Server-side instant redirect check (Magento-grade Query-to-Category Redirection)
   if (query) {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+      const apiUrl = getApiBaseUrl();
       const res = await fetch(`${apiUrl}/search/redirect?q=${encodeURIComponent(query)}`, {
         next: { revalidate: 300 },
         signal: AbortSignal.timeout(4000),

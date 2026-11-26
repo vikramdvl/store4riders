@@ -35,6 +35,7 @@ import {
   Info,
   Phone,
   Activity,
+  CornerUpRight,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useLogout } from "@/core/hooks/useAuth";
@@ -103,6 +104,12 @@ const navItems: NavItem[] = [
     name: "Search Redirects", 
     href: "/admin/search-terms", 
     icon: Search, 
+    allowedRoles: ["super_admin", "admin"] 
+  },
+  { 
+    name: "Page Redirects", 
+    href: "/admin/redirects", 
+    icon: CornerUpRight, 
     allowedRoles: ["super_admin", "admin"] 
   },
   { 
@@ -212,13 +219,92 @@ const getRoleBadge = (role?: string) => {
   }
 };
 
+const PAGE_PARAM_ALIASES: Record<string, string> = {
+  "about-us": "about-us-store4riders",
+  "about-us-store4riders": "about-us",
+  "contact-us": "contact-store4riders",
+  "contact-store4riders": "contact-us",
+};
+
+function matchesQueryParam(key: string, expected: string, actual: string | null): boolean {
+  if (actual === expected) return true;
+  if (key === "page" && actual) {
+    return PAGE_PARAM_ALIASES[expected] === actual;
+  }
+  return false;
+}
+
+export function isSidebarLinkActive(
+  href: string,
+  pathname: string,
+  searchParams: { get: (key: string) => string | null },
+  userRole?: string,
+  allVisibleHrefs: string[] = []
+): boolean {
+  const currentTab = searchParams.get("tab");
+
+  if (href === "/admin") {
+    return pathname === "/admin" && !currentTab;
+  }
+  if (href === "/admin?tab=inquiries") {
+    return (
+      pathname === "/admin" &&
+      (currentTab === "inquiries" ||
+        (!currentTab && (userRole === "customer_care" || userRole === "customer_support")))
+    );
+  }
+  if (href === "/admin?tab=orders") {
+    return pathname === "/admin" && currentTab === "orders";
+  }
+  if (href === "/admin/orders") {
+    return pathname === "/admin/orders" || /^\/admin\/orders\/[0-9a-fA-F-]+$/.test(pathname);
+  }
+
+  const [baseHref, queryString] = href.split("?");
+
+  if (queryString) {
+    if (pathname !== baseHref) return false;
+    const targetParams = Array.from(new URLSearchParams(queryString).entries());
+    const allMatch = targetParams.every(([key, val]) =>
+      matchesQueryParam(key, val, searchParams.get(key))
+    );
+    if (!allMatch) return false;
+
+    // Yield to any visible sibling link on the same path that matches more query params (e.g. ?tab=policies&page=about-us over ?tab=policies)
+    const hasMoreSpecificSibling = allVisibleHrefs.some((otherHref) => {
+      if (otherHref === href || !otherHref.includes("?")) return false;
+      const [otherBase, otherQuery] = otherHref.split("?");
+      if (otherBase !== baseHref || !otherQuery) return false;
+      const otherParams = Array.from(new URLSearchParams(otherQuery).entries());
+      if (otherParams.length <= targetParams.length) return false;
+      return otherParams.every(([key, val]) =>
+        matchesQueryParam(key, val, searchParams.get(key))
+      );
+    });
+
+    return !hasMoreSpecificSibling;
+  }
+
+  const matchesPath = pathname === baseHref || pathname.startsWith(baseHref + "/");
+  if (!matchesPath) return false;
+
+  // Yield to any visible sibling link with a more specific path prefix (e.g. /admin/blog/new over /admin/blog, /admin/products/migration over /admin/products)
+  const hasMoreSpecificPathSibling = allVisibleHrefs.some((otherHref) => {
+    if (otherHref === href || otherHref.includes("?")) return false;
+    const otherBase = otherHref.split("?")[0];
+    if (otherBase === baseHref || !otherBase.startsWith(baseHref + "/")) return false;
+    return pathname === otherBase || pathname.startsWith(otherBase + "/");
+  });
+
+  return !hasMoreSpecificPathSibling;
+}
+
 export function AdminSidebar() {
   const { user } = useAuthStore();
   const logoutMutation = useLogout();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const currentTab = searchParams.get("tab");
 
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({
     Orders: pathname.startsWith("/admin/orders"),
@@ -258,6 +344,10 @@ export function AdminSidebar() {
     if (!item.allowedRoles) return true;
     return user?.role && item.allowedRoles.includes(user.role);
   });
+
+  const allVisibleHrefs = filteredNavItems.flatMap((item) =>
+    item.subItems ? item.subItems.map((sub) => sub.href) : item.href ? [item.href] : []
+  );
 
   const roleBadge = getRoleBadge(user?.role);
 
@@ -311,9 +401,13 @@ export function AdminSidebar() {
                 {isOpen && (
                   <div className="pl-4 pr-1 py-1 space-y-1 border-l-2 border-slate-800 ml-5">
                     {item.subItems.map((sub) => {
-                      const isChildActive = sub.href === "/admin/orders"
-                        ? (pathname === "/admin/orders" || /^\/admin\/orders\/[0-9a-fA-F-]+$/.test(pathname))
-                        : sub.href.includes("?") ? (pathname === sub.href.split("?")[0] && currentTab === new URLSearchParams(sub.href.split("?")[1]).get("tab")) : (pathname === sub.href || pathname.startsWith(sub.href + "/"));
+                      const isChildActive = isSidebarLinkActive(
+                        sub.href,
+                        pathname,
+                        searchParams,
+                        user?.role,
+                        allVisibleHrefs
+                      );
                       return (
                         <Link
                           key={sub.name}
@@ -335,18 +429,15 @@ export function AdminSidebar() {
             );
           }
 
-          // Exact match for /admin, startsWith for others to handle sub-routes like /admin/products/[id]
-          let isActive = false;
-          if (item.href === "/admin") {
-            isActive = pathname === "/admin" && !currentTab;
-          } else if (item.href === "/admin?tab=inquiries") {
-            isActive = pathname === "/admin" && (currentTab === "inquiries" || (!currentTab && (user?.role === "customer_care" || user?.role === "customer_support")));
-          } else if (item.href === "/admin?tab=orders") {
-            isActive = pathname === "/admin" && currentTab === "orders";
-          } else if (item.href) {
-            const baseHref = item.href.split("?")[0];
-            isActive = pathname === baseHref || pathname.startsWith(baseHref + "/");
-          } 
+          const isActive = item.href
+            ? isSidebarLinkActive(
+                item.href,
+                pathname,
+                searchParams,
+                user?.role,
+                allVisibleHrefs
+              )
+            : false; 
 
           return (
             <Link

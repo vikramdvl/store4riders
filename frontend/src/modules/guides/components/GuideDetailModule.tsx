@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound, useRouter } from "next/navigation";
@@ -36,11 +36,24 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({
   const router = useRouter();
   const post = initialPost;
   const [copied, setCopied] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState("");
 
   const { data: relatedPosts = [] } = useRelatedBlogPosts(post?.slug || slug, 3, {
     initialData: initialRelatedPosts,
-    initialDataUpdatedAt: 0,
   });
+
+  const postContent = post?.content || "";
+  const cleanedHtml = useMemo(
+    () => cleanRichContent(postContent, { preserveFaqs: true }),
+    [postContent]
+  );
+
+  const activeSlug = post?.slug || slug;
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setCurrentUrl(window.location.href);
+    }
+  }, [activeSlug]);
 
   if (!post) {
     notFound();
@@ -48,10 +61,6 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({
 
   const videoEmbed = getVideoEmbedInfo((post as IBlogPost)?.videoUrl);
   const heroImage = normalizeExternalImageUrl(post.featuredImage);
-  const cleanedHtml = useMemo(
-    () => cleanRichContent(post.content || "", { preserveFaqs: true }),
-    [post.content]
-  );
   const summaryText =
     (post as IBlogPost).excerpt || (post as IGuidePost).description || "";
 
@@ -84,8 +93,7 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({
     }
   };
 
-  const shareUrl =
-    typeof window !== "undefined" ? encodeURIComponent(window.location.href) : "";
+  const shareUrl = currentUrl ? encodeURIComponent(currentUrl) : "";
   const shareTitle = encodeURIComponent(post.title);
 
   const hasCategory = Boolean(post.categorySlug && post.categoryName);

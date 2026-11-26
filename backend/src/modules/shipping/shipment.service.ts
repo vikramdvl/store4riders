@@ -6,7 +6,7 @@ import { OrderModel } from "../order/order.model";
 import { ProductModel } from "../product/product.model";
 import { WarehouseRepository } from "../warehouse/warehouse.repository";
 import { WarehouseModel } from "../warehouse/warehouse.model";
-import { PincodeRepository } from "../pincode/pincode.repository";
+import { PincodeService } from "../pincode/pincode.service";
 import { ShippingProviderFactory } from "../../core/shipping/ShippingProviderFactory";
 import { CreateShipmentInput } from "../../core/shipping/ShippingProvider";
 import { logger } from "../../core/utils/logger";
@@ -1164,7 +1164,7 @@ export class ShipmentService {
     // 1. If carrier API credentials are not yet configured (e.g. dev/sandbox testing or flat rate delivery),
     // verify against our master database of 19,586 authentic Indian Post Office PIN codes!
     if (!hasConfiguredCredentials) {
-      const pincodeDoc = await PincodeRepository.findByPincode(cleanPincode);
+      const pincodeDoc = await PincodeService.findByPincodeOrNull(cleanPincode);
       if (!pincodeDoc) {
         return {
           serviceable: false,
@@ -1218,7 +1218,7 @@ export class ShipmentService {
     // If it's a real postal location, allow standard/Speed Post delivery so checkout is not blocked.
     // If it's a fake/non-existent PIN code, reject it.
     if (!hasLiveSuccessfulResponse) {
-      const pincodeDoc = await PincodeRepository.findByPincode(cleanPincode);
+      const pincodeDoc = await PincodeService.findByPincodeOrNull(cleanPincode);
       if (pincodeDoc) {
         return {
           serviceable: true,

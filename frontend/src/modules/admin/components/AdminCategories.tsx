@@ -21,6 +21,7 @@ import { slugify } from "@store4riders/shared-utils";
 import { CATEGORY_SPEC_DEFINITIONS } from "./product-form/product-specs.constants";
 import { SizeChartUploader } from "./SizeChartUploader";
 import {
+  areCategorySlugsEquivalent,
   isLegacyNonMenuCategory,
   getStoreNavbarCategoryTree,
   getUnmappedLegacyCategories,
@@ -363,28 +364,50 @@ export const AdminCategories = () => {
   const heroCandidateOptions: Option[] = useMemo(() => {
     const currentId = editingCategory?._id ? String(editingCategory._id) : "";
     const currentSlug = editingCategory?.slug ? String(editingCategory.slug).toLowerCase().trim() : "";
+    const seenIds = new Set<string>();
+    const seenSlugs: string[] = [];
+    const seenNames = new Set<string>();
+    const result: Option[] = [];
 
-    return allCatalogCategories
-      .filter((c) => {
-        const cId = String(c._id || c.id || "");
-        const cSlug = String(c.slug || "").toLowerCase().trim();
-        // Exclude current category being edited
-        if (cId && cId === currentId) return false;
-        if (cSlug && cSlug === currentSlug) return false;
-        // Exclude already selected
-        if (selectedHeroCategoryIds.includes(cId) || selectedHeroCategoryIds.includes(cSlug)) return false;
-        return true;
-      })
-      .map((c) => {
-        const val = c._id ? String(c._id) : c.slug;
-        const depth = typeof c.depth === "number" ? c.depth : 0;
-        return {
-          label: `${depth > 0 ? "— ".repeat(depth) : ""}${c.name}`,
-          value: val,
-          description: `/${c.slug}`,
-          badge: depth === 0 ? "Root" : `Level ${depth}`,
-        };
+    for (const c of allCatalogCategories) {
+      const cId = String(c._id || c.id || "").trim();
+      const cSlug = String(c.slug || "").toLowerCase().trim();
+      const cName = String(c.name || "").trim();
+      const normName = cName.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+      if (!cName || !cSlug) continue;
+      // Exclude current category being edited (by ID or equivalent slug)
+      if (cId && cId === currentId) continue;
+      if (currentSlug && (cSlug === currentSlug || areCategorySlugsEquivalent(cSlug, currentSlug))) {
+        continue;
+      }
+      // Exclude already selected
+      if (
+        selectedHeroCategoryIds.includes(cId) ||
+        selectedHeroCategoryIds.some((sel) => sel === cSlug || areCategorySlugsEquivalent(sel, cSlug))
+      ) {
+        continue;
+      }
+      // Deduplicate by ID, equivalent slug, and normalized name
+      if (cId && seenIds.has(cId)) continue;
+      if (seenSlugs.some((s) => s === cSlug || areCategorySlugsEquivalent(s, cSlug))) continue;
+      if (normName && seenNames.has(normName)) continue;
+
+      if (cId) seenIds.add(cId);
+      seenSlugs.push(cSlug);
+      if (normName) seenNames.add(normName);
+
+      const val = c._id ? String(c._id) : c.slug;
+      const depth = typeof c.depth === "number" ? c.depth : 0;
+      result.push({
+        label: `${depth > 0 ? "— ".repeat(depth) : ""}${cName}`,
+        value: val,
+        description: `/${cSlug}`,
+        badge: depth === 0 ? "Root" : `Level ${depth}`,
       });
+    }
+
+    return result;
   }, [allCatalogCategories, editingCategory, selectedHeroCategoryIds]);
 
   const attributeSetOptions: Option[] = useMemo(() => [

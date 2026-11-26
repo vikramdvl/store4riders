@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/core/api/client";
+import { revalidateStorefrontPaths } from "@/core/utils/revalidateStorefront";
 import { toast } from "sonner";
 import Button from "@/components/ui/Button";
 import { 
@@ -84,6 +85,7 @@ export function AdminGstSettings() {
       await queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
       await queryClient.invalidateQueries({ queryKey: ["settings"] });
       await queryClient.invalidateQueries({ queryKey: ["product"] });
+      revalidateStorefrontPaths(["/"]);
       toast.success("GST and Tax settings saved successfully");
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || "Failed to save GST settings";

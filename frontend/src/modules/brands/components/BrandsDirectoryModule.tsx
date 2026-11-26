@@ -86,11 +86,12 @@ const DEFAULT_HERO_DESCRIPTION =
 
 interface BrandsDirectoryModuleProps {
   initialConfig?: IBrandsPageConfig | null;
+  initialBrands?: IBrand[];
 }
 
-export const BrandsDirectoryModule: React.FC<BrandsDirectoryModuleProps> = ({ initialConfig }) => {
-  const { data: brands, isLoading, error } = useBrands();
-  const { data: pageConfig } = useBrandsPageConfig();
+export const BrandsDirectoryModule: React.FC<BrandsDirectoryModuleProps> = ({ initialConfig, initialBrands }) => {
+  const { data: brands, isLoading, error } = useBrands(false, initialBrands);
+  const { data: pageConfig } = useBrandsPageConfig(initialConfig ?? undefined);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
 

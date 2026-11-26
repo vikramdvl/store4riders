@@ -89,6 +89,21 @@ describe('cleanRichContent Utility', () => {
     expect(cleaned).toContain('href="/guides/post/stay-dry-while-riding-motorcycle-in-rains"');
     expect(cleaned).toContain('href="/helmets"');
   });
+
+  it('should normalize self-closing and styled inline blog images without duplicate class or stray slash', () => {
+    const rich = `
+      <figure><img src="https://d2zuvpvc0pfkya.cloudfront.net/uploads/blog-pic.webp" alt="Riding pic" class="rounded-xl mx-auto" /></figure>
+      <img class="product-image-photo hovered-img" src="https://example.com/hover.jpg" />
+      <img src="https://www.store4riders.com/static/frontend/Codazon/unlimited_codekaar/en_US/Magento_Catalog/images/product/placeholder/small_image.jpg" />
+    `;
+    const cleaned = cleanRichContent(rich, { preserveFaqs: true });
+
+    expect(cleaned).not.toContain('/ class=');
+    expect(cleaned).not.toContain('hovered-img');
+    expect(cleaned).not.toContain('placeholder/small_image.jpg');
+    expect(cleaned).toContain('class="rounded-xl mx-auto max-w-full h-auto rounded-md shadow-xs my-2"');
+    expect(cleaned).toContain('loading="lazy" />');
+  });
 });
 
 describe('stripHtml Utility', () => {

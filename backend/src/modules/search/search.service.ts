@@ -4,6 +4,11 @@ import { resolveFuzzySearchTerms, getGearAccessoryExclusion } from "../../core/u
 import { SearchRepository } from "./search.repository";
 import { ISearchRedirect, ISearchRedirectCheckResult } from "@store4riders/shared-types";
 import { NotFoundError } from "../../core/errors/AppError";
+import { getCache, setCache } from "../../core/cache/redis";
+import { logger } from "../../core/utils/logger";
+
+const TRENDING_SEARCH_CACHE_KEY = "search_trending_v1";
+const TRENDING_SEARCH_TTL = 900; // 15 minutes
 
 const STOREFRONT_CANONICAL_CATEGORIES = [
   { name: "Motorcycle Helmets", slug: "motorcycle-helmets", url: "/motorcycle-helmets", keywords: ["helmet", "helmets", "headgear", "motorcycle helmet"] },
@@ -427,31 +432,39 @@ export class SearchService {
    * 2. Live database aggregation from top categories and active brands (Zero Mock)
    */
   static async getTrendingSearches() {
+    const cached = await getCache(TRENDING_SEARCH_CACHE_KEY);
+    if (cached) return cached;
+
     let trendingTerms: string[] = [];
 
     // 1. Check if Admin curated custom popularSearches in SettingModel
     try {
-      const { SettingModel } = await import("../settings/setting.model");
-      const settings: any = await SettingModel.findOne().select("popularSearches").lean().exec();
+      const { SettingRepository } = await import("../settings/setting.repository");
+      const settings: any = await SettingRepository.getSettings();
       if (settings?.popularSearches && Array.isArray(settings.popularSearches) && settings.popularSearches.length > 0) {
         trendingTerms = settings.popularSearches.filter(Boolean);
       }
-    } catch (e) {
+    } catch {
       // Ignore settings fetch error
+    }
+
+    // Fetch active categories once and reuse for both trending fallback and quick categories
+    let activeCategories: any[] = [];
+    try {
+      const categories = await CategoryRepository.findAll();
+      activeCategories = categories.filter(
+        (c: any) => c.status !== "inactive" && !c.name.toLowerCase().includes("default")
+      );
+    } catch {
+      // Fallback
     }
 
     // 2. Dynamic catalog aggregation if not set or sparse
     if (trendingTerms.length < 5) {
       try {
-        const { CategoryRepository } = await import("../category/category.repository");
         const { ProductModel } = await import("../product/product.model");
 
-        // Fetch top active categories
-        const categories = await CategoryRepository.findAll();
-        const topCategoryNames = categories
-          .filter((c: any) => c.status !== "inactive" && !c.name.toLowerCase().includes("default"))
-          .slice(0, 5)
-          .map((c: any) => c.name);
+        const topCategoryNames = activeCategories.slice(0, 5).map((c: any) => c.name);
 
         // Fetch top brands with active in-stock products
         const topBrands = await ProductModel.distinct("brand", {
@@ -463,30 +476,25 @@ export class SearchService {
         // Merge without duplicates
         const combined = Array.from(new Set([...trendingTerms, ...topCategoryNames, ...cleanBrands]));
         trendingTerms = combined.slice(0, 10);
-      } catch (err) {
-        console.error("Dynamic trending fallback error:", err);
+      } catch (err: any) {
+        logger.error("Dynamic trending fallback error", { error: err?.message });
       }
     }
 
     // 3. Quick Browse Categories (Top 4 active categories with name and slug)
-    let quickCategories: { name: string; slug: string }[] = [];
-    try {
-      const { CategoryRepository } = await import("../category/category.repository");
-      const categories = await CategoryRepository.findAll();
-      quickCategories = categories
-        .filter((c: any) => c.status !== "inactive" && !c.name.toLowerCase().includes("default"))
-        .slice(0, 4)
-        .map((c: any) => ({
-          name: c.name,
-          slug: c.slug,
-        }));
-    } catch {
-      // Fallback
-    }
+    const quickCategories: { name: string; slug: string }[] = activeCategories
+      .slice(0, 4)
+      .map((c: any) => ({
+        name: c.name,
+        slug: c.slug,
+      }));
 
-    return {
+    const result = {
       trending: trendingTerms,
       categories: quickCategories,
     };
+
+    await setCache(TRENDING_SEARCH_CACHE_KEY, result, TRENDING_SEARCH_TTL);
+    return result;
   }
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense, cache } from "react";
 import { notFound, permanentRedirect } from "next/navigation";
+import { redirectIfMatchedOrNotFound } from "@/core/utils/urlRedirects";
 import { ProductsPageModule } from "@/modules/catalog/components/ProductsPageModule";
 import { ProductDetailPageModule } from "@/modules/product-detail/components/ProductDetailPageModule";
 import { PolicyPageLayout } from "@/components/layout/PolicyPageLayout";
@@ -18,6 +19,7 @@ import {
   CATEGORY_SLUG_ALIASES,
   resolveProductBreadcrumbs,
   isCanonicalCategoryPath,
+  isKnownCategorySlug,
 } from "@/core/utils/navCategories";
 
 const rawApiBase = (
@@ -35,7 +37,7 @@ const API_BASE = rawApiBase.includes("/v1")
 const getProduct = cache(async (slug: string) => {
   try {
     const res = await fetch(`${API_BASE}/products/${encodeURIComponent(slug)}`, {
-      next: { revalidate: 60 },
+      next: { revalidate: 300 },
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
@@ -49,7 +51,7 @@ const getProduct = cache(async (slug: string) => {
 const getCategoryNode = cache(async (categorySlug: string) => {
   try {
     const res = await fetch(`${API_BASE}/categories/tree`, {
-      next: { revalidate: 300 },
+      next: { revalidate: 1800 },
       signal: AbortSignal.timeout(5000),
     });
     if (res.ok) {
@@ -78,7 +80,7 @@ const getCategoryNode = cache(async (categorySlug: string) => {
     }
 
     const singleRes = await fetch(`${API_BASE}/categories/${encodeURIComponent(categorySlug)}`, {
-      next: { revalidate: 300 },
+      next: { revalidate: 1800 },
       signal: AbortSignal.timeout(5000),
     });
     if (singleRes.ok) {
@@ -96,7 +98,7 @@ const getCategoryInitialProducts = cache(async (category: string) => {
     const prodRes = await fetch(
       `${API_BASE}/products?category=${encodeURIComponent(category)}&limit=12`,
       {
-        next: { revalidate: 60 },
+        next: { revalidate: 300 },
         signal: AbortSignal.timeout(6000),
       }
     );
@@ -121,7 +123,7 @@ const getCategoryInitialProducts = cache(async (category: string) => {
 const getPolicyPage = cache(async (candidateSlug: string) => {
   try {
     const res = await fetch(`${API_BASE}/settings`, {
-      next: { revalidate: 60 },
+      next: { revalidate: 3600 },
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
@@ -446,14 +448,23 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
       if (policyPage) {
         return renderPolicyPage(policyPage, candidateSlug);
       }
+      await redirectIfMatchedOrNotFound(`/${slugArray.join("/")}`);
+      if (slugArray.length > 1) {
+        await redirectIfMatchedOrNotFound(`/${candidateSlug}`);
+      }
       notFound();
     }
   } else {
     // For product slugs or legacy category URLs, resolve in parallel while strictly
     // preserving Product -> Category -> Policy precedence
-    const [product, resolvedCat] = await Promise.all([
+    const looksLikeCategory = isKnownCategorySlug(candidateSlug);
+    const [product, resolvedCat, prefetchedProducts, prefetchedPolicy] = await Promise.all([
       getProduct(candidateSlug),
       getCategoryNode(candidateSlug),
+      looksLikeCategory && !hasFilterParams
+        ? getCategoryInitialProducts(candidateSlug)
+        : Promise.resolve(undefined),
+      !looksLikeCategory ? getPolicyPage(candidateSlug) : Promise.resolve(null),
     ]);
 
     if (product) {
@@ -462,15 +473,22 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
 
     categoryNode = resolvedCat;
     if (!categoryNode) {
-      const policyPage = await getPolicyPage(candidateSlug);
+      const policyPage = prefetchedPolicy || (await getPolicyPage(candidateSlug));
       if (policyPage) {
         return renderPolicyPage(policyPage, candidateSlug);
+      }
+      await redirectIfMatchedOrNotFound(`/${slugArray.join("/")}`);
+      if (slugArray.length > 1) {
+        await redirectIfMatchedOrNotFound(`/${candidateSlug}`);
       }
       notFound();
     }
 
     if (!hasFilterParams) {
-      initialProductsData = await getCategoryInitialProducts(candidateSlug);
+      initialProductsData =
+        prefetchedProducts !== undefined
+          ? prefetchedProducts
+          : await getCategoryInitialProducts(candidateSlug);
     }
   }
 

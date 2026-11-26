@@ -46,14 +46,13 @@ export interface IPublicSettings {
   googlePayEnvironment?: "TEST" | "PRODUCTION";
 }
 
-export function usePublicSettings() {
+export function usePublicSettings(options?: { staleTime?: number }) {
   return useQuery({
     queryKey: ["publicSettings"],
     queryFn: async () => {
       const res = await apiClient.get<{ data: IPublicSettings }>("/settings/public");
       return res.data.data;
     },
-    staleTime: 30 * 1000, // 30 seconds
-    refetchOnWindowFocus: true,
+    staleTime: options?.staleTime ?? 30 * 60 * 1000, // 30 minutes default for footer/contact UI; pass shorter staleTime on checkout
   });
 }

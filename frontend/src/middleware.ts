@@ -1,7 +1,22 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import {
+  getCachedUrlRedirectMap,
+  normalizeUrlRedirectPath,
+} from "@/core/utils/urlRedirects";
 
-export function middleware(request: NextRequest) {
+const REDIRECT_SKIP_PREFIXES = [
+  "/admin",
+  "/api",
+  "/_next",
+  "/login",
+  "/register",
+  "/cart",
+  "/checkout",
+  "/account",
+];
+
+export async function middleware(request: NextRequest) {
   const host = request.headers.get("host") || "";
   const { pathname } = request.nextUrl;
 
@@ -73,6 +88,33 @@ export function middleware(request: NextRequest) {
   if (!isLocalhost && !isVercelPreview) {
     if (pathname.startsWith("/admin")) {
       return new NextResponse("Not Found", { status: 404 });
+    }
+  }
+
+  // 3. Dynamic Page Redirects (301/302) for storefront GET/HEAD requests
+  if (request.method === "GET" || request.method === "HEAD") {
+    const shouldSkipRedirect =
+      pathname === "/" ||
+      REDIRECT_SKIP_PREFIXES.some(
+        (prefix) => lowerPath === prefix || lowerPath.startsWith(`${prefix}/`)
+      ) ||
+      /\.[a-z0-9]{2,5}$/i.test(lowerPath);
+
+    if (!shouldSkipRedirect) {
+      const normalizedPath = normalizeUrlRedirectPath(pathname);
+      const redirectMap = await getCachedUrlRedirectMap();
+      const matched = redirectMap.get(normalizedPath);
+      if (matched && matched.toPath && matched.toPath !== normalizedPath) {
+        const destination = /^https?:\/\//i.test(matched.toPath)
+          ? matched.toPath
+          : new URL(
+              matched.toPath.includes("?")
+                ? matched.toPath
+                : `${matched.toPath}${request.nextUrl.search}`,
+              request.url
+            );
+        return NextResponse.redirect(destination, matched.statusCode || 301);
+      }
     }
   }
 

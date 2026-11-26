@@ -27,13 +27,9 @@ export const CategorySEOAccordion: React.FC<CategorySEOAccordionProps> = ({
   // Store open state per panel; default first panel closed
   const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
 
-  if (!items || items.length === 0) {
-    return null;
-  }
-
   // Handle deep linking for SEO: Expand accordion if URL has matching hash
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && items && items.length > 0) {
       const hash = window.location.hash.replace("#", "");
       if (hash && items.some((item) => item.id === hash)) {
         setOpenIds((prev) => ({ ...prev, [hash]: true }));
@@ -47,6 +43,10 @@ export const CategorySEOAccordion: React.FC<CategorySEOAccordionProps> = ({
       }
     }
   }, [items]);
+
+  if (!items || items.length === 0) {
+    return null;
+  }
 
   const togglePanel = (id: string) => {
     setOpenIds((prev) => ({

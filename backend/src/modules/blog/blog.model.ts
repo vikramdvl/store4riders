@@ -53,7 +53,11 @@ const blogPostSchema = new Schema<IBlogPost>(
   { timestamps: true }
 );
 
-// Full text search index
+// Full text search index & compound query indexes
+blogCategorySchema.index({ isActive: 1, order: 1, name: 1 });
+blogPostSchema.index({ status: 1, publishedAt: -1 });
+blogPostSchema.index({ status: 1, categorySlug: 1, publishedAt: -1 });
+blogPostSchema.index({ status: 1, tags: 1, publishedAt: -1 });
 blogPostSchema.index({ title: "text", excerpt: "text", tags: "text" });
 
 export const BlogCategoryModel =

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { IBlogCategory, IBlogPost } from "@store4riders/shared-types";
+import { cleanRichContent } from "@/core/utils/cleanRichContent";
 
 const notFoundMock = vi.fn(() => {
   throw new Error("NEXT_NOT_FOUND");
@@ -311,5 +312,104 @@ describe("Guides Storefront Live Blog Regression Suite", () => {
       }),
       undefined
     );
+  });
+
+  it("GuideDetailModule updates share links via effect without reading stale window location on SSR", async () => {
+    window.history.replaceState(null, "", "/guides/post/choosing-right-riding-boots");
+
+    const { rerender } = render(
+      <GuideDetailModule
+        slug={mockPosts[0].slug}
+        initialPost={mockPosts[0]}
+        initialRelatedPosts={[mockPosts[1]]}
+      />
+    );
+
+    await waitFor(() => {
+      const whatsappHref = screen.getByRole("link", { name: "WhatsApp" }).getAttribute("href");
+      const twitterHref = screen.getByRole("link", { name: "X / Twitter" }).getAttribute("href");
+      const fbHref = screen.getByRole("link", { name: "Facebook" }).getAttribute("href");
+      expect(whatsappHref).toContain(encodeURIComponent("http://localhost:3000/guides/post/choosing-right-riding-boots"));
+      expect(twitterHref).toContain(encodeURIComponent("choosing-right-riding-boots"));
+      expect(fbHref).toContain(encodeURIComponent("choosing-right-riding-boots"));
+    });
+
+    window.history.replaceState(null, "", "/guides/post/choosing-a-motorcycle-smart-display");
+    rerender(
+      <GuideDetailModule
+        slug={mockPosts[1].slug}
+        initialPost={mockPosts[1]}
+        initialRelatedPosts={[]}
+      />
+    );
+
+    await waitFor(() => {
+      const twitterHref = screen.getByRole("link", { name: "X / Twitter" }).getAttribute("href");
+      expect(twitterHref).toContain(encodeURIComponent("choosing-a-motorcycle-smart-display"));
+      expect(twitterHref).not.toContain("choosing-right-riding-boots");
+    });
+  });
+
+  it("GuideDetailModule calls notFound cleanly when post is null", () => {
+    expect(() =>
+      render(
+        <GuideDetailModule
+          slug="missing-guide-slug"
+          initialPost={null}
+          initialRelatedPosts={[]}
+        />
+      )
+    ).toThrow("NEXT_NOT_FOUND");
+    expect(notFoundMock).toHaveBeenCalled();
+  });
+
+  it("fetchGuideOrBlogPost resolves legacy aliased guide slugs", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: mockPosts[0] }),
+    } as Response);
+
+    await fetchGuideOrBlogPost("motorcycle-touring-with-dslr-camera");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/blog/posts/carrying-dslr-lenses-drone-motorcycle-tour"),
+      expect.any(Object)
+    );
+
+    await fetchGuideOrBlogPost("motorcycle-security-touring-theft-prevention");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/blog/posts/motorcycle-security-while-touring"),
+      expect.any(Object)
+    );
+
+    fetchSpy.mockRestore();
+  });
+
+  it("cleanRichContent rewrites legacy touring guide links to canonical slugs", () => {
+    const html = cleanRichContent(
+      '<p><a href="https://www.store4riders.com/guides/post/motorcycle-touring-with-dslr-camera">DSLR</a> <a href="/guides/post/motorcycle-security-touring-theft-prevention">Security</a></p>'
+    );
+
+    expect(html).toContain('href="/guides/post/carrying-dslr-lenses-drone-motorcycle-tour"');
+    expect(html).toContain('href="/guides/post/motorcycle-security-while-touring"');
+  });
+
+  it("fetchGuideOrBlogPost retries transient 5xx and throws instead of false 404", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({ ok: false, status: 503 } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, data: mockPosts[0] }),
+      } as Response);
+
+    const recovered = await fetchGuideOrBlogPost("choosing-right-riding-boots");
+    expect(recovered?.slug).toBe("choosing-right-riding-boots");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    fetchSpy.mockResolvedValue({ ok: false, status: 500 } as Response);
+    await expect(fetchGuideOrBlogPost("transient-error-slug")).rejects.toThrow(/status 500|Failed to fetch/);
+
+    fetchSpy.mockRestore();
   });
 });

@@ -2,8 +2,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { IBrand, IBrandsPageConfig } from "@store4riders/shared-types";
 import { toast } from "sonner";
+import { revalidateStorefrontPaths } from "../utils/revalidateStorefront";
 
-export function useBrands(includeInactive?: boolean) {
+export function useBrands(includeInactive?: boolean, initialData?: IBrand[]) {
   return useQuery({
     queryKey: ["brands", Boolean(includeInactive)],
     queryFn: async () => {
@@ -11,6 +12,8 @@ export function useBrands(includeInactive?: boolean) {
       const response = await apiClient.get(url);
       return response.data.data as IBrand[];
     },
+    initialData,
+    staleTime: 15 * 60 * 1000,
   });
 }
 
@@ -22,6 +25,7 @@ export function useBrand(slug: string) {
       return response.data.data as IBrand;
     },
     enabled: Boolean(slug),
+    staleTime: 10 * 60 * 1000,
   });
 }
 
@@ -32,8 +36,13 @@ export function useCreateBrand() {
       const response = await apiClient.post("/brands", data);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["brands"] });
+      queryClient.invalidateQueries({ queryKey: ["brand"] });
+      revalidateStorefrontPaths([
+        "/brands",
+        created?.slug ? `/brands/${created.slug}` : undefined,
+      ]);
       toast.success("Brand created successfully");
     },
     onError: (error: any) => {
@@ -49,8 +58,13 @@ export function useUpdateBrand() {
       const response = await apiClient.put(`/brands/${id}`, data);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ["brands"] });
+      queryClient.invalidateQueries({ queryKey: ["brand"] });
+      revalidateStorefrontPaths([
+        "/brands",
+        updated?.slug ? `/brands/${updated.slug}` : undefined,
+      ]);
       toast.success("Brand updated successfully");
     },
     onError: (error: any) => {
@@ -66,8 +80,13 @@ export function useDeleteBrand() {
       const response = await apiClient.delete(`/brands/${id}`);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (deleted) => {
       queryClient.invalidateQueries({ queryKey: ["brands"] });
+      queryClient.invalidateQueries({ queryKey: ["brand"] });
+      revalidateStorefrontPaths([
+        "/brands",
+        deleted?.slug ? `/brands/${deleted.slug}` : undefined,
+      ]);
       toast.success("Brand deleted successfully");
     },
     onError: (error: any) => {
@@ -76,14 +95,15 @@ export function useDeleteBrand() {
   });
 }
 
-export function useBrandsPageConfig() {
+export function useBrandsPageConfig(initialData?: IBrandsPageConfig) {
   return useQuery({
     queryKey: ["brands-page-config"],
     queryFn: async () => {
       const response = await apiClient.get("/brands/page-seo");
       return response.data.data as IBrandsPageConfig;
     },
-    staleTime: 60 * 1000,
+    initialData,
+    staleTime: 15 * 60 * 1000,
   });
 }
 
@@ -96,6 +116,7 @@ export function useUpdateBrandsPageConfig() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["brands-page-config"] });
+      revalidateStorefrontPaths(["/brands"]);
       toast.success("Brand directory page settings saved successfully");
     },
     onError: (error: any) => {

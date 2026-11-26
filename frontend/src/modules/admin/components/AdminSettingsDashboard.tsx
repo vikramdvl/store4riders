@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AdminPaymentSettings } from "@/modules/admin/components/AdminPaymentSettings";
 import { AdminShippingSettings } from "@/modules/admin/components/AdminShippingSettings";
 import { AdminGoogleReviewsSettings } from "@/modules/admin/components/AdminGoogleReviewsSettings";
@@ -13,16 +13,35 @@ import { AdminPolicyPagesSettings } from "@/modules/admin/components/AdminPolicy
 
 type SettingsTab = "contact" | "footer" | "policies" | "shipping" | "payments" | "gst" | "search" | "google-reviews";
 
+const VALID_TABS: SettingsTab[] = [
+  "contact",
+  "footer",
+  "policies",
+  "shipping",
+  "payments",
+  "gst",
+  "search",
+  "google-reviews",
+];
+
 export default function AdminSettingsDashboard() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const tabQuery = searchParams.get("tab") as SettingsTab | null;
-  const [activeTab, setActiveTab] = useState<SettingsTab>("contact");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() =>
+    tabQuery && VALID_TABS.includes(tabQuery) ? tabQuery : "contact"
+  );
 
   useEffect(() => {
-    if (tabQuery && ["contact", "footer", "policies", "shipping", "payments", "gst", "search", "google-reviews"].includes(tabQuery)) {
+    if (tabQuery && VALID_TABS.includes(tabQuery)) {
       setActiveTab(tabQuery);
     }
   }, [tabQuery]);
+
+  const handleSelectTab = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    router.replace(`/admin/settings?tab=${tab}`, { scroll: false });
+  };
 
   return (
     <div className="p-6">
@@ -37,7 +56,7 @@ export default function AdminSettingsDashboard() {
 
       <div className="mb-6 border-b border-neutral-200 flex gap-4 overflow-x-auto">
         <button
-          onClick={() => setActiveTab("contact")}
+          onClick={() => handleSelectTab("contact")}
           className={`px-6 py-3 font-bold text-sm uppercase tracking-wide transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === "contact"
               ? "text-brand border-brand"
@@ -51,7 +70,7 @@ export default function AdminSettingsDashboard() {
         </button>
 
         <button
-          onClick={() => setActiveTab("footer")}
+          onClick={() => handleSelectTab("footer")}
           className={`px-6 py-3 font-bold text-sm uppercase tracking-wide transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === "footer"
               ? "text-brand border-brand"
@@ -65,7 +84,7 @@ export default function AdminSettingsDashboard() {
         </button>
 
         <button
-          onClick={() => setActiveTab("policies")}
+          onClick={() => handleSelectTab("policies")}
           className={`px-6 py-3 font-bold text-sm uppercase tracking-wide transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === "policies"
               ? "text-brand border-brand"
@@ -79,7 +98,7 @@ export default function AdminSettingsDashboard() {
         </button>
 
         <button
-          onClick={() => setActiveTab("shipping")}
+          onClick={() => handleSelectTab("shipping")}
           className={`px-6 py-3 font-bold text-sm uppercase tracking-wide transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === "shipping"
               ? "text-brand border-brand"
@@ -93,7 +112,7 @@ export default function AdminSettingsDashboard() {
         </button>
 
         <button
-          onClick={() => setActiveTab("payments")}
+          onClick={() => handleSelectTab("payments")}
           className={`px-6 py-3 font-bold text-sm uppercase tracking-wide transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === "payments"
               ? "text-brand border-brand"
@@ -107,7 +126,7 @@ export default function AdminSettingsDashboard() {
         </button>
 
         <button
-          onClick={() => setActiveTab("gst")}
+          onClick={() => handleSelectTab("gst")}
           className={`px-6 py-3 font-bold text-sm uppercase tracking-wide transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === "gst"
               ? "text-brand border-brand"
@@ -121,7 +140,7 @@ export default function AdminSettingsDashboard() {
         </button>
 
         <button
-          onClick={() => setActiveTab("search")}
+          onClick={() => handleSelectTab("search")}
           className={`px-6 py-3 font-bold text-sm uppercase tracking-wide transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === "search"
               ? "text-brand border-brand"
@@ -135,7 +154,7 @@ export default function AdminSettingsDashboard() {
         </button>
 
         <button
-          onClick={() => setActiveTab("google-reviews")}
+          onClick={() => handleSelectTab("google-reviews")}
           className={`px-6 py-3 font-bold text-sm uppercase tracking-wide transition-all border-b-2 flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === "google-reviews"
               ? "text-brand border-brand"

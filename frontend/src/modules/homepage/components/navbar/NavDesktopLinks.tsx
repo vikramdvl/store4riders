@@ -47,7 +47,7 @@ export const NavDesktopLinks: React.FC<NavDesktopLinksProps> = ({
       if (!href || href === "#") return;
       prefetchTimerRef.current = setTimeout(() => {
         router.prefetch(href);
-      }, 65);
+      }, 25);
     },
     [cancelPrefetch, router]
   );

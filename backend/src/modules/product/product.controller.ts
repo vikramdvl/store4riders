@@ -179,7 +179,16 @@ export class ProductController {
         message: `Deleted product ${prevProduct?.name || ""} (${prevProduct?.sku || id})`,
       });
     } catch {}
-    return ApiResponse.success(null, "Product deleted successfully");
+    return ApiResponse.success(
+      prevProduct
+        ? {
+            slug: prevProduct.slug,
+            categorySlugs: prevProduct.categorySlugs || [],
+            brand: prevProduct.brand,
+          }
+        : null,
+      "Product deleted successfully"
+    );
   }
 
   static async export(req: NextRequest) {

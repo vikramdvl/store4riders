@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { revalidateStorefrontPaths } from "@/core/utils/revalidateStorefront";
 import {
   FileText,
   Save,
@@ -585,23 +586,39 @@ function VisualRichEditor({ html, onChange }: VisualEditorProps) {
   );
 }
 
+const POLICY_SLUG_ALIASES: Record<string, string> = {
+  returns: "returns-replacements-store4riders",
+  shipping: "shipping-policies-store4riders",
+  terms: "store4riders-conditions-of-use-and-sale",
+  privacy: "privacy-policy-cookie-restriction-mode",
+  legal: "legal-stuff",
+  "store-policies": "store4riders-store-policies",
+  "about-us": "about-us-store4riders",
+  "contact-us": "contact-store4riders",
+  contact: "contact-store4riders",
+};
+
+function resolvePolicySlug(rawSlug?: string | null): string {
+  const normalized = (rawSlug || "").trim().toLowerCase();
+  const mapped = POLICY_SLUG_ALIASES[normalized] || normalized;
+  if (mapped && OFFICIAL_PAGE_DEFINITIONS.some((d) => d.slug === mapped)) {
+    return mapped;
+  }
+  return OFFICIAL_PAGE_DEFINITIONS[0]?.slug || "returns-replacements-store4riders";
+}
+
 export function AdminPolicyPagesSettings() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const pageParam = searchParams.get("page");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeSlug, setActiveSlug] = useState<string>(() => {
-    if (pageParam && OFFICIAL_PAGE_DEFINITIONS.some((d) => d.slug === pageParam)) {
-      return pageParam;
-    }
-    return "returns";
-  });
+  const [activeSlug, setActiveSlug] = useState<string>(() => resolvePolicySlug(pageParam));
   const [editorMode, setEditorMode] = useState<"visual" | "html" | "preview">("visual");
 
   useEffect(() => {
-    if (pageParam && OFFICIAL_PAGE_DEFINITIONS.some((d) => d.slug === pageParam)) {
-      setActiveSlug(pageParam);
+    if (pageParam) {
+      setActiveSlug(resolvePolicySlug(pageParam));
     }
   }, [pageParam]);
 
@@ -619,24 +636,15 @@ export function AdminPolicyPagesSettings() {
       const existingPages: IPolicyPageConfig[] = res.data?.data?.policyPages || [];
 
       const initialMap: Record<string, IPolicyPageConfig> = {};
-      const slugAliases: Record<string, string> = {
-        returns: "returns-replacements-store4riders",
-        shipping: "shipping-policies-store4riders",
-        terms: "store4riders-conditions-of-use-and-sale",
-        privacy: "privacy-policy-cookie-restriction-mode",
-        legal: "legal-stuff",
-        "store-policies": "store4riders-store-policies",
-        "about-us": "about-us-store4riders",
-        "contact-us": "contact-store4riders",
-        contact: "contact-store4riders",
-      };
 
       OFFICIAL_PAGE_DEFINITIONS.forEach((def) => {
         const found = existingPages.find(
-          (p) => p.slug === def.slug || slugAliases[p.slug] === def.slug
+          (p) =>
+            p?.slug === def.slug ||
+            (typeof p?.slug === "string" && POLICY_SLUG_ALIASES[p.slug] === def.slug)
         );
         if (found) {
-          initialMap[def.slug] = { ...found, slug: found.slug || def.slug };
+          initialMap[def.slug] = { ...found, slug: def.slug };
         } else {
           // Initialize with default template values
           initialMap[def.slug] = {
@@ -662,8 +670,10 @@ export function AdminPolicyPagesSettings() {
     }
   };
 
-  const currentDef = OFFICIAL_PAGE_DEFINITIONS.find((d) => d.slug === activeSlug)!;
-  const currentPage = pagesMap[activeSlug] || {
+  const currentDef =
+    OFFICIAL_PAGE_DEFINITIONS.find((d) => d.slug === activeSlug) ??
+    OFFICIAL_PAGE_DEFINITIONS[0];
+  const currentPage = pagesMap[currentDef.slug] || pagesMap[activeSlug] || {
     slug: currentDef.slug,
     title: currentDef.defaultTitle,
     subtitle: currentDef.defaultSubtitle,
@@ -722,6 +732,13 @@ export function AdminPolicyPagesSettings() {
 
       queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
       queryClient.invalidateQueries({ queryKey: ["settings"] });
+      const aliasPaths = Object.keys(POLICY_SLUG_ALIASES).map((a) => `/${a}`);
+      revalidateStorefrontPaths([
+        ...policyPagesArray.map((p) =>
+          p?.slug ? (p.slug.startsWith("/") ? p.slug : `/${p.slug}`) : undefined
+        ),
+        ...aliasPaths,
+      ]);
 
       toast.success("Policy & page contents saved successfully! Live website updated.");
     } catch (err: any) {
@@ -897,17 +914,23 @@ export function AdminPolicyPagesSettings() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">URL Path (Slug)</label>
+              <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                Canonical URL Path (Fixed)
+              </label>
               <div className="flex items-center">
                 <span className="text-xs text-neutral-400 font-mono px-2 py-2.5 bg-neutral-100 border border-r-0 border-neutral-200 rounded-l-lg select-none">/</span>
                 <input
                   type="text"
-                  value={currentPage.slug || ""}
-                  onChange={(e) => updateCurrentPage("slug", e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ""))}
-                  placeholder="e.g. shipping-policies-store4riders"
-                  className="w-full text-xs p-2.5 bg-white border border-neutral-200 rounded-r-lg font-mono focus:outline-none focus:border-brand"
+                  value={currentDef.slug}
+                  readOnly
+                  aria-label="Canonical URL Path"
+                  title="Canonical URL is fixed for SEO and footer link integrity. Use Page Redirects (301/302) to redirect another URL here."
+                  className="w-full text-xs p-2.5 bg-neutral-100 text-neutral-600 border border-neutral-200 rounded-r-lg font-mono cursor-not-allowed focus:outline-none"
                 />
               </div>
+              <p className="text-[10px] text-neutral-400 mt-1">
+                Fixed for SEO. To redirect an old URL here, use Page Redirects.
+              </p>
             </div>
 
             <div>

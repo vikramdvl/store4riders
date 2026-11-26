@@ -169,6 +169,7 @@ export const CATEGORY_SLUG_ALIASES: Record<string, string[]> = {
 
   // Spares
   "spares": ["spares", "bike-spares", "bike-spare-parts-online"],
+  "bike-spares": ["spares", "bike-spares", "bike-spare-parts-online"],
   "chain-sprocket-kits": ["chain-sprocket-kits", "chain-sprockets", "sprockets"],
   "iridium-spark-plug": ["iridium-spark-plug", "spark-plugs", "spark-plug"],
   "performance-air-filter-bike": ["performance-air-filter-bike", "performance-air-filters-for-bikes", "performance-air-filters", "air-filter", "air-filters"],
@@ -254,6 +255,19 @@ export const LEGACY_NON_MENU_SLUGS = new Set<string>([
   "axor-agera-full-face-helmets",
   "best-helmets-under-rs5000",
   "best-helmets-under-rs-5000",
+  "bike-exhausts",
+  "bike-spare-parts-online",
+  "motorcycle-accessories-bike-accessories",
+  "helmet-bags-for-bike-riders",
+  "bike-top-boxes-aluminium-top-box",
+  "crash-bar-bags-for-motorcycles",
+  "thigh-bags-for-motorcycle-riders",
+  "adventure-off-road-riding-boots",
+  "motorcycle-touring-gear",
+  "bluetooth-intercoms",
+  "short-riding-boots-city-riding-shoes",
+  "motorcycle-riding-jeans-4428",
+  "test-category",
 ]);
 
 export function isLegacyNonMenuCategory(slug?: string): boolean {

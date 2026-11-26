@@ -20,3 +20,4 @@ export * from "./newsletter.types";
 export * from "./search.types";
 export * from "./audit-log.types";
 export * from "./blocked-ip.types";
+export * from "./url-redirect.types";

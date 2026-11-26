@@ -14,6 +14,7 @@ import { docsRouter } from "./modules/docs/docs.route";
 import { healthRouter } from "./modules/health/health.route";
 import { adminRouter } from "./modules/admin/admin.route";
 import { searchRouter } from "./modules/search/search.route";
+import { urlRedirectRouter } from "./modules/url-redirect/url-redirect.route";
 import { paymentRouter } from "./modules/payment/payment.route";
 import { shippingRouter } from "./modules/shipping/shipping.route";
 import { settingRouter } from "./modules/settings/setting.route";
@@ -47,6 +48,7 @@ export async function centralRouter(req: NextRequest, routePath: string[]) {
     case "coupons": return couponRouter(req, rest);
     case "upload": return uploadRouter(req, rest);
     case "search": return searchRouter(req, rest.join("/"));
+    case "url-redirects": return urlRedirectRouter(req, rest.join("/"));
     case "payments": return paymentRouter(req, rest.join("/"));
     case "shipping": 
     case "shipments": return shippingRouter(req, rest);

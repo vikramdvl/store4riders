@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/core/api/client";
+import { revalidateStorefrontPaths } from "@/core/utils/revalidateStorefront";
 import { toast } from "sonner";
 import Button from "@/components/ui/Button";
 import Link from "next/link";
@@ -135,6 +136,7 @@ export function AdminShippingSettings() {
       await queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
       await queryClient.invalidateQueries({ queryKey: ["product"] });
       await queryClient.refetchQueries({ queryKey: ["publicSettings"] });
+      revalidateStorefrontPaths(["/"]);
       toast.success("Shipping & Delivery settings saved successfully!");
     } catch (err: any) {
       const msg = err.response?.data?.message || err.response?.data?.error || "Failed to save settings";

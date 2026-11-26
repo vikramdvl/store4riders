@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useQuery, keepPreviousData, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
+import { revalidateStorefrontPaths, collectProductStorefrontPaths } from "../utils/revalidateStorefront";
 
 /**
  * Frontend interface matching the ACTUAL MongoDB product schema.
@@ -240,7 +241,7 @@ export function useProductBySlug(slug: string, initialData?: IBackendProduct) {
  * Fetch smart kit recommendations for a product.
  * Returns complementary gear across different riding categories.
  */
-export function useProductKit(slug: string) {
+export function useProductKit(slug: string, enabled: boolean = true) {
   return useQuery({
     queryKey: ["product-kit", slug],
     queryFn: async () => {
@@ -248,7 +249,7 @@ export function useProductKit(slug: string) {
       const response = await apiClient.get<{ data: IBackendProduct[] }>(`/products/${slug}/kit`);
       return response.data.data;
     },
-    enabled: !!slug,
+    enabled: Boolean(slug && enabled),
     staleTime: 1000 * 60 * 5,
   });
 }
@@ -259,7 +260,7 @@ export function useProductKit(slug: string) {
 /**
  * Fetch upsell recommendations for a product ("You May Also Like").
  */
-export function useProductUpsell(slug: string) {
+export function useProductUpsell(slug: string, enabled: boolean = true) {
   return useQuery({
     queryKey: ["product-upsell", slug],
     queryFn: async () => {
@@ -267,7 +268,7 @@ export function useProductUpsell(slug: string) {
       const response = await apiClient.get<{ data: IBackendProduct[] }>(`/products/${slug}/upsell`);
       return response.data.data;
     },
-    enabled: !!slug,
+    enabled: Boolean(slug && enabled),
     staleTime: 1000 * 60 * 5,
   });
 }
@@ -275,7 +276,7 @@ export function useProductUpsell(slug: string) {
 /**
  * Fetch cross-sell recommendations for a product ("Frequently Bought Together").
  */
-export function useProductCrossSell(slug: string) {
+export function useProductCrossSell(slug: string, enabled: boolean = true) {
   return useQuery({
     queryKey: ["product-cross-sell", slug],
     queryFn: async () => {
@@ -283,7 +284,7 @@ export function useProductCrossSell(slug: string) {
       const response = await apiClient.get<{ data: IBackendProduct[] }>(`/products/${slug}/cross-sell`);
       return response.data.data;
     },
-    enabled: !!slug,
+    enabled: Boolean(slug && enabled),
     staleTime: 1000 * 60 * 5,
   });
 }
@@ -360,6 +361,7 @@ export function useBulkUpdateProducts() {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["product_aggregations"] });
       queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      revalidateStorefrontPaths(["/", "/products", "/sale"]);
     },
   });
 }
@@ -383,12 +385,13 @@ export function useCreateProduct() {
       const response = await apiClient.post("/products", data);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["product"] });
       queryClient.invalidateQueries({ queryKey: ["products-by-skus"] });
       queryClient.invalidateQueries({ queryKey: ["admin-products"] });
       queryClient.invalidateQueries({ queryKey: ["product_aggregations"] });
+      revalidateStorefrontPaths(collectProductStorefrontPaths(created));
     },
   });
 }
@@ -400,12 +403,16 @@ export function useUpdateProduct() {
       const response = await apiClient.put(`/products/${id}`, data);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (updated, variables) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["product"] });
       queryClient.invalidateQueries({ queryKey: ["products-by-skus"] });
       queryClient.invalidateQueries({ queryKey: ["admin-products"] });
       queryClient.invalidateQueries({ queryKey: ["product_aggregations"] });
+      revalidateStorefrontPaths([
+        ...collectProductStorefrontPaths(updated),
+        ...collectProductStorefrontPaths(variables?.data),
+      ]);
     },
   });
 }
@@ -417,10 +424,11 @@ export function useDeleteProduct() {
       const response = await apiClient.delete(`/products/${id}`);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (deleted) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["product_aggregations"] });
       queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      revalidateStorefrontPaths(collectProductStorefrontPaths(deleted));
     },
   });
 }

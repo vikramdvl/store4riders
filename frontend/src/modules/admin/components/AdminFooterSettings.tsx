@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/core/api/client";
+import { revalidateStorefrontPaths } from "@/core/utils/revalidateStorefront";
 import { toast } from "sonner";
 import Button from "@/components/ui/Button";
 import {
@@ -95,6 +97,7 @@ const INITIAL_DEFAULTS: IFooterConfig = {
 };
 
 export function AdminFooterSettings() {
+  const queryClient = useQueryClient();
   const [config, setConfig] = useState<IFooterConfig>(INITIAL_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -187,6 +190,17 @@ export function AdminFooterSettings() {
       await apiClient.put("/admin/settings", {
         footerConfig: config,
       });
+      await queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      await queryClient.invalidateQueries({ queryKey: ["settings"] });
+      revalidateStorefrontPaths([
+        "/",
+        "/products",
+        "/brands",
+        "/guides",
+        "/about-us-store4riders",
+        "/contact-store4riders",
+      ]);
       toast.success("Footer settings and navigation links saved successfully!");
     } catch (err: any) {
       toast.error(err.response?.data?.message || err.message || "Failed to save footer settings");

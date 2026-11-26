@@ -90,7 +90,8 @@ export function cleanRichContent(rawHtml: string, options: CleanRichContentOptio
     .replace(/href=["'][^"']*\/premium-mesh-riding-jackets["']/gi, 'href="/riding-gear/riding-jackets?minPrice=20000"')
     .replace(/href=["'][^"']*\/riding-gloves-below-rs-3000["']/gi, 'href="/riding-gear/riding-gloves/short-motorbike-gloves?maxPrice=3000"')
     .replace(/\/guides\/post\/motorcycle-rain-riding-what-to-wear\b/gi, '/guides/post/stay-dry-while-riding-motorcycle-in-rains')
-    .replace(/\/guides\/post\/motorcycle-security-touring-theft-prevention\b/gi, '/guides/post/motorcycle-security-while-touring');
+    .replace(/\/guides\/post\/motorcycle-security-touring-theft-prevention\b/gi, '/guides/post/motorcycle-security-while-touring')
+    .replace(/\/guides\/post\/motorcycle-touring-with-dslr-camera\b/gi, '/guides/post/carrying-dslr-lenses-drone-motorcycle-tour');
 
   // External links (e.g. YouTube, third-party sites): ensure target="_blank" and rel="nofollow noopener noreferrer" to protect SEO
   clean = clean.replace(
@@ -126,8 +127,26 @@ export function cleanRichContent(rawHtml: string, options: CleanRichContentOptio
     '<td class="border border-neutral-200 p-2 align-top text-xs sm:text-sm">'
   );
 
-  // 6. Force images to never exceed container width
-  clean = clean.replace(/<img([^>]*)>/gi, '<img$1 class="max-w-full h-auto rounded-md shadow-xs my-2" loading="lazy" />');
+  // 6. Remove broken Magento product placeholders & hover-duplicate product images, then normalize all <img> tags cleanly
+  clean = clean.replace(/<img\b[^>]*Magento_Catalog\/images\/product\/placeholder\/[^>]*>/gi, "");
+  clean = clean.replace(/<img\b[^>]*class=["'][^"']*\bhovered-img\b[^"']*["'][^>]*>/gi, "");
+  clean = clean.replace(/<img\b([^>]*?)\s*\/?>/gi, (_match, rawAttrs) => {
+    let attrs = String(rawAttrs || "").trim().replace(/\/+$/, "").trim();
+    const classParts: string[] = [];
+    attrs = attrs.replace(/\s*\bclass\s*=\s*(?:"([^"]*)"|'([^']*)')/gi, (_m, dq, sq) => {
+      const cls = (dq || sq || "").trim();
+      if (cls) classParts.push(cls);
+      return "";
+    });
+    attrs = attrs.replace(/\s*\bloading\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "").trim();
+
+    const mergedClasses = [...classParts, "max-w-full h-auto rounded-md shadow-xs my-2"]
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return `<img${attrs ? ` ${attrs}` : ""} class="${mergedClasses}" loading="lazy" />`;
+  });
 
   return clean;
 }

@@ -34,7 +34,7 @@ export const CheckoutPaymentStep = ({
   isCodAvailable = true,
   total
 }: CheckoutPaymentStepProps) => {
-  const { data: settings, isLoading } = usePublicSettings();
+  const { data: settings, isLoading } = usePublicSettings({ staleTime: 30 * 1000 });
   const snapmintMin = settings?.snapmintMinOrderValue ?? 0;
 
   const baseGateways = settings?.enabledGateways && settings.enabledGateways.length > 0

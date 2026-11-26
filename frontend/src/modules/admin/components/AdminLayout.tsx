@@ -20,6 +20,7 @@ const KNOWN_DASHBOARD_ROUTES = [
   "/admin/inquiries",
   "/admin/orders",
   "/admin/products",
+  "/admin/redirects",
   "/admin/search-terms",
   "/admin/settings",
   "/admin/shipping",

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { IBlogPost, IBlogCategory, IBlogPostQuery } from "@store4riders/shared-types";
 import { toast } from "sonner";
+import { revalidateStorefrontPaths } from "../utils/revalidateStorefront";
 
 export interface PaginatedBlogResponse {
   items: IBlogPost[];
@@ -129,11 +130,18 @@ export function useCreateBlogPost() {
       const response = await apiClient.post("/blog/admin/posts", data);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (createdPost) => {
       queryClient.invalidateQueries({ queryKey: ["admin-blog-posts"] });
       queryClient.invalidateQueries({ queryKey: ["blog-posts"] });
       queryClient.invalidateQueries({ queryKey: ["blog-categories"] });
       queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
+      revalidateStorefrontPaths([
+        "/guides",
+        createdPost?.slug ? `/guides/post/${createdPost.slug}` : undefined,
+        createdPost?.slug ? `/guides/${createdPost.slug}` : undefined,
+        createdPost?.categorySlug ? `/guides/category/${createdPost.categorySlug}` : undefined,
+        createdPost?.categorySlug ? `/guides/${createdPost.categorySlug}` : undefined,
+      ]);
       toast.success("Blog post created successfully!");
     },
     onError: (error: any) => {
@@ -159,6 +167,13 @@ export function useUpdateBlogPost() {
       }
       queryClient.invalidateQueries({ queryKey: ["blog-categories"] });
       queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
+      revalidateStorefrontPaths([
+        "/guides",
+        updatedPost?.slug ? `/guides/post/${updatedPost.slug}` : undefined,
+        updatedPost?.slug ? `/guides/${updatedPost.slug}` : undefined,
+        updatedPost?.categorySlug ? `/guides/category/${updatedPost.categorySlug}` : undefined,
+        updatedPost?.categorySlug ? `/guides/${updatedPost.categorySlug}` : undefined,
+      ]);
       toast.success("Blog post updated successfully!");
     },
     onError: (error: any) => {
@@ -174,11 +189,18 @@ export function useDeleteBlogPost() {
       const response = await apiClient.delete(`/blog/admin/posts/${id}`);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (deletedPost) => {
       queryClient.invalidateQueries({ queryKey: ["admin-blog-posts"] });
       queryClient.invalidateQueries({ queryKey: ["blog-posts"] });
       queryClient.invalidateQueries({ queryKey: ["blog-categories"] });
       queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
+      revalidateStorefrontPaths([
+        "/guides",
+        deletedPost?.slug ? `/guides/post/${deletedPost.slug}` : undefined,
+        deletedPost?.slug ? `/guides/${deletedPost.slug}` : undefined,
+        deletedPost?.categorySlug ? `/guides/category/${deletedPost.categorySlug}` : undefined,
+        deletedPost?.categorySlug ? `/guides/${deletedPost.categorySlug}` : undefined,
+      ]);
       toast.success("Blog post deleted successfully!");
     },
     onError: (error: any) => {
@@ -204,9 +226,14 @@ export function useCreateBlogCategory() {
       const response = await apiClient.post("/blog/admin/categories", data);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (createdCat) => {
       queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
       queryClient.invalidateQueries({ queryKey: ["blog-categories"] });
+      revalidateStorefrontPaths([
+        "/guides",
+        createdCat?.slug ? `/guides/category/${createdCat.slug}` : undefined,
+        createdCat?.slug ? `/guides/${createdCat.slug}` : undefined,
+      ]);
       toast.success("Category created successfully!");
     },
     onError: (error: any) => {
@@ -222,9 +249,14 @@ export function useUpdateBlogCategory() {
       const response = await apiClient.put(`/blog/admin/categories/${id}`, data);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (updatedCat) => {
       queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
       queryClient.invalidateQueries({ queryKey: ["blog-categories"] });
+      revalidateStorefrontPaths([
+        "/guides",
+        updatedCat?.slug ? `/guides/category/${updatedCat.slug}` : undefined,
+        updatedCat?.slug ? `/guides/${updatedCat.slug}` : undefined,
+      ]);
       toast.success("Category updated successfully!");
     },
     onError: (error: any) => {
@@ -240,9 +272,14 @@ export function useDeleteBlogCategory() {
       const response = await apiClient.delete(`/blog/admin/categories/${id}`);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (deletedCat) => {
       queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
       queryClient.invalidateQueries({ queryKey: ["blog-categories"] });
+      revalidateStorefrontPaths([
+        "/guides",
+        deletedCat?.slug ? `/guides/category/${deletedCat.slug}` : undefined,
+        deletedCat?.slug ? `/guides/${deletedCat.slug}` : undefined,
+      ]);
       toast.success("Category deleted successfully!");
     },
     onError: (error: any) => {
@@ -261,6 +298,7 @@ export function useSeedBlogContent() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["admin-blog-posts"] });
       queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
+      revalidateStorefrontPaths(["/guides"]);
       toast.success(`Seeded ${data.postsSeeded} articles and ${data.categoriesSeeded} categories!`);
     },
     onError: (error: any) => {

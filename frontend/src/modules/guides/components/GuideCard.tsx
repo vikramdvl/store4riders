@@ -40,7 +40,6 @@ export const GuideCard: React.FC<GuideCardProps> = ({ post, priority = false }) 
       {/* Featured Image */}
       <Link
         href={`/guides/post/${post.slug}`}
-        prefetch={false}
         className="relative aspect-[16/10] w-full overflow-hidden bg-neutral-100 block shrink-0"
       >
         {imageUrl ? (
@@ -89,7 +88,7 @@ export const GuideCard: React.FC<GuideCardProps> = ({ post, priority = false }) 
 
         {/* Title */}
         <h3 className="text-base sm:text-lg font-bold text-neutral-900 group-hover:text-brand transition-colors duration-200 line-clamp-2 leading-snug mb-2.5">
-          <Link href={`/guides/post/${post.slug}`} prefetch={false}>
+          <Link href={`/guides/post/${post.slug}`}>
             {post.title}
           </Link>
         </h3>
@@ -124,7 +123,6 @@ export const GuideCard: React.FC<GuideCardProps> = ({ post, priority = false }) 
 
           <Link
             href={`/guides/post/${post.slug}`}
-            prefetch={false}
             className="text-xs font-bold text-banner group-hover:text-brand flex items-center gap-1 transition-colors"
           >
             <span>Read Guide</span>

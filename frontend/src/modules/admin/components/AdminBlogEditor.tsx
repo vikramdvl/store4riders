@@ -52,6 +52,8 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createBlogPostSchema } from "@store4riders/shared-validation";
 import { compressImageToWebP, uploadImageToS3 } from "@/core/utils/imageCompressor";
+import { cleanRichContent } from "@/core/utils/cleanRichContent";
+import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
 import { slugify } from "@store4riders/shared-utils";
 import { getVideoEmbedInfo } from "@/modules/guides";
 import { toast } from "sonner";
@@ -1428,10 +1430,10 @@ export function AdminBlogEditor({ id }: AdminBlogEditorProps) {
                 Featured Video Player rendered at top of post
               </p>
             </div>
-          ) : featuredImageValue ? (
+          ) : normalizeExternalImageUrl(featuredImageValue) ? (
             <div className="relative w-full h-72 sm:h-96 rounded-xl overflow-hidden bg-slate-100">
               <Image
-                src={featuredImageValue}
+                src={normalizeExternalImageUrl(featuredImageValue)}
                 alt={titleValue || "Preview"}
                 fill
                 sizes="(max-width: 1024px) 100vw, 896px"
@@ -1466,8 +1468,12 @@ export function AdminBlogEditor({ id }: AdminBlogEditorProps) {
 
           {/* Rendered HTML */}
           <div
-            className="prose prose-slate prose-sm sm:prose-base max-w-none leading-relaxed prose-a:text-blue-600 hover:prose-a:text-blue-800 prose-a:underline prose-a:font-medium"
-            dangerouslySetInnerHTML={{ __html: contentValue || "<p class='text-slate-400 italic'>No content written yet.</p>" }}
+            className="prose prose-slate prose-sm sm:prose-base max-w-none leading-relaxed prose-a:text-blue-600 hover:prose-a:text-blue-800 prose-a:underline prose-a:font-medium prose-img:rounded-lg prose-img:shadow-sm prose-img:my-4 prose-img:mx-auto"
+            dangerouslySetInnerHTML={{
+              __html: contentValue
+                ? cleanRichContent(contentValue, { preserveFaqs: true })
+                : "<p class='text-slate-400 italic'>No content written yet.</p>",
+            }}
           />
         </div>
       )}

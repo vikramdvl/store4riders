@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { ICategory } from "@store4riders/shared-types";
 import { toast } from "sonner";
+import { revalidateStorefrontPaths, collectCategoryStorefrontPaths } from "../utils/revalidateStorefront";
 
 export interface ICategoryTree extends ICategory {
   children?: ICategoryTree[];
@@ -28,6 +29,7 @@ export function useCategoryTree() {
       const response = await apiClient.get<{ success: boolean; data: ICategoryTree[] }>("/categories/tree");
       return response.data.data;
     },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -38,9 +40,10 @@ export function useCreateCategory() {
       const response = await apiClient.post<{ success: boolean; data: ICategory }>("/admin/categories", data);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       toast.success("Category created successfully");
       queryClient.invalidateQueries({ queryKey: ["categoryTree"] });
+      revalidateStorefrontPaths(collectCategoryStorefrontPaths(created));
     },
     onError: (error: any) => {
       toast.error(formatApiError(error, "Failed to create category"));
@@ -55,9 +58,10 @@ export function useUpdateCategory() {
       const response = await apiClient.put<{ success: boolean; data: ICategory }>(`/admin/categories/${id}`, data);
       return response.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (updated) => {
       toast.success("Category updated successfully");
       queryClient.invalidateQueries({ queryKey: ["categoryTree"] });
+      revalidateStorefrontPaths(collectCategoryStorefrontPaths(updated));
     },
     onError: (error: any) => {
       toast.error(formatApiError(error, "Failed to update category"));
@@ -75,6 +79,7 @@ export function useDeleteCategory() {
     onSuccess: () => {
       toast.success("Category deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["categoryTree"] });
+      revalidateStorefrontPaths(["/", "/products"]);
     },
     onError: (error: any) => {
       toast.error(formatApiError(error, "Failed to delete category"));

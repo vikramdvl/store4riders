@@ -2,13 +2,17 @@ import { ReviewRepository } from "./review.repository";
 import { IReview, IStoreReview } from "@store4riders/shared-types";
 import { ConflictError, ValidationError, AppError, NotFoundError } from "../../core/errors/AppError";
 import { logger } from "../../core/utils/logger";
+import { getCache, setCache, deleteCache, clearReviewCaches, clearProductCaches } from "../../core/cache/redis";
+
+const REVIEW_CACHE_TTL = 1800; // 30 minutes (invalidated instantly on review write/sync)
+const STORE_REVIEWS_POOL_KEY = "reviews_store_pool_v1";
+const STORE_REVIEWS_POOL_LIMIT = 50;
 
 /**
  * @class ReviewService
  * @description Core business logic for Product & Store (Google) Reviews.
  */
 export class ReviewService {
-  
   static async addReview(userId: string, data: Partial<IReview>): Promise<IReview> {
     const existing = await ReviewRepository.findByUserAndProduct(userId, data.productId!);
     if (existing) {
@@ -22,16 +26,24 @@ export class ReviewService {
       const stats = await ReviewRepository.calculateRatingStats(data.productId!);
       const { ProductRepository } = await import("../product/product.repository");
       await ProductRepository.updateRatingStats(data.productId!, stats.avgRating, stats.reviewCount);
+      await clearProductCaches(Boolean(data.productId)).catch(() => {});
       logger.info(`Updated rating stats for product ${data.productId}`, stats);
     } catch (err: any) {
       logger.error("Failed to update product rating stats", { error: err.message, productId: data.productId });
     }
 
+    await deleteCache(`reviews_product_v1_${data.productId}`);
     return review;
   }
 
   static async getProductReviews(productId: string): Promise<IReview[]> {
-    return ReviewRepository.findByProductId(productId);
+    const cacheKey = `reviews_product_v1_${productId}`;
+    const cached = await getCache(cacheKey);
+    if (cached) return cached as IReview[];
+
+    const reviews = await ReviewRepository.findByProductId(productId);
+    await setCache(cacheKey, reviews, REVIEW_CACHE_TTL);
+    return reviews;
   }
 
   static async getStoreReviews(
@@ -39,6 +51,41 @@ export class ReviewService {
     random: boolean = false,
     excludeIds: string[] = []
   ): Promise<IStoreReview[]> {
+    // Fast-path: serve both random and filtered store review requests from a cached 50-item pool
+    if (limit <= STORE_REVIEWS_POOL_LIMIT) {
+      let pool = (await getCache(STORE_REVIEWS_POOL_KEY)) as IStoreReview[] | null;
+      if (!Array.isArray(pool) || pool.length === 0) {
+        pool = await ReviewRepository.getStoreReviews(STORE_REVIEWS_POOL_LIMIT, false, []);
+        if (pool.length === 0 && process.env.SERPAPI_KEY) {
+          try {
+            logger.info("Store reviews collection is empty in DB. Auto-syncing from Google via SerpApi...");
+            pool = await this.syncGoogleReviews();
+          } catch (err: any) {
+            logger.warn("Auto-syncing Google reviews on empty state failed", { error: err.message });
+          }
+        }
+        if (pool.length > 0) {
+          await setCache(STORE_REVIEWS_POOL_KEY, pool, REVIEW_CACHE_TTL);
+        }
+      }
+
+      const excludeSet = new Set(excludeIds.map((id) => String(id)));
+      const filtered = excludeSet.size > 0
+        ? pool.filter((r: any) => !excludeSet.has(String(r._id || "")) && !excludeSet.has(String(r.externalId || "")))
+        : pool;
+
+      if (random && filtered.length > 1) {
+        const shuffled = [...filtered];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled.slice(0, limit);
+      }
+
+      return filtered.slice(0, limit);
+    }
+
     let reviews = await ReviewRepository.getStoreReviews(limit, random, excludeIds);
     if (reviews.length === 0 && process.env.SERPAPI_KEY) {
       try {
@@ -48,27 +95,38 @@ export class ReviewService {
         logger.warn("Auto-syncing Google reviews on empty state failed", { error: err.message });
       }
     }
+
     return reviews;
   }
 
   static async getStoreRatingStats(): Promise<{ rating: number; reviewCount: string }> {
+    const cacheKey = "reviews_store_stats_v1";
+    const cached = await getCache(cacheKey);
+    if (cached && typeof cached === "object") {
+      return cached as { rating: number; reviewCount: string };
+    }
+
     try {
       const { SettingRepository } = await import("../settings/setting.repository");
       const settings = await SettingRepository.getSettings();
       if (settings.googleLastSyncedAt && settings.googleRating && settings.googleRating > 0) {
-        return {
+        const result = {
           rating: settings.googleRating,
           reviewCount: settings.googleReviewCount ? String(settings.googleReviewCount) : "",
         };
+        await setCache(cacheKey, result, REVIEW_CACHE_TTL);
+        return result;
       }
     } catch {
       // Fallback to reviews calculation
     }
     const stats = await ReviewRepository.calculateStoreRatingStats();
-    return {
+    const result = {
       rating: stats.avgRating,
       reviewCount: stats.reviewCount > 0 ? `${stats.reviewCount}+` : "",
     };
+    await setCache(cacheKey, result, REVIEW_CACHE_TTL);
+    return result;
   }
 
   static async syncGoogleReviews(apiKey?: string, pages: number = 1): Promise<IStoreReview[]> {
@@ -108,8 +166,8 @@ export class ReviewService {
           placeRating = parseFloat(data.place_info.rating);
         }
         if (data.place_info.reviews !== undefined) {
-          placeReviewsCount = typeof data.place_info.reviews === "number" 
-            ? data.place_info.reviews 
+          placeReviewsCount = typeof data.place_info.reviews === "number"
+            ? data.place_info.reviews
             : parseInt(String(data.place_info.reviews), 10);
         }
       }
@@ -157,6 +215,7 @@ export class ReviewService {
       }
     }
 
+    await clearReviewCaches();
     return saved;
   }
 
@@ -187,5 +246,4 @@ export class ReviewService {
       return null;
     }
   }
-
 }

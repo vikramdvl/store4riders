@@ -76,7 +76,7 @@ export const CheckoutPageModule = () => {
   const { items, clearCart, isLoaded } = useCartStore();
   const [mounted, setMounted] = useState(false);
   const { mutate: placeOrder, mutateAsync: placeOrderAsync, isPending: isPlacingOrder } = useCheckout();
-  const { data: settings } = usePublicSettings();
+  const { data: settings } = usePublicSettings({ staleTime: 30 * 1000 });
   const { data: savedAddresses = [] } = useUserAddresses();
   const { mutateAsync: addAddressAsync, isPending: isAddingAddress } = useAddAddress();
   const { mutateAsync: updateAddressAsync, isPending: isUpdatingAddress } = useUpdateAddress();

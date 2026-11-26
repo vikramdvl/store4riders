@@ -10,7 +10,11 @@ import mongoose from "mongoose";
 import { CategoryModel } from "../../modules/category/category.model";
 import { BrandModel } from "../../modules/brand/brand.model";
 import { slugify, extractProductDimensions, extractProductWeight, parseAttributesString } from "@store4riders/shared-utils";
-import { resolveCanonicalCategorySlugs } from "../../modules/product/product.category-constants";
+import {
+  buildSearchSlugs,
+  MAGENTO_PATH_TO_NAVBAR_SLUG,
+  resolveCanonicalCategorySlugs,
+} from "../../modules/product/product.category-constants";
 
 // BullMQ Worker dedicated connection
 const connection = createWorkerRedisConnection("migrationWorker");
@@ -141,6 +145,9 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
     await BrandModel.updateOne({ slug }, { $set: { name: b, slug, isActive: true } }, { upsert: true });
   }
 
+  const isTestSegment = (val: string) =>
+    /^(?:test(?:[\s_-]|$)|root[\s_-]*test)|[\s_-]test(?:[\s_-]|$)/i.test(val.trim());
+
   for (const catStr of categoriesToCreate) {
     if (!catStr) continue;
     const paths = catStr.split(",");
@@ -150,14 +157,33 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
       let currentSlug = "";
       for (const p of parts) {
         if (p === "Default Category" || p === "Root Catalog") continue;
-        currentSlug = currentSlug ? `${currentSlug}-${slugify(p)}` : slugify(p);
+        if (isTestSegment(p)) break;
+
+        const leafSlug = slugify(p);
+        if (!leafSlug || isTestSegment(leafSlug)) break;
+
+        currentSlug = currentSlug ? `${currentSlug}-${leafSlug}` : leafSlug;
+        const mappedSegmentSlug = MAGENTO_PATH_TO_NAVBAR_SLUG[p.toLowerCase()];
+        const lookupSlugs = Array.from(
+          new Set([mappedSegmentSlug, ...buildSearchSlugs(leafSlug), currentSlug].filter(Boolean))
+        );
+
+        const existingCat: any = await CategoryModel.findOne({ slug: { $in: lookupSlugs } }).lean();
+        if (existingCat && existingCat._id) {
+          parentId = existingCat._id.toString();
+          currentSlug = existingCat.slug;
+          continue;
+        }
+
+        const targetSlug = mappedSegmentSlug || leafSlug;
         const cat: any = await CategoryModel.findOneAndUpdate(
-          { slug: currentSlug },
-          { $set: { name: p, slug: currentSlug, parentId: parentId || null } },
+          { slug: targetSlug },
+          { $setOnInsert: { name: p, slug: targetSlug, parentId: parentId || null } },
           { upsert: true, new: true }
         );
         if (cat && cat._id) {
           parentId = cat._id.toString();
+          currentSlug = cat.slug;
         }
       }
     }

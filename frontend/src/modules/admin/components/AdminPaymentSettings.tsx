@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/core/api/client";
+import { revalidateStorefrontPaths } from "@/core/utils/revalidateStorefront";
 import { toast } from "sonner";
 import Button from "@/components/ui/Button";
 import {
@@ -116,6 +117,7 @@ export function AdminPaymentSettings() {
       await apiClient.put("/admin/settings", payload);
       await queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
       await queryClient.refetchQueries({ queryKey: ["publicSettings"] });
+      revalidateStorefrontPaths(["/"]);
       toast.success("Payment settings saved successfully");
     } catch (err: any) {
       const msg = err.response?.data?.message || err.response?.data?.error || "Failed to save settings";

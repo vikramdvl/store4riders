@@ -49,6 +49,16 @@ const nextConfig = {
         destination: '/cart',
         permanent: true,
       },
+      {
+        source: '/blog',
+        destination: '/guides',
+        permanent: true,
+      },
+      {
+        source: '/blog/:slug*',
+        destination: '/guides/:slug*',
+        permanent: true,
+      },
     ];
   },
   async headers() {
@@ -130,8 +140,8 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react', '@heroicons/react'],
     staleTimes: {
-      dynamic: 30,
-      static: 180,
+      dynamic: 120,
+      static: 300,
     },
   },
 };

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import Link from "next/link";
 import {
   useSearchRedirects,
   useCreateSearchRedirect,
@@ -28,7 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { DEFAULT_NAV_ITEMS } from "@/modules/homepage/components/navbar/nav.constants";
-import { isLegacyNonMenuCategory } from "@/core/utils/navCategories";
+import { areCategorySlugsEquivalent, isLegacyNonMenuCategory } from "@/core/utils/navCategories";
 
 export function AdminSearchRedirectsManager() {
   const [page, setPage] = useState(1);
@@ -96,20 +97,35 @@ export function AdminSearchRedirectsManager() {
   // 2. Custom Categories created in Admin / Database (from useCategoryTree)
   const databaseCustomCategories = useMemo(() => {
     const menuUrls = new Set(menuCategories.map((m) => m.url.toLowerCase()));
+    const menuLeafSlugs = menuCategories
+      .map((m) => m.url.split("?")[0].split("/").filter(Boolean).pop()?.toLowerCase() || "")
+      .filter(Boolean);
+    const seenSlugs: string[] = [...menuLeafSlugs];
     const list: { name: string; url: string; path: string }[] = [];
+
+    const isTestSlug = (slug: string) =>
+      /^(?:test(?:[-_]|$)|root[-_]test)|[-_]test(?:[-_]|$)/i.test(slug);
 
     const traverse = (nodes: ICategoryTree[], parentPath = "") => {
       for (const node of nodes) {
-        if (isLegacyNonMenuCategory(node.slug) || node.includeInMenu === false) {
+        const slug = String(node.slug || "").toLowerCase().trim();
+        const name = String(node.name || "").trim();
+        if (!slug || !name || isTestSlug(slug) || isLegacyNonMenuCategory(slug) || node.includeInMenu === false) {
           continue;
         }
 
-        const currentPath = parentPath ? `${parentPath} → ${node.name}` : node.name;
-        const cleanUrl = `/${node.slug.replace(/^\//, "")}`;
+        const currentPath = parentPath ? `${parentPath} → ${name}` : name;
+        const cleanUrl = `/${slug.replace(/^\//, "")}`;
+        const matchesMenuUrl =
+          menuUrls.has(cleanUrl.toLowerCase()) || menuUrls.has(`/${slug}`.toLowerCase());
+        const matchesSeenSlug = seenSlugs.some(
+          (existing) => existing === slug || areCategorySlugsEquivalent(existing, slug)
+        );
 
-        if (!menuUrls.has(cleanUrl.toLowerCase()) && !menuUrls.has(`/${node.slug}`.toLowerCase())) {
+        if (!matchesMenuUrl && !matchesSeenSlug) {
+          seenSlugs.push(slug);
           list.push({
-            name: node.name,
+            name,
             url: cleanUrl,
             path: currentPath,
           });
@@ -256,6 +272,21 @@ export function AdminSearchRedirectsManager() {
 
   return (
     <div className="space-y-6">
+      {/* Scope Clarification Banner */}
+      <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-blue-900">
+        <div>
+          <span className="font-bold">Search Query Redirects:</span> These rules trigger only when a customer types a keyword in the{" "}
+          <span className="font-mono font-semibold">/search</span> bar. Looking to redirect an old page URL to a new URL (301/302)?
+        </div>
+        <Link
+          href="/admin/redirects"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs shrink-0 transition-colors"
+        >
+          <span>Open Page Redirects (301/302)</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+
       {/* Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-xl border border-neutral-200 flex items-center gap-4">
@@ -513,7 +544,7 @@ export function AdminSearchRedirectsManager() {
                   Select Target Category <span className="text-neutral-400 font-normal">(Menu & Submenu Selector)</span>
                 </label>
                 <select
-                  value={formRedirectUrl}
+                  value={allAvailableCategories.some((c) => c.url === formRedirectUrl) ? formRedirectUrl : ""}
                   onChange={handleCategorySelect}
                   className="w-full px-3.5 py-2.5 text-sm bg-neutral-50 border border-neutral-200 rounded-lg focus:outline-none focus:border-brand focus:bg-white font-medium"
                 >

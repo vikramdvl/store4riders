@@ -13,6 +13,7 @@ import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
 import { syncPageQueryParam } from "@/core/utils/shallowUrl";
 import { GuideCard } from "./GuideCard";
 import { GuideAuthorCard } from "./GuideAuthorCard";
+import { GuideCardsGridSkeleton } from "./GuideCardsGridSkeleton";
 import { MagnifyingGlassIcon, BookOpenIcon } from "@heroicons/react/24/outline";
 
 const GUIDES_PER_PAGE = 18;
@@ -93,14 +94,12 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
       search: debouncedSearch || undefined,
     },
     matchesInitialSsrQuery && initialPostsData
-      ? { initialData: initialPostsData, initialDataUpdatedAt: 0 }
+      ? { initialData: initialPostsData }
       : undefined
   );
 
   const { data: categories = [] } = usePublicBlogCategories(
-    initialCategories
-      ? { initialData: initialCategories, initialDataUpdatedAt: 0 }
-      : undefined
+    initialCategories ? { initialData: initialCategories } : undefined
   );
 
   useEffect(() => {
@@ -265,10 +264,7 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
 
         {/* Guides Grid / Loading / Error / Empty */}
         {isLoading && !postsData ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-3">
-            <div className="w-10 h-10 border-4 border-brand border-t-transparent rounded-full animate-spin" />
-            <p className="text-xs font-semibold text-neutral-500">Loading motorcycle guides...</p>
-          </div>
+          <GuideCardsGridSkeleton count={6} />
         ) : isError && posts.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-neutral-200 max-w-md mx-auto my-12">
             <BookOpenIcon className="w-12 h-12 text-neutral-300 mx-auto mb-3" />

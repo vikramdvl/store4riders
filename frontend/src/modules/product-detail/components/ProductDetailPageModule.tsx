@@ -10,6 +10,7 @@ import { useRecentViewsStore } from "@/stores/useRecentViewsStore";
 import { useStoreReviews } from "@/core/hooks/useStoreReviews";
 import { useUIStore } from "@/stores/useUIStore";
 import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
+import ProductDetailLoading from "../../../../app/products/[slug]/loading";
 
 /**
  * Helper: Strip HTML tags for clean plain text.
@@ -913,10 +914,21 @@ export const ProductDetailPageModule = ({ slug: propSlug, initialProduct }: Prod
   const productId = product?._id || "";
   const { data: settings } = usePublicSettings();
 
-  // Smart recommendations (Kit, Upsell & Cross-sell)
-  const { data: kitProducts } = useProductKit(slug);
-  const { data: upsellProducts } = useProductUpsell(slug);
-  const { data: crossSellProducts } = useProductCrossSell(slug);
+  // Smart recommendations (Kit, Upsell & Cross-sell) — skip API calls if product has no SKUs configured
+  const hasRelatedSkus = Boolean(
+    Array.isArray(product?.relatedSkus) && product.relatedSkus.some((s) => Boolean(s?.trim()))
+  );
+  const hasUpsellSkus = Boolean(
+    Array.isArray(product?.upsellSkus) && product.upsellSkus.some((s) => Boolean(s?.trim()))
+  );
+  const hasCrossSellSkus = Boolean(
+    Array.isArray((product as any)?.crosssellSkus) &&
+      (product as any).crosssellSkus.some((s: string) => Boolean(s?.trim()))
+  );
+
+  const { data: kitProducts } = useProductKit(slug, hasRelatedSkus);
+  const { data: upsellProducts } = useProductUpsell(slug, hasUpsellSkus);
+  const { data: crossSellProducts } = useProductCrossSell(slug, hasCrossSellSkus);
   const { data: reviewsData } = useProductReviews(productId);
   const homepageReviewIds = useUIStore((state) => state.homepageReviewIds);
   const { data: storeReviewsData, fetchNextPage, hasNextPage, isFetchingNextPage } = useStoreReviews({
@@ -1011,35 +1023,8 @@ export const ProductDetailPageModule = ({ slug: propSlug, initialProduct }: Prod
     );
   }, [product, kitProducts, upsellProducts, crossSellProducts, mappedReviews, storeReviewsData, settings]);
 
-  // Show a lightweight skeleton instead of a blocking full-page spinner
   if (isLoading) {
-    return (
-      <div className="w-full min-h-screen bg-white">
-        {/* Skeleton header */}
-        <div className="h-12 bg-neutral-100 animate-pulse" />
-        <div className="h-16 bg-white border-b border-neutral-200" />
-        <div className="max-w-[1400px] mx-auto px-4 md:px-6 pt-8">
-          <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
-            {/* Skeleton gallery */}
-            <div className="w-full lg:w-[40%]">
-              <div className="aspect-square bg-neutral-100 rounded-md animate-pulse" />
-              <div className="flex gap-2 mt-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="w-20 h-20 bg-neutral-100 rounded-sm animate-pulse" />
-                ))}
-              </div>
-            </div>
-            {/* Skeleton info */}
-            <div className="w-full lg:w-[60%] space-y-4">
-              <div className="h-4 w-32 bg-neutral-100 rounded animate-pulse" />
-              <div className="h-8 w-3/4 bg-neutral-100 rounded animate-pulse" />
-              <div className="h-6 w-40 bg-neutral-100 rounded animate-pulse" />
-              <div className="h-20 w-full bg-neutral-100 rounded animate-pulse mt-4" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <ProductDetailLoading />;
   }
 
   if (error || !product || !mappedProduct) {

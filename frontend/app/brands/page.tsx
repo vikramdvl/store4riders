@@ -1,21 +1,25 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 import { BrandsDirectoryModule } from "@/modules/brands";
 import { getRobotsMetadata } from "@/core/utils/seo-schema";
 
-export const revalidate = 60;
+export const revalidate = 1800;
 
-const rawApiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+const rawApiBase = (
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:4000/api/v1"
+).replace(/\/+$/, "");
 const API_BASE = rawApiBase.includes("/v1")
   ? rawApiBase
   : rawApiBase.endsWith("/api")
   ? `${rawApiBase}/v1`
   : `${rawApiBase}/api/v1`;
 
-async function getBrandsPageSeo() {
+const getBrandsPageSeo = cache(async () => {
   try {
     const res = await fetch(`${API_BASE}/brands/page-seo`, {
-      next: { revalidate: 60 },
+      next: { revalidate: 1800 },
       signal: AbortSignal.timeout(2500),
     });
     if (!res.ok) return null;
@@ -24,7 +28,21 @@ async function getBrandsPageSeo() {
   } catch {
     return null;
   }
-}
+});
+
+const getPublicBrands = cache(async () => {
+  try {
+    const res = await fetch(`${API_BASE}/brands`, {
+      next: { revalidate: 1800 },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return undefined;
+    const json = await res.json();
+    return Array.isArray(json?.data) ? json.data : undefined;
+  } catch {
+    return undefined;
+  }
+});
 
 export async function generateMetadata(): Promise<Metadata> {
   const seo = await getBrandsPageSeo();
@@ -70,10 +88,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function BrandsPage() {
-  const pageConfig = await getBrandsPageSeo();
+  const [pageConfig, initialBrands] = await Promise.all([
+    getBrandsPageSeo(),
+    getPublicBrands(),
+  ]);
   return (
     <Suspense fallback={null}>
-      <BrandsDirectoryModule initialConfig={pageConfig} />
+      <BrandsDirectoryModule initialConfig={pageConfig} initialBrands={initialBrands} />
     </Suspense>
   );
 }

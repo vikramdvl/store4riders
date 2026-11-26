@@ -13,9 +13,9 @@ export async function generateMetadata({ searchParams }: ProductsPageProps): Pro
 
   if (category) {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+      const baseUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
       const fetchUrl = baseUrl.includes('/v1') ? `${baseUrl}/categories/tree` : `${baseUrl}/v1/categories/tree`;
-      const res = await fetch(fetchUrl, { next: { revalidate: 60 } });
+      const res = await fetch(fetchUrl, { next: { revalidate: 1800 } });
       if (res.ok) {
         const data = await res.json();
         const findCategory = (nodes: any[]): any => {

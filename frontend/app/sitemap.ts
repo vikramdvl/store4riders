@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { GUIDE_CATEGORIES, GUIDE_POSTS } from "@/modules/guides";
+import { areCategorySlugsEquivalent, isLegacyNonMenuCategory } from "@/core/utils/navCategories";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://store4riders.com";
@@ -111,15 +112,34 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       const catJson = await catRes.json();
       const nodes = catJson?.data || [];
 
+      const seenPaths = new Set<string>();
+      const seenSlugs: string[] = [];
+      const isTestSlug = (slug: string) =>
+        /^(?:test(?:[-_]|$)|root[-_]test)|[-_]test(?:[-_]|$)/i.test(slug);
+
       const traverse = (items: any[], parentPath = "") => {
         for (const item of items) {
-          const currentPath = parentPath ? `${parentPath}/${item.slug}` : `/${item.slug}`;
-          categoryRoutes.push({
-            url: `${baseUrl}${currentPath}`,
-            lastModified: item.updatedAt ? new Date(item.updatedAt) : now,
-            changeFrequency: "weekly",
-            priority: parentPath ? 0.8 : 0.85,
-          });
+          const slug = String(item?.slug || "").trim().toLowerCase();
+          const name = String(item?.name || "").trim();
+          if (!slug || !name || isTestSlug(slug) || isLegacyNonMenuCategory(slug)) {
+            continue;
+          }
+
+          const currentPath = parentPath ? `${parentPath}/${slug}` : `/${slug}`;
+          const isDupSlug = seenSlugs.some(
+            (existing) => existing === slug || areCategorySlugsEquivalent(existing, slug)
+          );
+
+          if (!seenPaths.has(currentPath) && !isDupSlug) {
+            seenPaths.add(currentPath);
+            seenSlugs.push(slug);
+            categoryRoutes.push({
+              url: `${baseUrl}${currentPath}`,
+              lastModified: item.updatedAt ? new Date(item.updatedAt) : now,
+              changeFrequency: "weekly",
+              priority: parentPath ? 0.8 : 0.85,
+            });
+          }
           if (item.children && Array.isArray(item.children)) {
             traverse(item.children, currentPath);
           }

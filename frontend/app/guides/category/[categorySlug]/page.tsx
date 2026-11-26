@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { redirectIfMatchedOrNotFound } from "@/core/utils/urlRedirects";
 import { getRobotsMetadata } from "@/core/utils/seo-schema";
 import {
   GuidesCategoryModule,
@@ -10,7 +11,7 @@ import {
   buildBreadcrumbSchema,
 } from "@/modules/guides";
 
-export const revalidate = 30;
+export const revalidate = 3600;
 export const dynamicParams = true;
 
 interface Props {
@@ -82,16 +83,21 @@ export default async function GuidesCategoryPage({ params, searchParams }: Props
   const parsedPage = parseInt(resolvedSearchParams?.page || "1", 10);
   const initialPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
-  const [category, categories] = await Promise.all([
+  const [category, categories, initialPostsResult] = await Promise.all([
     fetchBlogCategoryBySlug(categorySlug),
     fetchPublicBlogCategories(),
+    fetchPublicBlogPosts(initialPage, 18, categorySlug.toLowerCase()),
   ]);
 
   if (!category || category.isActive === false) {
+    await redirectIfMatchedOrNotFound(`/guides/category/${categorySlug}`);
     notFound();
   }
 
-  const postsData = await fetchPublicBlogPosts(initialPage, 18, category.slug);
+  const postsData =
+    category.slug.toLowerCase() === categorySlug.toLowerCase()
+      ? initialPostsResult
+      : await fetchPublicBlogPosts(initialPage, 18, category.slug);
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
