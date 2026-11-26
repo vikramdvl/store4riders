@@ -87,13 +87,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function GuidePostPage({ params }: Props) {
   const { slug } = await params;
-  const post = await fetchGuideOrBlogPost(slug);
+  const [post, relatedPosts] = await Promise.all([
+    fetchGuideOrBlogPost(slug),
+    fetchRelatedBlogPosts(slug, 3),
+  ]);
 
   if (!post) {
     notFound();
   }
-
-  const relatedPosts = await fetchRelatedBlogPosts(post.slug, 3);
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||

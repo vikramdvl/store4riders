@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound, useRouter } from "next/navigation";
 import { IBlogPost, IGuidePost } from "@store4riders/shared-types";
-import { handleRichTextClick } from "@/core/utils/cleanRichContent";
+import { cleanRichContent, handleRichTextClick } from "@/core/utils/cleanRichContent";
 import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
 import { useRelatedBlogPosts } from "@/core/hooks/useBlog";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
@@ -48,6 +48,10 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({
 
   const videoEmbed = getVideoEmbedInfo((post as IBlogPost)?.videoUrl);
   const heroImage = normalizeExternalImageUrl(post.featuredImage);
+  const cleanedHtml = useMemo(
+    () => cleanRichContent(post.content || "", { preserveFaqs: true }),
+    [post.content]
+  );
   const summaryText =
     (post as IBlogPost).excerpt || (post as IGuidePost).description || "";
 
@@ -109,92 +113,91 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({
   };
 
   return (
-    <article className="min-h-screen bg-neutral-50/50 pb-24">
+    <article className="min-h-screen bg-neutral-50/50 pb-20">
       {/* Breadcrumb Navigation */}
-      <Breadcrumb items={breadcrumbItems} />
+      <Breadcrumb items={breadcrumbItems} containerClassName="max-w-4xl" />
 
       {/* Post Header */}
-      <header className="bg-white border-b border-neutral-200/80 pt-10 pb-12">
+      <header className="bg-white border-b border-neutral-200/80 pt-6 pb-7 sm:pt-7 sm:pb-8">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Back link */}
-          <Link
-            href={hasCategory ? `/guides/category/${post.categorySlug}` : "/guides"}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-500 hover:text-brand transition-colors mb-6 uppercase tracking-wider"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>{hasCategory ? `Back to ${post.categoryName}` : "Back to All Guides"}</span>
-          </Link>
+          {/* Top navigation & category row */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <Link
+              href={hasCategory ? `/guides/category/${post.categorySlug}` : "/guides"}
+              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-neutral-500 hover:text-brand transition-colors uppercase tracking-wider"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>{hasCategory ? `Back to ${post.categoryName}` : "Back to All Guides"}</span>
+            </Link>
 
-          {/* Category Badge */}
-          {hasCategory && (
-            <div className="mb-4">
+            {hasCategory && (
               <Link
                 href={`/guides/category/${post.categorySlug}`}
-                className="inline-block bg-brand/10 text-brand text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-full hover:bg-brand hover:text-white transition-colors"
+                className="inline-block bg-brand/10 text-brand text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full hover:bg-brand hover:text-white transition-colors"
               >
                 {post.categoryName}
               </Link>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Headline - CSS Selector matched in speakable spec */}
-          <h1 className="guide-headline text-2xl sm:text-4xl lg:text-5xl font-sans font-black text-neutral-900 tracking-tight leading-tight mb-4">
+          <h1 className="guide-headline text-xl sm:text-2xl lg:text-[28px] font-sans font-bold text-neutral-900 tracking-tight leading-snug mb-2.5">
             {post.title}
           </h1>
 
           {/* Excerpt / Summary */}
           {summaryText && (
-            <p className="text-base sm:text-lg text-neutral-600 leading-relaxed mb-6 font-normal">
+            <p className="text-sm sm:text-[15px] text-neutral-600 leading-relaxed mb-5 font-normal">
               {summaryText}
             </p>
           )}
 
           {/* Metadata Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-neutral-100 text-xs sm:text-sm text-neutral-600">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-neutral-100 text-xs text-neutral-600">
             {/* Author info */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               {authorAvatar ? (
-                <div className="relative w-10 h-10 rounded-full overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
+                <div className="relative w-8 h-8 rounded-full overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
                   <Image
                     src={authorAvatar}
                     alt={authorName}
                     fill
-                    sizes="40px"
+                    sizes="32px"
                     className="object-cover"
                   />
                 </div>
               ) : (
-                <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs tracking-wider shadow-2xs border border-slate-800 shrink-0">
+                <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-[11px] tracking-wider shadow-2xs border border-slate-800 shrink-0">
                   {authorInitials}
                 </div>
               )}
               <div>
-                <p className="font-bold text-neutral-900 leading-tight">
+                <p className="font-semibold text-neutral-900 leading-tight text-xs sm:text-[13px]">
                   {authorName}
                 </p>
-                <p className="text-xs text-brand font-medium">
+                <p className="text-[11px] text-brand font-medium">
                   {post.author?.jobTitle || "Motorcycle Gear Specialist"}
                 </p>
               </div>
             </div>
 
             {/* Date and Reading Time */}
-            <div className="flex items-center gap-4 text-xs font-medium text-neutral-500">
+            <div className="flex items-center gap-3.5 text-[11px] sm:text-xs font-medium text-neutral-500">
               {formattedDate && (
                 <span className="flex items-center gap-1.5" suppressHydrationWarning>
-                  <Calendar className="w-4 h-4 text-neutral-400" />
+                  <Calendar className="w-3.5 h-3.5 text-neutral-400" />
                   <span suppressHydrationWarning>{formattedDate}</span>
                 </span>
               )}
               {post.readingTimeMinutes ? (
                 <span className="flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-neutral-400" />
+                  <Clock className="w-3.5 h-3.5 text-neutral-400" />
                   <span>{post.readingTimeMinutes} min read</span>
                 </span>
               ) : null}
               {post.wordCount ? (
                 <span className="hidden sm:flex items-center gap-1.5">
-                  <BookOpen className="w-4 h-4 text-neutral-400" />
+                  <BookOpen className="w-3.5 h-3.5 text-neutral-400" />
                   <span>{post.wordCount.toLocaleString()} words</span>
                 </span>
               ) : null}
@@ -204,11 +207,11 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({
       </header>
 
       {/* Main Content Area */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mt-10">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 sm:mt-8">
         {/* Featured Video Embed (if provided) or Featured Cover Image */}
         {videoEmbed ? (
-          <div className="mb-10">
-            <div className="relative aspect-video w-full rounded-2xl overflow-hidden shadow-2xl border border-neutral-200/90 bg-neutral-950">
+          <div className="mb-7">
+            <div className="relative aspect-video w-full rounded-xl overflow-hidden shadow-md border border-neutral-200/90 bg-neutral-950">
               {videoEmbed.type === "youtube" || videoEmbed.type === "vimeo" ? (
                 <iframe
                   src={videoEmbed.embedUrl}
@@ -226,41 +229,42 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({
                 />
               )}
             </div>
-            <div className="flex items-center gap-2 mt-3 px-1 text-xs text-neutral-600">
+            <div className="flex items-center gap-2 mt-2.5 px-1 text-xs text-neutral-600">
               <span className="w-2 h-2 rounded-full bg-brand animate-pulse" />
-              <span className="font-bold text-neutral-900">Featured Video Walkthrough / Review</span>
+              <span className="font-semibold text-neutral-900">Featured Video Walkthrough / Review</span>
               <span className="text-neutral-400">•</span>
               <span className="text-neutral-500">Official Store4Riders Channel</span>
             </div>
           </div>
         ) : heroImage ? (
-          <div className="relative aspect-[16/9] w-full rounded-2xl overflow-hidden shadow-lg border border-neutral-200/80 mb-10 bg-neutral-100">
+          <div className="relative aspect-[16/9] max-h-[420px] w-full rounded-xl overflow-hidden shadow-sm border border-neutral-200/80 mb-7 bg-neutral-100">
             <Image
               src={heroImage}
               alt={post.title}
               fill
               priority
-              sizes="(max-width: 896px) 100vw, 896px"
+              sizes="(max-width: 896px) 100vw, 832px"
               className="object-cover"
             />
           </div>
         ) : null}
 
         {/* Article Body - CSS Selector matched in speakable spec */}
-        <div className="bg-white rounded-2xl p-6 sm:p-10 lg:p-12 border border-neutral-200/80 shadow-sm mb-12">
+        <div className="bg-white rounded-xl p-5 sm:p-7 lg:p-9 border border-neutral-200/80 shadow-xs mb-10">
           <div
             onClick={(e) => handleRichTextClick(e, router)}
-            className="guide-article-body prose prose-neutral sm:prose-lg max-w-none 
-              prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-neutral-950
-              prose-h1:text-2xl sm:prose-h1:text-3xl prose-h1:mb-4
-              prose-h2:text-xl sm:prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-3 prose-h2:border-b prose-h2:border-neutral-100 prose-h2:pb-2
-              prose-p:text-neutral-700 prose-p:leading-relaxed prose-p:mb-4
-              prose-ul:my-4 prose-ul:list-disc prose-ul:pl-6 prose-li:text-neutral-700 prose-li:my-1
-              prose-ol:my-4 prose-ol:list-decimal prose-ol:pl-6 prose-li:text-neutral-700
-              prose-strong:text-neutral-900 prose-strong:font-bold
+            className="guide-article-body prose prose-neutral prose-sm sm:prose-base max-w-none 
+              prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-neutral-900
+              prose-h1:text-xl sm:prose-h1:text-2xl prose-h1:mt-5 prose-h1:mb-3
+              prose-h2:text-lg sm:prose-h2:text-xl prose-h2:mt-7 prose-h2:mb-2.5 prose-h2:border-b prose-h2:border-neutral-100 prose-h2:pb-1.5
+              prose-h3:text-base sm:prose-h3:text-[17px] prose-h3:mt-5 prose-h3:mb-2
+              prose-p:text-[14.5px] sm:prose-p:text-[15.5px] prose-p:text-neutral-700 prose-p:leading-[1.7] prose-p:mb-3.5
+              prose-ul:my-3.5 prose-ul:list-disc prose-ul:pl-5 prose-li:text-[14.5px] sm:prose-li:text-[15.5px] prose-li:text-neutral-700 prose-li:my-1
+              prose-ol:my-3.5 prose-ol:list-decimal prose-ol:pl-5
+              prose-strong:text-neutral-900 prose-strong:font-semibold
               prose-a:text-blue-600 hover:prose-a:text-blue-800 prose-a:underline prose-a:font-medium
-              prose-img:rounded-xl prose-img:shadow-md"
-            dangerouslySetInnerHTML={{ __html: post.content }}
+              prose-img:rounded-lg prose-img:shadow-sm prose-img:my-4 prose-img:mx-auto"
+            dangerouslySetInnerHTML={{ __html: cleanedHtml }}
           />
 
           {/* Article Topic Tags */}

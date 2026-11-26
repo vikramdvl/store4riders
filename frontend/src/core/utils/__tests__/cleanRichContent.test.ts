@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { cleanRichContent, stripHtml } from '../cleanRichContent';
+import { describe, it, expect, vi } from 'vitest';
+import { cleanRichContent, stripHtml, handleRichTextClick } from '../cleanRichContent';
 
 describe('cleanRichContent Utility', () => {
   it('should wrap tables in responsive overflow-x-auto container with border-collapse', () => {
@@ -75,6 +75,20 @@ describe('cleanRichContent Utility', () => {
     expect(cleaned).toContain('<strong>Interceptor 650</strong>');
     expect(cleaned).not.toContain('&lt;');
   });
+
+  it('should preserve FAQ sections and rewrite renamed blog slugs when preserveFaqs is true', () => {
+    const blogHtml = `
+      <p>Read <a href="https://www.store4riders.com/guides/post/motorcycle-rain-riding-what-to-wear">rain gear</a> and <a href="https://www.store4riders.com/helmets.html">helmets</a>.</p>
+      <h2>Frequently Asked Questions</h2>
+      <p><strong>Q1: How do I stay dry?</strong></p>
+    `;
+    const cleaned = cleanRichContent(blogHtml, { preserveFaqs: true });
+
+    expect(cleaned).toContain('Frequently Asked Questions');
+    expect(cleaned).toContain('Q1: How do I stay dry?');
+    expect(cleaned).toContain('href="/guides/post/stay-dry-while-riding-motorcycle-in-rains"');
+    expect(cleaned).toContain('href="/helmets"');
+  });
 });
 
 describe('stripHtml Utility', () => {
@@ -85,5 +99,32 @@ describe('stripHtml Utility', () => {
     expect(stripped).toBe('This is ECE 22.06 certified with EPS liner.');
     expect(stripped).not.toContain('<');
     expect(stripped).not.toContain('&nbsp;');
+  });
+});
+
+describe('handleRichTextClick Utility', () => {
+  it('scrolls to in-page TOC anchor links without redirecting to homepage', () => {
+    document.body.innerHTML = `
+      <div>
+        <a id="toc-link" href="#Purpose ">Purpose</a>
+        <p id="Purpose">Target section</p>
+      </div>
+    `;
+    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const replaceStateSpy = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
+    const router = { push: vi.fn() };
+    const link = document.getElementById('toc-link')!;
+
+    handleRichTextClick(
+      { target: link, preventDefault: vi.fn() } as unknown as React.MouseEvent<HTMLElement>,
+      router
+    );
+
+    expect(router.push).not.toHaveBeenCalled();
+    expect(scrollToSpy).toHaveBeenCalled();
+    expect(replaceStateSpy).toHaveBeenCalledWith(null, '', '#Purpose');
+
+    scrollToSpy.mockRestore();
+    replaceStateSpy.mockRestore();
   });
 });

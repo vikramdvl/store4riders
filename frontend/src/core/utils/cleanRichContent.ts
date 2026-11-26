@@ -9,7 +9,11 @@ import { resolveMagentoMediaUrls } from "./mediaUrlHelper";
  * 4. Stripping legacy inline typography/colors to enforce Store4Riders brand design.
  */
 
-export function cleanRichContent(rawHtml: string): string {
+export interface CleanRichContentOptions {
+  preserveFaqs?: boolean;
+}
+
+export function cleanRichContent(rawHtml: string, options: CleanRichContentOptions = {}): string {
   if (!rawHtml) return "";
   let clean = rawHtml;
 
@@ -28,10 +32,12 @@ export function cleanRichContent(rawHtml: string): string {
   clean = clean.replace(/<(script|iframe|embed|object)[^>]*>/gi, "");
   clean = clean.replace(/on\w+\s*=\s*["'][^"']*["']/gi, "");
 
-  // 1. Strip FAQs if accidentally embedded inside category or brand description
-  const faqSplit = clean.split(/(?:<(?:h[1-6]|p)[^>]*>(?:<[^>]+>)*\s*(?:Frequently\s*asked\s*questions|faqs?)\b|<(?:p|div|h[1-6])[^>]*>(?:<[^>]+>)*\s*(?:Question|Q\d*)[\s:.]|\bFrequently\s+Asked\s+Questions\b)/i);
-  if (faqSplit.length > 1) {
-    clean = faqSplit[0];
+  // 1. Strip FAQs if accidentally embedded inside category or brand description (skip when rendering full blog articles)
+  if (!options.preserveFaqs) {
+    const faqSplit = clean.split(/(?:<(?:h[1-6]|p)[^>]*>(?:<[^>]+>)*\s*(?:Frequently\s*asked\s*questions|faqs?)\b|<(?:p|div|h[1-6])[^>]*>(?:<[^>]+>)*\s*(?:Question|Q\d*)[\s:.]|\bFrequently\s+Asked\s+Questions\b)/i);
+    if (faqSplit.length > 1) {
+      clean = faqSplit[0];
+    }
   }
 
   // 1b. Resolve Magento media directives, legacy domains, and S3 description paths
@@ -82,7 +88,9 @@ export function cleanRichContent(rawHtml: string): string {
     .replace(/href=["'][^"']*\/bike-jackets-between-8000-10000["']/gi, 'href="/riding-gear/riding-jackets?minPrice=8000&maxPrice=10000"')
     .replace(/href=["'][^"']*\/best-riding-jackets-between-10000-20000["']/gi, 'href="/riding-gear/riding-jackets?minPrice=10000&maxPrice=20000"')
     .replace(/href=["'][^"']*\/premium-mesh-riding-jackets["']/gi, 'href="/riding-gear/riding-jackets?minPrice=20000"')
-    .replace(/href=["'][^"']*\/riding-gloves-below-rs-3000["']/gi, 'href="/riding-gear/riding-gloves/short-motorbike-gloves?maxPrice=3000"');
+    .replace(/href=["'][^"']*\/riding-gloves-below-rs-3000["']/gi, 'href="/riding-gear/riding-gloves/short-motorbike-gloves?maxPrice=3000"')
+    .replace(/\/guides\/post\/motorcycle-rain-riding-what-to-wear\b/gi, '/guides/post/stay-dry-while-riding-motorcycle-in-rains')
+    .replace(/\/guides\/post\/motorcycle-security-touring-theft-prevention\b/gi, '/guides/post/motorcycle-security-while-touring');
 
   // External links (e.g. YouTube, third-party sites): ensure target="_blank" and rel="nofollow noopener noreferrer" to protect SEO
   clean = clean.replace(
@@ -148,7 +156,7 @@ export function handleRichTextClick(e: React.MouseEvent<HTMLElement>, router: { 
   const link = target.closest("a");
   if (!link) return;
 
-  const hrefAttr = link.getAttribute("href") || link.href;
+  const hrefAttr = (link.getAttribute("href") || link.href || "").trim();
   if (!hrefAttr) return;
 
   // Let browser natively handle mailto/tel protocols
@@ -156,10 +164,42 @@ export function handleRichTextClick(e: React.MouseEvent<HTMLElement>, router: { 
     return;
   }
 
+  const scrollToHash = (rawHash: string): boolean => {
+    const cleanId = decodeURIComponent(rawHash.replace(/^#/, "")).trim();
+    if (!cleanId) return false;
+
+    const escaped = typeof CSS !== "undefined" && typeof CSS.escape === "function"
+      ? CSS.escape(cleanId)
+      : cleanId.replace(/([ #;?%&,.+*~\':"!^$[\]()=>|/@])/g, "\\$1");
+
+    const elem =
+      document.querySelector(`[id="${escaped}"]`) ||
+      document.querySelector(`[name="${escaped}"]`) ||
+      Array.from(document.querySelectorAll("[id], [name]")).find(
+        (el) =>
+          (el.getAttribute("id") || "").trim().toLowerCase() === cleanId.toLowerCase() ||
+          (el.getAttribute("name") || "").trim().toLowerCase() === cleanId.toLowerCase()
+      );
+
+    if (elem) {
+      const top = elem.getBoundingClientRect().top + window.scrollY - 96;
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+      window.history.replaceState(null, "", `#${cleanId}`);
+      return true;
+    }
+    return false;
+  };
+
+  // Same-page Table of Contents / anchor link (must run BEFORE new URL(..., origin) so it doesn't resolve to "/#hash")
+  if (hrefAttr.startsWith("#")) {
+    e.preventDefault();
+    scrollToHash(hrefAttr);
+    return;
+  }
+
   // Check if it's an internal link or old store4riders link
   const isInternal =
     hrefAttr.startsWith("/") ||
-    hrefAttr.startsWith("#") ||
     !hrefAttr.includes("://") ||
     link.hostname === window.location.hostname ||
     link.hostname.includes("store4riders.com");
@@ -167,18 +207,26 @@ export function handleRichTextClick(e: React.MouseEvent<HTMLElement>, router: { 
   if (isInternal) {
     e.preventDefault();
     let targetPath = hrefAttr;
+    let parsedHash = "";
+    let parsedPathname = "";
     try {
-      const parsed = new URL(hrefAttr, window.location.origin);
+      const parsed = new URL(hrefAttr, window.location.href);
       if (parsed.hostname.includes("store4riders.com") || parsed.hostname === window.location.hostname) {
-        targetPath = parsed.pathname.replace(/\.html$/i, "") + parsed.search + parsed.hash;
+        parsedPathname = parsed.pathname.replace(/\.html$/i, "");
+        parsedHash = parsed.hash;
+        targetPath = parsedPathname + parsed.search + parsed.hash;
       }
     } catch {
       targetPath = hrefAttr.replace(/^https?:\/\/(?:www\.)?store4riders\.com/i, "").replace(/\.html$/i, "");
     }
 
+    if (parsedHash && parsedPathname === window.location.pathname) {
+      scrollToHash(parsedHash);
+      return;
+    }
+
     if (targetPath.startsWith("#")) {
-      const elem = document.querySelector(targetPath);
-      if (elem) elem.scrollIntoView({ behavior: "smooth" });
+      scrollToHash(targetPath);
     } else {
       if (!targetPath.startsWith("/") && !targetPath.startsWith("http")) {
         targetPath = `/${targetPath}`;

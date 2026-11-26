@@ -29,11 +29,23 @@ export function getBlogApiBase(): string {
   return `${rawApiBase}/api/v1`;
 }
 
+const BLOG_FETCH_TIMEOUT_MS = 15000;
+
+const BLOG_SLUG_ALIASES: Record<string, string> = {
+  "motorcycle-rain-riding-what-to-wear": "stay-dry-while-riding-motorcycle-in-rains",
+  "motorcycle-security-touring-theft-prevention": "motorcycle-security-while-touring",
+};
+
+export function resolveBlogSlugAlias(slug: string): string {
+  const normalized = slug.trim().toLowerCase();
+  return BLOG_SLUG_ALIASES[normalized] || slug;
+}
+
 export const fetchGuidesPageSeo = cache(async (): Promise<GuidesPageSeoData | null> => {
   try {
     const res = await fetch(`${getBlogApiBase()}/blog/page-seo`, {
       next: { revalidate: 30 },
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(BLOG_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const json = await res.json();
@@ -47,7 +59,7 @@ export const fetchPublicBlogCategories = cache(async (): Promise<IBlogCategory[]
   try {
     const res = await fetch(`${getBlogApiBase()}/blog/categories`, {
       next: { revalidate: 30 },
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(BLOG_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return [];
     const json = await res.json();
@@ -64,7 +76,7 @@ export const fetchBlogCategoryBySlug = cache(async (slug: string): Promise<IBlog
       `${getBlogApiBase()}/blog/categories/${encodeURIComponent(slug)}`,
       {
         next: { revalidate: 30 },
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(BLOG_FETCH_TIMEOUT_MS),
       }
     );
     if (!res.ok) return null;
@@ -93,7 +105,7 @@ export const fetchPublicBlogPosts = cache(
     try {
       const res = await fetch(`${getBlogApiBase()}/blog/posts?${query.toString()}`, {
         next: { revalidate: 30 },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(BLOG_FETCH_TIMEOUT_MS),
       });
       if (!res.ok) {
         return { items: [], totalCount: 0, page, limit, totalPages: 1 };
@@ -115,13 +127,14 @@ export const fetchPublicBlogPosts = cache(
 
 export const fetchGuideOrBlogPost = cache(async (slug: string): Promise<IBlogPost | null> => {
   if (!slug) return null;
+  const targetSlug = resolveBlogSlugAlias(slug);
 
   try {
     const res = await fetch(
-      `${getBlogApiBase()}/blog/posts/${encodeURIComponent(slug)}`,
+      `${getBlogApiBase()}/blog/posts/${encodeURIComponent(targetSlug)}`,
       {
         next: { revalidate: 30 },
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(BLOG_FETCH_TIMEOUT_MS),
       }
     );
 
@@ -136,12 +149,13 @@ export const fetchGuideOrBlogPost = cache(async (slug: string): Promise<IBlogPos
 export const fetchRelatedBlogPosts = cache(
   async (slug: string, limit = 3): Promise<IBlogPost[]> => {
     if (!slug) return [];
+    const targetSlug = resolveBlogSlugAlias(slug);
     try {
       const res = await fetch(
-        `${getBlogApiBase()}/blog/posts/${encodeURIComponent(slug)}/related?limit=${limit}`,
+        `${getBlogApiBase()}/blog/posts/${encodeURIComponent(targetSlug)}/related?limit=${limit}`,
         {
           next: { revalidate: 30 },
-          signal: AbortSignal.timeout(4000),
+          signal: AbortSignal.timeout(BLOG_FETCH_TIMEOUT_MS),
         }
       );
       if (!res.ok) return [];

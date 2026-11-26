@@ -95,12 +95,12 @@ export const GuidesCategoryModule: React.FC<GuidesCategoryModuleProps> = ({
       />
 
       {/* Header Banner */}
-      <header className="bg-gradient-to-b from-neutral-100/70 via-white to-neutral-50/50 border-b border-neutral-200/80 py-10 sm:py-14">
+      <header className="bg-gradient-to-b from-neutral-100/70 via-white to-neutral-50/50 border-b border-neutral-200/80 py-8 sm:py-10">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
-            <div className="flex items-center gap-2.5 mb-4">
+            <div className="flex items-center gap-2 mb-3">
               <span className="w-2 h-2 rounded-full bg-brand shadow-xs" />
-              <span className="text-xs font-black uppercase tracking-widest text-brand">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-brand">
                 {category.name} Guides &amp; Manuals
               </span>
               <span className="text-neutral-300">•</span>
@@ -109,12 +109,12 @@ export const GuidesCategoryModule: React.FC<GuidesCategoryModuleProps> = ({
               </span>
             </div>
 
-            <h1 className="text-3xl sm:text-5xl font-sans font-black tracking-tight text-neutral-900 mb-3">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-sans font-bold tracking-tight text-neutral-900 mb-2.5">
               {category.name}
             </h1>
 
             {category.description && (
-              <p className="text-sm sm:text-base text-neutral-600 leading-relaxed mb-6">
+              <p className="text-sm sm:text-[15px] text-neutral-600 leading-relaxed mb-5">
                 {category.description}
               </p>
             )}
@@ -141,6 +141,7 @@ export const GuidesCategoryModule: React.FC<GuidesCategoryModuleProps> = ({
             <Link
               key={cat._id || cat.slug}
               href={`/guides/category/${cat.slug}`}
+              prefetch={false}
               className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                 cat.slug === category.slug
                   ? "bg-brand text-white shadow-sm"

@@ -114,7 +114,11 @@ export default async function GuidesDynamicSlugPage({ params }: Props) {
     process.env.NEXT_PUBLIC_APP_URL ||
     "https://www.store4riders.com";
 
-  const category = await fetchBlogCategoryBySlug(slug);
+  const [category, post] = await Promise.all([
+    fetchBlogCategoryBySlug(slug),
+    fetchGuideOrBlogPost(slug),
+  ]);
+
   if (category && category.isActive !== false) {
     const [postsData, categories] = await Promise.all([
       fetchPublicBlogPosts(1, 18, category.slug),
@@ -159,7 +163,6 @@ export default async function GuidesDynamicSlugPage({ params }: Props) {
     );
   }
 
-  const post = await fetchGuideOrBlogPost(slug);
   if (post) {
     const relatedPosts = await fetchRelatedBlogPosts(post.slug, 3);
     const authorSchema = buildAuthorSchema(post.author, siteUrl);

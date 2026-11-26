@@ -145,12 +145,12 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
       />
 
       {/* Hero Banner */}
-      <section className="bg-gradient-to-b from-neutral-100/70 via-white to-neutral-50/50 border-b border-neutral-200/80 py-12 sm:py-16">
+      <section className="bg-gradient-to-b from-neutral-100/70 via-white to-neutral-50/50 border-b border-neutral-200/80 py-8 sm:py-10">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
-            <div className="flex items-center gap-2.5 mb-4">
+            <div className="flex items-center gap-2 mb-3">
               <span className="w-2 h-2 rounded-full bg-brand shadow-xs" />
-              <span className="text-xs font-black uppercase tracking-widest text-brand">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-brand">
                 Store4Riders Editorial &amp; Field Guides
               </span>
               <span className="text-neutral-300">•</span>
@@ -159,11 +159,11 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
               </span>
             </div>
 
-            <h1 className="text-3xl sm:text-5xl font-sans font-black tracking-tight text-neutral-900 mb-4 leading-tight">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-sans font-bold tracking-tight text-neutral-900 mb-3 leading-snug">
               {heroTitle}
             </h1>
 
-            <p className="text-sm sm:text-base text-neutral-600 leading-relaxed mb-8">
+            <p className="text-sm sm:text-[15px] text-neutral-600 leading-relaxed mb-6">
               {heroDescription}
             </p>
 

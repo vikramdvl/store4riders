@@ -18,6 +18,7 @@ export interface BreadcrumbProps {
   /** Whether to inject Schema.org JSON-LD structured data for Google Rich Snippets (default: true) */
   enableSchemaJsonLd?: boolean;
   className?: string;
+  containerClassName?: string;
 }
 
 // User-friendly label formatting dictionary for common e-commerce paths
@@ -51,6 +52,7 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({
   customLastTitle,
   enableSchemaJsonLd = true,
   className,
+  containerClassName,
 }) => {
   const pathname = usePathname();
 
@@ -127,14 +129,13 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({
         aria-label="Breadcrumb" 
         className={`w-full ${className || "bg-white border-b border-neutral-100"}`}
       >
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-2.5 sm:py-3.5">
+        <div className={`${containerClassName || "max-w-[1400px]"} mx-auto px-4 sm:px-6 lg:px-8 py-2.5`}>
           <ol 
             itemScope 
             itemType="https://schema.org/BreadcrumbList"
-            className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-neutral-500 leading-relaxed"
+            className="block text-xs font-medium text-neutral-500 leading-relaxed"
           >
             {breadcrumbItems.map((item, index) => {
-              const isFirst = index === 0;
               const isLast = index === breadcrumbItems.length - 1;
 
               return (
@@ -152,7 +153,7 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({
                     <Link
                       href={item.href}
                       itemProp="item"
-                      className="hover:text-banner transition-colors inline text-neutral-600 font-medium"
+                      className="hover:text-brand transition-colors text-neutral-500 font-medium"
                     >
                       <span itemProp="name">
                         {item.label}
@@ -162,9 +163,7 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({
                     <span
                       itemProp="name"
                       aria-current={isLast ? "page" : undefined}
-                      className={`inline ${
-                        isLast ? "text-neutral-900 font-bold" : "text-neutral-600"
-                      }`}
+                      className={isLast ? "text-neutral-800 font-semibold break-words" : "text-neutral-500"}
                     >
                       {item.label}
                     </span>
@@ -174,7 +173,7 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({
                   {!isLast && (
                     <span 
                       aria-hidden="true" 
-                      className="inline-block mx-1.5 sm:mx-2 text-neutral-300 font-normal"
+                      className="mx-1.5 text-neutral-300 font-normal select-none"
                     >
                       /
                     </span>

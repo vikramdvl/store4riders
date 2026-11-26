@@ -14,7 +14,7 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({ href, children, ...props }: any) => (
+  default: ({ href, children, prefetch: _prefetch, ...props }: any) => (
     <a href={href} {...props}>
       {children}
     </a>

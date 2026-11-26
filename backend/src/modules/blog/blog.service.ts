@@ -79,7 +79,8 @@ export class BlogService {
     }
 
     if (incrementView && post._id) {
-      await BlogRepository.incrementViews(post._id.toString());
+      // Non-blocking view increment so remote DB write never stalls article rendering
+      BlogRepository.incrementViews(post._id.toString()).catch(() => {});
     }
 
     return post;
