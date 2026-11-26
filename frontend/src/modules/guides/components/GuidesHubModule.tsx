@@ -1,18 +1,27 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import Link from "next/link";
+import React, { useState, useEffect } from "react";
+import { IBlogCategory, IBlogPost } from "@store4riders/shared-types";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
-import { GUIDE_CATEGORIES, GUIDE_POSTS } from "../data/guides-data";
+import {
+  PaginatedBlogResponse,
+  usePublicBlogCategories,
+  usePublicBlogPosts,
+} from "@/core/hooks/useBlog";
+import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
 import { GuideCard } from "./GuideCard";
 import { GuideAuthorCard } from "./GuideAuthorCard";
 import { MagnifyingGlassIcon, BookOpenIcon } from "@heroicons/react/24/outline";
+
+const GUIDES_PER_PAGE = 18;
 
 interface GuidesHubModuleProps {
   heroTitle?: string;
   heroDescription?: string;
   initialTag?: string;
   initialSearch?: string;
+  initialPostsData?: PaginatedBlogResponse;
+  initialCategories?: IBlogCategory[];
 }
 
 export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
@@ -20,26 +29,113 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
   heroDescription = "Real-world gear tests, sizing walkthroughs, maintenance checklists, and touring preparation guides curated by riders for Indian roads and conditions.",
   initialTag = "",
   initialSearch = "",
+  initialPostsData,
+  initialCategories,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [searchQuery, setSearchQuery] = useState<string>(initialTag || initialSearch || "");
+  const [activeTag, setActiveTag] = useState<string>(initialTag);
+  const [searchQuery, setSearchQuery] = useState<string>(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(initialSearch.trim());
+  const [page, setPage] = useState<number>(1);
+  const [allGuidesTotal, setAllGuidesTotal] = useState<number | null>(
+    !initialTag && !initialSearch.trim() && initialPostsData
+      ? initialPostsData.totalCount
+      : null
+  );
 
-  const filteredPosts = useMemo(() => {
-    return GUIDE_POSTS.filter((post) => {
-      const matchesCat =
-        selectedCategory === "all" || post.categorySlug === selectedCategory;
-      const matchesSearch =
-        !searchQuery.trim() ||
-        post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        post.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        post.categoryName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (Array.isArray(post.tags) && post.tags.some((t: string) => t.toLowerCase().includes(searchQuery.toLowerCase().trim())));
-      return matchesCat && matchesSearch;
-    });
-  }, [selectedCategory, searchQuery]);
+  // Debounce search query (300ms) and reset page to 1 on change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const trimmed = searchQuery.trim();
+      setDebouncedSearch((prev) => {
+        if (prev !== trimmed) {
+          setPage(1);
+        }
+        return trimmed;
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const matchesInitialSsrQuery =
+    page === 1 &&
+    selectedCategory === "all" &&
+    activeTag === initialTag &&
+    debouncedSearch === initialSearch.trim();
+
+  const {
+    data: postsData,
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+  } = usePublicBlogPosts(
+    {
+      page,
+      limit: GUIDES_PER_PAGE,
+      categorySlug: selectedCategory !== "all" ? selectedCategory : undefined,
+      tag: activeTag || undefined,
+      search: debouncedSearch || undefined,
+    },
+    matchesInitialSsrQuery && initialPostsData
+      ? { initialData: initialPostsData, initialDataUpdatedAt: 0 }
+      : undefined
+  );
+
+  const { data: categories = [] } = usePublicBlogCategories(
+    initialCategories
+      ? { initialData: initialCategories, initialDataUpdatedAt: 0 }
+      : undefined
+  );
+
+  useEffect(() => {
+    if (
+      selectedCategory === "all" &&
+      !activeTag &&
+      !debouncedSearch &&
+      typeof postsData?.totalCount === "number"
+    ) {
+      setAllGuidesTotal(postsData.totalCount);
+    }
+  }, [selectedCategory, activeTag, debouncedSearch, postsData?.totalCount]);
+
+  const posts: IBlogPost[] = postsData?.items || [];
+  const totalPages = postsData?.totalPages || 1;
+  const totalCount = postsData?.totalCount || 0;
+
+  const handleCategoryChange = (slug: string) => {
+    setSelectedCategory(slug);
+    setPage(1);
+  };
+
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setDebouncedSearch("");
+    setActiveTag("");
+    setSelectedCategory("all");
+    setPage(1);
+  };
+
+  const handlePageChange = (nextPage: number) => {
+    setPage(nextPage);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 320, behavior: "smooth" });
+    }
+  };
+
+  const spotlightAuthor = posts[0]?.author
+    ? {
+        name: posts[0].author.name || "Store4Riders Team",
+        url: posts[0].author.url || "",
+        jobTitle: posts[0].author.jobTitle,
+        avatar: normalizeExternalImageUrl(posts[0].author.avatar) || undefined,
+        bio: posts[0].author.bio,
+        sameAs: Array.isArray(posts[0].author.sameAs) ? posts[0].author.sameAs : [],
+      }
+    : null;
+
   return (
     <div className="min-h-screen bg-neutral-50/60 pb-20">
-
       {/* Breadcrumb */}
       <Breadcrumb
         items={[
@@ -55,18 +151,18 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
             <div className="flex items-center gap-2.5 mb-4">
               <span className="w-2 h-2 rounded-full bg-brand shadow-xs" />
               <span className="text-xs font-black uppercase tracking-widest text-brand">
-                Store4Riders Editorial & Field Guides
+                Store4Riders Editorial &amp; Field Guides
               </span>
               <span className="text-neutral-300">•</span>
               <span className="text-xs font-medium text-neutral-500">
-                Gear Manuals & Rider Advice
+                Gear Manuals &amp; Rider Advice
               </span>
             </div>
-            
+
             <h1 className="text-3xl sm:text-5xl font-sans font-black tracking-tight text-neutral-900 mb-4 leading-tight">
               {heroTitle}
             </h1>
-            
+
             <p className="text-sm sm:text-base text-neutral-600 leading-relaxed mb-8">
               {heroDescription}
             </p>
@@ -79,7 +175,7 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search guides (e.g. helmets, chain care, touring, CE armour)..."
                 suppressHydrationWarning
-                className="w-full bg-white border border-neutral-300 text-neutral-900 placeholder-neutral-400 pl-11 pr-4 py-3.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-all shadow-sm"
+                className="w-full bg-white border border-neutral-300 text-neutral-900 placeholder-neutral-400 pl-11 pr-16 py-3.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-all shadow-sm"
               />
               <MagnifyingGlassIcon className="w-5 h-5 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               {searchQuery && (
@@ -93,6 +189,23 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
                 </button>
               )}
             </div>
+
+            {activeTag && (
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-xs text-neutral-500 font-medium">Filtered by tag:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTag("");
+                    setPage(1);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-brand/10 text-brand border border-brand/20 hover:bg-brand hover:text-white transition-colors"
+                >
+                  <span>#{activeTag}</span>
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -103,7 +216,7 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
         <div className="flex items-center gap-2 overflow-x-auto pb-4 pt-1 scrollbar-none">
           <button
             type="button"
-            onClick={() => setSelectedCategory("all")}
+            onClick={() => handleCategoryChange("all")}
             suppressHydrationWarning
             className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
               selectedCategory === "all"
@@ -111,14 +224,14 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
                 : "bg-white text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 border border-neutral-200"
             }`}
           >
-            All Guides ({GUIDE_POSTS.length})
+            All Guides{allGuidesTotal !== null ? ` (${allGuidesTotal})` : ""}
           </button>
 
-          {GUIDE_CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <button
-              key={cat.id}
+              key={cat._id || cat.slug}
               type="button"
-              onClick={() => setSelectedCategory(cat.slug)}
+              onClick={() => handleCategoryChange(cat.slug)}
               suppressHydrationWarning
               className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                 selectedCategory === cat.slug
@@ -131,13 +244,69 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
           ))}
         </div>
 
-        {/* Guides Grid */}
-        {filteredPosts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 mt-6">
-            {filteredPosts.map((post, idx) => (
-              <GuideCard key={post.slug} post={post} priority={idx < 3} />
-            ))}
+        {/* Guides Grid / Loading / Error / Empty */}
+        {isLoading && !postsData ? (
+          <div className="py-20 flex flex-col items-center justify-center gap-3">
+            <div className="w-10 h-10 border-4 border-brand border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs font-semibold text-neutral-500">Loading motorcycle guides...</p>
           </div>
+        ) : isError && posts.length === 0 ? (
+          <div className="bg-white rounded-2xl p-12 text-center border border-neutral-200 max-w-md mx-auto my-12">
+            <BookOpenIcon className="w-12 h-12 text-neutral-300 mx-auto mb-3" />
+            <h3 className="text-base font-bold text-neutral-900 mb-1">
+              Unable to load guides right now
+            </h3>
+            <p className="text-xs text-neutral-500 mb-4">
+              Connection failed, please try again.
+            </p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="px-4 py-2 bg-brand text-white rounded-xl text-xs font-bold hover:bg-brand/90 transition-colors shadow-sm"
+            >
+              Retry
+            </button>
+          </div>
+        ) : posts.length > 0 ? (
+          <>
+            <div
+              className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 mt-6 transition-opacity duration-200 ${
+                isFetching ? "opacity-75" : "opacity-100"
+              }`}
+            >
+              {posts.map((post, idx) => (
+                <GuideCard key={post._id || post.slug} post={post} priority={idx < 3} />
+              ))}
+            </div>
+
+            {/* Backend Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="mt-10 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-neutral-200 shadow-2xs">
+                <p className="text-xs text-neutral-600 font-medium">
+                  Showing page <span className="font-bold text-neutral-900">{page}</span> of{" "}
+                  <span className="font-bold text-neutral-900">{totalPages}</span> ({totalCount} guides)
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handlePageChange(Math.max(1, page - 1))}
+                    disabled={page <= 1 || isFetching}
+                    className="px-4 py-2 text-xs font-bold rounded-lg border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePageChange(Math.min(totalPages, page + 1))}
+                    disabled={page >= totalPages || isFetching}
+                    className="px-4 py-2 text-xs font-bold rounded-lg bg-brand text-white hover:bg-brand/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="bg-white rounded-2xl p-12 text-center border border-neutral-200 max-w-md mx-auto my-12">
             <BookOpenIcon className="w-12 h-12 text-neutral-300 mx-auto mb-3" />
@@ -145,26 +314,28 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
               No matching guides found
             </h3>
             <p className="text-xs text-neutral-500 mb-4">
-              Try searching with a different keyword or choose another category.
+              {selectedCategory !== "all" || debouncedSearch || activeTag
+                ? "Try searching with a different keyword or choose another category."
+                : "No published guides are available yet."}
             </p>
-            <button
-              onClick={() => {
-                setSearchQuery("");
-                setSelectedCategory("all");
-              }}
-              className="px-4 py-2 bg-brand text-white rounded-xl text-xs font-bold hover:bg-brand/90 transition-colors shadow-sm"
-            >
-              Reset Filters
-            </button>
+            {(selectedCategory !== "all" || debouncedSearch || activeTag) && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="px-4 py-2 bg-brand text-white rounded-xl text-xs font-bold hover:bg-brand/90 transition-colors shadow-sm"
+              >
+                Reset Filters
+              </button>
+            )}
           </div>
         )}
 
         {/* Author Spotlight */}
-        <div className="mt-16 pt-10 border-t border-neutral-200">
-          <GuideAuthorCard
-            author={GUIDE_POSTS[0].author}
-          />
-        </div>
+        {spotlightAuthor && (
+          <div className="mt-16 pt-10 border-t border-neutral-200">
+            <GuideAuthorCard author={spotlightAuthor} />
+          </div>
+        )}
       </div>
     </div>
   );

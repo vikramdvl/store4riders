@@ -18,6 +18,7 @@ export class BlogRepository {
 
     const [items, totalCount] = await Promise.all([
       BlogPostModel.find(filter)
+        .select("-content")
         .sort({ [sortField]: sortDirection })
         .skip(skip)
         .limit(limit)
@@ -70,6 +71,7 @@ export class BlogRepository {
     }
 
     return BlogPostModel.find(filter)
+      .select("-content")
       .sort({ publishedAt: -1 })
       .limit(limit)
       .lean()
@@ -129,7 +131,11 @@ export class BlogRepository {
   }
 
   static async findCategoryById(id: string): Promise<IBlogCategory | null> {
-    return BlogCategoryModel.findById(id).lean().exec() as unknown as Promise<IBlogCategory | null>;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      const cat = await BlogCategoryModel.findById(id).lean().exec();
+      if (cat) return cat as unknown as IBlogCategory;
+    }
+    return BlogCategoryModel.findOne({ slug: id.toLowerCase() }).lean().exec() as unknown as Promise<IBlogCategory | null>;
   }
 
   static async findCategoryBySlug(slug: string): Promise<IBlogCategory | null> {
@@ -159,9 +165,9 @@ export class BlogRepository {
   }
 
   static async updateCategoryArticleCount(slugOrId: string, count: number): Promise<void> {
-    await BlogCategoryModel.updateOne(
-      { $or: [{ _id: slugOrId }, { slug: slugOrId }] },
-      { articleCount: count }
-    ).exec();
+    const filter = mongoose.Types.ObjectId.isValid(slugOrId)
+      ? { $or: [{ _id: slugOrId }, { slug: slugOrId.toLowerCase() }] }
+      : { slug: slugOrId.toLowerCase() };
+    await BlogCategoryModel.updateOne(filter, { articleCount: count }).exec();
   }
 }

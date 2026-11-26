@@ -1,16 +1,18 @@
 import { getRobotsMetadata } from "@/core/utils/seo-schema";
+import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   GuideDetailModule,
   fetchGuideOrBlogPost,
-  GUIDE_POSTS,
+  fetchPublicBlogPosts,
+  fetchRelatedBlogPosts,
   buildAuthorSchema,
   buildBlogPostingSchema,
   buildBreadcrumbSchema,
 } from "@/modules/guides";
 
-export const revalidate = 60;
+export const revalidate = 30;
 export const dynamicParams = true;
 
 interface Props {
@@ -18,7 +20,8 @@ interface Props {
 }
 
 export async function generateStaticParams() {
-  return GUIDE_POSTS.map((post) => ({
+  const postsData = await fetchPublicBlogPosts(1, 100);
+  return postsData.items.map((post) => ({
     slug: post.slug,
   }));
 }
@@ -37,12 +40,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const title = post.metaTitle?.trim() || `${post.title} | Store4Riders Guides`;
   const description =
     post.metaDescription?.trim() ||
-    post.description?.trim() ||
     post.excerpt?.trim() ||
     "Expert motorcycle riding guides, gear care advice, and maintenance tips by Store4Riders.";
   const canonical = `https://www.store4riders.com/guides/post/${post.slug}`;
-  const rawPublished = post.publishedDate || post.publishedAt || new Date().toISOString();
-  const rawModified = post.modifiedDate || post.updatedAt || rawPublished;
+  const rawPublished = post.publishedAt || new Date().toISOString();
+  const rawModified = post.updatedAt || rawPublished;
+  const ogImage = normalizeExternalImageUrl(post.featuredImage);
 
   return {
     title,
@@ -62,10 +65,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       modifiedTime: typeof rawModified === "string" ? rawModified : rawModified.toISOString?.() || undefined,
       authors: [post.author?.name || "Store4Riders Team"],
       section: post.categoryName || "Motorcycle Guides",
-      images: post.featuredImage
+      images: ogImage
         ? [
             {
-              url: post.featuredImage,
+              url: ogImage,
               width: 1200,
               height: 630,
               alt: post.title,
@@ -77,7 +80,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       card: "summary_large_image",
       title,
       description,
-      images: post.featuredImage ? [post.featuredImage] : [],
+      images: ogImage ? [ogImage] : [],
     },
   };
 }
@@ -90,18 +93,22 @@ export default async function GuidePostPage({ params }: Props) {
     notFound();
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://www.store4riders.com";
+  const relatedPosts = await fetchRelatedBlogPosts(post.slug, 3);
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "https://www.store4riders.com";
   const authorSchema = buildAuthorSchema(post.author, siteUrl);
   const blogPostingSchema = buildBlogPostingSchema(post, siteUrl);
-  const breadcrumbSchema = buildBreadcrumbSchema(
-    [
-      { name: "Home", url: "/" },
-      { name: "Guides", url: "/guides" },
-      { name: post.categoryName || "Guides", url: `/guides/category/${post.categorySlug || "general"}` },
-      { name: post.title, url: `/guides/post/${post.slug}` },
-    ],
-    siteUrl
-  );
+  const breadcrumbItems = [
+    { name: "Home", url: "/" },
+    { name: "Guides", url: "/guides" },
+    ...(post.categorySlug && post.categoryName
+      ? [{ name: post.categoryName, url: `/guides/category/${post.categorySlug}` }]
+      : []),
+    { name: post.title, url: `/guides/post/${post.slug}` },
+  ];
+  const breadcrumbSchema = buildBreadcrumbSchema(breadcrumbItems, siteUrl);
 
   return (
     <>
@@ -117,7 +124,11 @@ export default async function GuidePostPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
       />
-      <GuideDetailModule slug={slug} initialPost={post} />
+      <GuideDetailModule
+        slug={slug}
+        initialPost={post}
+        initialRelatedPosts={relatedPosts}
+      />
     </>
   );
 }

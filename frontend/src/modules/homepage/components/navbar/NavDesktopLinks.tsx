@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
 import { NavItem } from "../../types/homepage.types";
 
@@ -30,10 +31,36 @@ export const NavDesktopLinks: React.FC<NavDesktopLinksProps> = ({
   onNavEnter,
   onNavLeave,
 }) => {
+  const router = useRouter();
+  const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelPrefetch = useCallback(() => {
+    if (prefetchTimerRef.current) {
+      clearTimeout(prefetchTimerRef.current);
+      prefetchTimerRef.current = null;
+    }
+  }, []);
+
+  const schedulePrefetch = useCallback(
+    (href?: string) => {
+      cancelPrefetch();
+      if (!href || href === "#") return;
+      prefetchTimerRef.current = setTimeout(() => {
+        router.prefetch(href);
+      }, 65);
+    },
+    [cancelPrefetch, router]
+  );
+
+  useEffect(() => cancelPrefetch, [cancelPrefetch]);
+
   return (
     <div
       className="hidden lg:flex flex-1 items-center justify-center px-0.5 xl:px-1 pointer-events-auto whitespace-nowrap static min-w-0"
-      onMouseLeave={onNavLeave}
+      onMouseLeave={() => {
+        cancelPrefetch();
+        onNavLeave();
+      }}
     >
       <div
         className={`relative flex items-center gap-0 xl:gap-0.5 2xl:gap-1 transition-all duration-300 ${
@@ -58,6 +85,8 @@ export const NavDesktopLinks: React.FC<NavDesktopLinksProps> = ({
             >
               <Link
                 href={item.href}
+                onMouseEnter={() => schedulePrefetch(item.href)}
+                onMouseLeave={cancelPrefetch}
                 className={`relative flex items-center gap-0.5 text-[9px] lg:text-[9.5px] xl:text-[10px] 2xl:text-[11px] font-sans font-semibold xl:font-bold leading-none tracking-tight xl:tracking-normal 2xl:tracking-wide uppercase px-1.5 lg:px-2 xl:px-2.5 py-1.5 rounded-md transition-all duration-150 z-10 cursor-pointer select-none active:scale-95 antialiased ${
                   isDarkSolid
                     ? isHovered
@@ -182,7 +211,12 @@ export const NavDesktopLinks: React.FC<NavDesktopLinksProps> = ({
                                 <div key={idx} className={`min-w-0 w-full ${isWide ? "col-span-2" : "col-span-1"}`}>
                                   {shouldShowHeader ? (
                                     menuGroup.groupHref ? (
-                                      <Link href={menuGroup.groupHref} className="mb-3.5 block cursor-pointer">
+                                      <Link
+                                        href={menuGroup.groupHref}
+                                        onMouseEnter={() => schedulePrefetch(menuGroup.groupHref)}
+                                        onMouseLeave={cancelPrefetch}
+                                        className="mb-3.5 block cursor-pointer"
+                                      >
                                         <h4 className="text-[12.5px] font-bold text-neutral-900 uppercase tracking-widest border-b border-neutral-200/60 pb-2 flex items-start gap-2 leading-snug hover:text-brand transition-colors">
                                           <span className="w-1.5 h-1.5 rounded-full bg-banner shadow-xs shrink-0 mt-1.5" />
                                           <span className="flex-1 min-w-0 break-words whitespace-normal">{menuGroup.group}</span>
@@ -200,6 +234,8 @@ export const NavDesktopLinks: React.FC<NavDesktopLinksProps> = ({
                                       <li key={lIdx} className="w-full">
                                         <Link
                                           href={link.href}
+                                          onMouseEnter={() => schedulePrefetch(link.href)}
+                                          onMouseLeave={cancelPrefetch}
                                           className={`cursor-pointer ${
                                             !shouldShowHeader
                                               ? "text-[13px] font-medium text-neutral-700 hover:text-brand hover:bg-neutral-50 rounded-xl px-3 py-2 transition-colors duration-150 flex items-start gap-2 group w-full"

@@ -14,9 +14,18 @@ import {
   cleanText,
   getRobotsMetadata,
 } from "@/core/utils/seo-schema";
-import { CATEGORY_SLUG_ALIASES, resolveProductBreadcrumbs } from "@/core/utils/navCategories";
+import {
+  CATEGORY_SLUG_ALIASES,
+  resolveProductBreadcrumbs,
+  isCanonicalCategoryPath,
+} from "@/core/utils/navCategories";
 
-const rawApiBase = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+const rawApiBase = (
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:4000/api/v1"
+).replace(/\/+$/, "");
+
 const API_BASE = rawApiBase.includes("/v1")
   ? rawApiBase
   : rawApiBase.endsWith("/api")
@@ -39,9 +48,10 @@ const getProduct = cache(async (slug: string) => {
 
 const getCategoryNode = cache(async (categorySlug: string) => {
   try {
-    const baseUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
-    const treeUrl = baseUrl.includes("/v1") ? `${baseUrl}/categories/tree` : `${baseUrl}/v1/categories/tree`;
-    const res = await fetch(treeUrl, { next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) });
+    const res = await fetch(`${API_BASE}/categories/tree`, {
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(5000),
+    });
     if (res.ok) {
       const data = await res.json();
       const cleanTarget = categorySlug.toLowerCase().trim();
@@ -67,10 +77,10 @@ const getCategoryNode = cache(async (categorySlug: string) => {
       if (node) return node;
     }
 
-    const singleUrl = baseUrl.includes("/v1")
-      ? `${baseUrl}/categories/${encodeURIComponent(categorySlug)}`
-      : `${baseUrl}/v1/categories/${encodeURIComponent(categorySlug)}`;
-    const singleRes = await fetch(singleUrl, { next: { revalidate: 300 }, signal: AbortSignal.timeout(5000) });
+    const singleRes = await fetch(`${API_BASE}/categories/${encodeURIComponent(categorySlug)}`, {
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(5000),
+    });
     if (singleRes.ok) {
       const singleData = await singleRes.json();
       if (singleData?.data) return singleData.data;
@@ -81,15 +91,36 @@ const getCategoryNode = cache(async (categorySlug: string) => {
   }
 });
 
+const getCategoryInitialProducts = cache(async (category: string) => {
+  try {
+    const prodRes = await fetch(
+      `${API_BASE}/products?category=${encodeURIComponent(category)}&limit=12`,
+      {
+        next: { revalidate: 60 },
+        signal: AbortSignal.timeout(6000),
+      }
+    );
+    if (!prodRes.ok) return undefined;
+    const prodData = await prodRes.json();
+    const raw = prodData?.data;
+    if (!raw) return undefined;
+
+    const items = Array.isArray(raw.items) ? raw.items : Array.isArray(raw) ? raw : [];
+    return {
+      items,
+      totalCount: raw.totalCount ?? items.length,
+      page: raw.page ?? 1,
+      limit: raw.limit ?? 12,
+      totalPages: raw.totalPages ?? Math.max(1, Math.ceil((raw.totalCount ?? items.length) / 12)),
+    };
+  } catch {
+    return undefined;
+  }
+});
+
 const getPolicyPage = cache(async (candidateSlug: string) => {
   try {
-    const rawApiBase = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
-    const apiBase = rawApiBase.includes("/v1")
-      ? rawApiBase
-      : rawApiBase.endsWith("/api")
-      ? `${rawApiBase}/v1`
-      : `${rawApiBase}/api/v1`;
-    const res = await fetch(`${apiBase}/settings`, {
+    const res = await fetch(`${API_BASE}/settings`, {
       next: { revalidate: 60 },
       signal: AbortSignal.timeout(5000),
     });
@@ -110,125 +141,266 @@ const getPolicyPage = cache(async (candidateSlug: string) => {
   }
 });
 
+function hasCategoryFilterParams(resolvedSearchParams: Record<string, string | string[] | undefined>): boolean {
+  return Boolean(
+    resolvedSearchParams.brand ||
+      resolvedSearchParams.search ||
+      resolvedSearchParams.q ||
+      resolvedSearchParams.colour ||
+      resolvedSearchParams.color ||
+      resolvedSearchParams.size ||
+      resolvedSearchParams.minPrice ||
+      resolvedSearchParams.maxPrice ||
+      resolvedSearchParams.sort ||
+      resolvedSearchParams.helmet_type ||
+      resolvedSearchParams.material ||
+      resolvedSearchParams.riding_style ||
+      resolvedSearchParams.certification ||
+      resolvedSearchParams.gender ||
+      resolvedSearchParams.motorcycle_model ||
+      resolvedSearchParams.inStock ||
+      resolvedSearchParams.onSale ||
+      (resolvedSearchParams.page && resolvedSearchParams.page !== "1")
+  );
+}
+
+function buildProductMetadata(product: any, candidateSlug: string): Metadata {
+  const title = product.metaTitle?.trim() || `${product.name} | Store4Riders`;
+  const cleanDescription =
+    product.metaDescription?.trim() ||
+    cleanText(product.shortDescription) ||
+    `Buy ${product.name} at Store4Riders. Certified motorcycle riding gear with best prices & express delivery.`;
+  const keywords = product.metaKeywords
+    ? product.metaKeywords
+        .split(",")
+        .map((k: string) => k.trim())
+        .filter(Boolean)
+    : ["riding gear", "motorcycle", "store4riders", product.name];
+  const imageUrl = product.images?.[0]?.url;
+  const canonicalPath = `/${candidateSlug}`;
+
+  return {
+    title: {
+      absolute: title,
+    },
+    description: cleanDescription,
+    keywords,
+    alternates: {
+      canonical: canonicalPath,
+    },
+    robots: getRobotsMetadata(),
+    openGraph: {
+      title,
+      description: cleanDescription,
+      url: canonicalPath,
+      type: "website",
+      siteName: "Store4Riders",
+      images: imageUrl ? [{ url: imageUrl, alt: product.name }] : [],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description: cleanDescription,
+      images: imageUrl ? [imageUrl] : [],
+    },
+  };
+}
+
+function buildCategoryMetadata(categoryNode: any, slugArray: string[]): Metadata {
+  const title = categoryNode.metaTitle || `${categoryNode.name} - Motorcycle Gear | Store4Riders`;
+  const description =
+    categoryNode.metaDescription ||
+    `Explore the best collection of ${categoryNode.name} at Store4Riders. Certified gear, best prices & express delivery across India.`;
+  const canonicalPath = `/${slugArray.join("/")}`;
+
+  return {
+    title: {
+      absolute: title,
+    },
+    description,
+    keywords: categoryNode.metaKeywords
+      ? categoryNode.metaKeywords.split(",").map((k: string) => k.trim())
+      : [],
+    alternates: {
+      canonical: canonicalPath,
+    },
+    openGraph: {
+      title,
+      description,
+      url: canonicalPath,
+      type: "website",
+      siteName: "Store4Riders",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+    robots: getRobotsMetadata(),
+  };
+}
+
+function buildPolicyMetadata(policyPage: any, candidateSlug: string): Metadata {
+  const title = policyPage.title ? `${policyPage.title} | Store4Riders` : "Store Policy | Store4Riders";
+  const description = policyPage.subtitle || "Official Store4Riders policy information.";
+  const canonicalPath = `/${candidateSlug}`;
+
+  return {
+    title: {
+      absolute: title,
+    },
+    description,
+    alternates: {
+      canonical: canonicalPath,
+    },
+    robots: getRobotsMetadata(),
+    openGraph: {
+      title,
+      description,
+      url: canonicalPath,
+      type: "website",
+      siteName: "Store4Riders",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+  };
+}
+
+function renderProductPage(
+  product: any,
+  candidateSlug: string,
+  slugArray: string[],
+  resolvedSearchParams: Record<string, string | string[] | undefined>
+) {
+  // If accessed via a multi-segment path (e.g. /riding-gear/gloves/furygan-jet-d3o-riding-gloves),
+  // permanently redirect (HTTP 301) to the canonical root-level product URL: /furygan-jet-d3o-riding-gloves
+  if (slugArray.length > 1) {
+    const qsParams = new URLSearchParams();
+    for (const [key, val] of Object.entries(resolvedSearchParams)) {
+      if (Array.isArray(val)) {
+        val.forEach((v) => qsParams.append(key, v));
+      } else if (typeof val === "string") {
+        qsParams.append(key, val);
+      }
+    }
+    const qs = qsParams.toString() ? `?${qsParams.toString()}` : "";
+    permanentRedirect(`/${candidateSlug}${qs}`);
+  }
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://store4riders.com";
+  const productSchema = buildProductSchema(product, siteUrl);
+
+  const breadcrumbLinks = resolveProductBreadcrumbs(product);
+  const schemaBreadcrumbItems = breadcrumbLinks.map((b) => ({
+    name: b.label,
+    url: b.href ? (b.href.startsWith("/") ? b.href : `/${b.href}`) : `/${candidateSlug}`,
+  }));
+
+  const breadcrumbSchema = buildBreadcrumbSchema(schemaBreadcrumbItems, siteUrl);
+  const faqSchema = buildFAQSchema(product.faqs);
+
+  return (
+    <>
+      {productSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(productSchema) }}
+        />
+      )}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+      />
+      {faqSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+        />
+      )}
+      <Suspense fallback={<ProductDetailLoading />}>
+        <ProductDetailPageModule initialProduct={product} slug={candidateSlug} />
+      </Suspense>
+    </>
+  );
+}
+
+function renderPolicyPage(policyPage: any, candidateSlug: string) {
+  return (
+    <PolicyPageLayout
+      title={policyPage.title}
+      subtitle={policyPage.subtitle}
+      badge={policyPage.badge || "Official Store Policy"}
+      lastUpdated={policyPage.lastUpdated || "October 2026"}
+      currentSlug={`/${candidateSlug}`}
+      summaryAlert={
+        policyPage.summaryAlertText
+          ? {
+              type: (policyPage.summaryAlertType || "info") as any,
+              title: policyPage.summaryAlertTitle,
+              text: policyPage.summaryAlertText,
+            }
+          : undefined
+      }
+    >
+      <div
+        className="policy-content prose prose-slate max-w-none text-slate-700 leading-relaxed space-y-4"
+        dangerouslySetInnerHTML={{ __html: policyPage.contentHtml || "" }}
+      />
+    </PolicyPageLayout>
+  );
+}
+
 interface CategoryPageProps {
   params: Promise<{ categorySlug: string[] }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export async function generateMetadata({ params, searchParams }: CategoryPageProps): Promise<Metadata> {
+export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
   const resolvedParams = await params;
   const slugArray = resolvedParams.categorySlug || [];
   const candidateSlug = (slugArray[slugArray.length - 1] || "").replace(/\.html$/i, "");
 
-  // 1. Check if this slug resolves to a Product
-  if (candidateSlug) {
+  if (!candidateSlug) {
+    return {
+      title: "Page Not Found | Store4Riders",
+      robots: getRobotsMetadata(false),
+    };
+  }
+
+  const isCanonicalCategory = isCanonicalCategoryPath(slugArray);
+
+  if (isCanonicalCategory) {
+    // Fast-path for unambiguous official storefront category URLs
+    const categoryNode = await getCategoryNode(candidateSlug);
+    if (categoryNode) {
+      return buildCategoryMetadata(categoryNode, slugArray);
+    }
+    // Symmetrical fallback in case category node isn't in DB
     const product = await getProduct(candidateSlug);
     if (product) {
-      const title = product.metaTitle?.trim() || `${product.name} | Store4Riders`;
-      const cleanDescription =
-        product.metaDescription?.trim() ||
-        cleanText(product.shortDescription) ||
-        `Buy ${product.name} at Store4Riders. Certified motorcycle riding gear with best prices & express delivery.`;
-      const keywords = product.metaKeywords
-        ? product.metaKeywords
-            .split(",")
-            .map((k: string) => k.trim())
-            .filter(Boolean)
-        : ["riding gear", "motorcycle", "store4riders", product.name];
-      const imageUrl = product.images?.[0]?.url;
-      const canonicalPath = `/${candidateSlug}`;
-
-      return {
-        title: {
-          absolute: title,
-        },
-        description: cleanDescription,
-        keywords,
-        alternates: {
-          canonical: canonicalPath,
-        },
-        robots: getRobotsMetadata(),
-        openGraph: {
-          title,
-          description: cleanDescription,
-          url: canonicalPath,
-          type: "website",
-          siteName: "Store4Riders",
-          images: imageUrl ? [{ url: imageUrl, alt: product.name }] : [],
-        },
-        twitter: {
-          card: "summary_large_image",
-          title,
-          description: cleanDescription,
-          images: imageUrl ? [imageUrl] : [],
-        },
-      };
+      return buildProductMetadata(product, candidateSlug);
+    }
+  } else {
+    // For non-canonical paths/product slugs, fetch product & category in parallel
+    // while strictly preserving Product > Category > Policy resolution precedence
+    const [product, categoryNode] = await Promise.all([
+      getProduct(candidateSlug),
+      getCategoryNode(candidateSlug),
+    ]);
+    if (product) {
+      return buildProductMetadata(product, candidateSlug);
+    }
+    if (categoryNode) {
+      return buildCategoryMetadata(categoryNode, slugArray);
     }
   }
 
-  // 2. Check if this resolves to a Category
-  const categoryNode = candidateSlug ? await getCategoryNode(candidateSlug) : null;
-  if (categoryNode) {
-    const title = categoryNode.metaTitle || `${categoryNode.name} - Motorcycle Gear | Store4Riders`;
-    const description =
-      categoryNode.metaDescription ||
-      `Explore the best collection of ${categoryNode.name} at Store4Riders. Certified gear, best prices & express delivery across India.`;
-    const canonicalPath = `/${slugArray.join("/")}`;
-
-    return {
-      title: {
-        absolute: title,
-      },
-      description,
-      keywords: categoryNode.metaKeywords ? categoryNode.metaKeywords.split(",").map((k: string) => k.trim()) : [],
-      alternates: {
-        canonical: canonicalPath,
-      },
-      openGraph: {
-        title,
-        description,
-        url: canonicalPath,
-        type: "website",
-        siteName: "Store4Riders",
-      },
-      twitter: {
-        card: "summary_large_image",
-        title,
-        description,
-      },
-      robots: getRobotsMetadata(),
-    };
-  }
-
-  // 3. Check if this resolves to a Policy Page in Admin Settings
-  const policyPage = candidateSlug ? await getPolicyPage(candidateSlug) : null;
+  const policyPage = await getPolicyPage(candidateSlug);
   if (policyPage) {
-    const title = policyPage.title ? `${policyPage.title} | Store4Riders` : "Store Policy | Store4Riders";
-    const description = policyPage.subtitle || "Official Store4Riders policy information.";
-    const canonicalPath = `/${candidateSlug}`;
-
-    return {
-      title: {
-        absolute: title,
-      },
-      description,
-      alternates: {
-        canonical: canonicalPath,
-      },
-      robots: getRobotsMetadata(),
-      openGraph: {
-        title,
-        description,
-        url: canonicalPath,
-        type: "website",
-        siteName: "Store4Riders",
-      },
-      twitter: {
-        card: "summary_large_image",
-        title,
-        description,
-      },
-    };
+    return buildPolicyMetadata(policyPage, candidateSlug);
   }
 
   return {
@@ -247,131 +419,67 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
     notFound();
   }
 
-  // 1. If candidateSlug resolves to a Product, render the Product Detail Page directly!
-  const product = await getProduct(candidateSlug);
-  if (product) {
-    // If accessed via a multi-segment path (e.g. /riding-gear/gloves/furygan-jet-d3o-riding-gloves),
-    // permanently redirect (HTTP 301) to the canonical root-level product URL: /furygan-jet-d3o-riding-gloves
-    if (slugArray.length > 1) {
-      const qsParams = new URLSearchParams();
-      for (const [key, val] of Object.entries(resolvedSearchParams)) {
-        if (Array.isArray(val)) {
-          val.forEach((v) => qsParams.append(key, v));
-        } else if (typeof val === "string") {
-          qsParams.append(key, val);
-        }
+  const isCanonicalCategory = isCanonicalCategoryPath(slugArray);
+  const hasFilterParams = hasCategoryFilterParams(resolvedSearchParams);
+
+  let categoryNode: any = null;
+  let initialProductsData: any = undefined;
+
+  if (isCanonicalCategory) {
+    // Fast-path for official storefront category URLs: fetch category node + initial products in parallel
+    const [resolvedCat, resolvedProds] = await Promise.all([
+      getCategoryNode(candidateSlug),
+      !hasFilterParams ? getCategoryInitialProducts(candidateSlug) : Promise.resolve(undefined),
+    ]);
+    categoryNode = resolvedCat;
+    initialProductsData = resolvedProds;
+
+    if (!categoryNode) {
+      // Fallback: check product then policy page
+      const [product, policyPage] = await Promise.all([
+        getProduct(candidateSlug),
+        getPolicyPage(candidateSlug),
+      ]);
+      if (product) {
+        return renderProductPage(product, candidateSlug, slugArray, resolvedSearchParams);
       }
-      const qs = qsParams.toString() ? `?${qsParams.toString()}` : "";
-      permanentRedirect(`/${candidateSlug}${qs}`);
+      if (policyPage) {
+        return renderPolicyPage(policyPage, candidateSlug);
+      }
+      notFound();
+    }
+  } else {
+    // For product slugs or legacy category URLs, resolve in parallel while strictly
+    // preserving Product -> Category -> Policy precedence
+    const [product, resolvedCat] = await Promise.all([
+      getProduct(candidateSlug),
+      getCategoryNode(candidateSlug),
+    ]);
+
+    if (product) {
+      return renderProductPage(product, candidateSlug, slugArray, resolvedSearchParams);
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://store4riders.com";
-    const productSchema = buildProductSchema(product, siteUrl);
-
-    const breadcrumbLinks = resolveProductBreadcrumbs(product);
-    const schemaBreadcrumbItems = breadcrumbLinks.map((b) => ({
-      name: b.label,
-      url: b.href ? (b.href.startsWith("/") ? b.href : `/${b.href}`) : `/${candidateSlug}`,
-    }));
-
-    const breadcrumbSchema = buildBreadcrumbSchema(schemaBreadcrumbItems, siteUrl);
-    const faqSchema = buildFAQSchema(product.faqs);
-
-    return (
-      <>
-        {productSchema && (
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(productSchema) }}
-          />
-        )}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
-        />
-        {faqSchema && (
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
-          />
-        )}
-        <Suspense fallback={<ProductDetailLoading />}>
-          <ProductDetailPageModule initialProduct={product} slug={candidateSlug} />
-        </Suspense>
-      </>
-    );
-  }
-
-  // 2. Candidate is NOT a product. Check if it resolves to a valid Category.
-  const categoryNode = await getCategoryNode(candidateSlug);
-  if (!categoryNode) {
-    // 3. Check if candidateSlug resolves to a Policy Page in Admin Settings!
-    const policyPage = await getPolicyPage(candidateSlug);
-    if (policyPage) {
-      return (
-        <PolicyPageLayout
-          title={policyPage.title}
-          subtitle={policyPage.subtitle}
-          badge={policyPage.badge || "Official Store Policy"}
-          lastUpdated={policyPage.lastUpdated || "October 2026"}
-          currentSlug={`/${candidateSlug}`}
-          summaryAlert={
-            policyPage.summaryAlertText
-              ? {
-                  type: (policyPage.summaryAlertType || "info") as any,
-                  title: policyPage.summaryAlertTitle,
-                  text: policyPage.summaryAlertText,
-                }
-              : undefined
-          }
-        >
-          <div
-            className="policy-content prose prose-slate max-w-none text-slate-700 leading-relaxed space-y-4"
-            dangerouslySetInnerHTML={{ __html: policyPage.contentHtml || "" }}
-          />
-        </PolicyPageLayout>
-      );
+    categoryNode = resolvedCat;
+    if (!categoryNode) {
+      const policyPage = await getPolicyPage(candidateSlug);
+      if (policyPage) {
+        return renderPolicyPage(policyPage, candidateSlug);
+      }
+      notFound();
     }
 
-    notFound();
+    if (!hasFilterParams) {
+      initialProductsData = await getCategoryInitialProducts(candidateSlug);
+    }
   }
 
-  const category = candidateSlug;
-  let collectionProducts: any[] = [];
+  const collectionProducts: any[] = initialProductsData?.items || [];
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://store4riders.com";
 
-  // Check if filtering parameters exist
-  const hasFilterParams = Boolean(
-    resolvedSearchParams.brand ||
-    resolvedSearchParams.search ||
-    resolvedSearchParams.colour ||
-    resolvedSearchParams.color ||
-    resolvedSearchParams.size ||
-    resolvedSearchParams.minPrice ||
-    resolvedSearchParams.maxPrice ||
-    resolvedSearchParams.sort ||
-    (resolvedSearchParams.page && resolvedSearchParams.page !== "1")
-  );
-
-  // Fetch sample products for CollectionPage ItemList schema (only on initial view, skip on filter clicks)
-  if (!hasFilterParams) {
-    try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
-      const prodUrl = baseUrl.includes("/v1")
-        ? `${baseUrl}/products?category=${encodeURIComponent(category)}&limit=12`
-        : `${baseUrl}/v1/products?category=${encodeURIComponent(category)}&limit=12`;
-      const prodRes = await fetch(prodUrl, { next: { revalidate: 60 }, signal: AbortSignal.timeout(8000) });
-      if (prodRes.ok) {
-        const prodData = await prodRes.json();
-        collectionProducts = prodData?.data?.items || prodData?.data || [];
-      }
-    } catch {
-      // Ignore
-    }
-  }
-
   // Schema: CollectionPage with ItemList
-  const categoryName = categoryNode.name || candidateSlug.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const categoryName =
+    categoryNode.name || candidateSlug.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   const cleanRawDesc = (categoryNode.metaDescription || categoryNode.description || "")
     .replace(/<[^>]*>?/gm, "")
     .replace(/&nbsp;/g, " ")
@@ -433,7 +541,10 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
         />
       )}
       <Suspense fallback={<ProductsLoading />}>
-        <ProductsPageModule initialCategoryNode={categoryNode} />
+        <ProductsPageModule
+          initialCategoryNode={categoryNode}
+          initialProductsData={initialProductsData}
+        />
       </Suspense>
     </>
   );

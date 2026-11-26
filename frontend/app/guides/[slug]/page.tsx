@@ -1,20 +1,22 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getRobotsMetadata } from "@/core/utils/seo-schema";
+import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
 import {
   GuidesCategoryModule,
   GuideDetailModule,
-  getCategoryBySlug,
-  getGuideBySlug,
-  GUIDE_CATEGORIES,
-  GUIDE_POSTS,
+  fetchBlogCategoryBySlug,
+  fetchGuideOrBlogPost,
+  fetchPublicBlogCategories,
+  fetchPublicBlogPosts,
+  fetchRelatedBlogPosts,
   buildAuthorSchema,
   buildBlogPostingSchema,
   buildBlogCollectionSchema,
   buildBreadcrumbSchema,
 } from "@/modules/guides";
 
-export const revalidate = 60;
+export const revalidate = 30;
 export const dynamicParams = true;
 
 interface Props {
@@ -22,18 +24,23 @@ interface Props {
 }
 
 export async function generateStaticParams() {
-  const catSlugs = GUIDE_CATEGORIES.map((cat) => ({ slug: cat.slug }));
-  const postSlugs = GUIDE_POSTS.map((post) => ({ slug: post.slug }));
+  const [categories, postsData] = await Promise.all([
+    fetchPublicBlogCategories(),
+    fetchPublicBlogPosts(1, 100),
+  ]);
+  const catSlugs = categories.map((cat) => ({ slug: cat.slug }));
+  const postSlugs = postsData.items.map((post) => ({ slug: post.slug }));
   return [...catSlugs, ...postSlugs];
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const category = getCategoryBySlug(slug);
+  const category = await fetchBlogCategoryBySlug(slug);
 
-  if (category) {
-    const title = `${category.name} Guides | Store4Riders`;
+  if (category && category.isActive !== false) {
+    const title = category.metaTitle?.trim() || `${category.name} Guides | Store4Riders`;
     const description =
+      category.metaDescription?.trim() ||
       category.description ||
       `Expert motorcycle guides and advice for ${category.name} at Store4Riders.`;
     const canonical = `https://www.store4riders.com/guides/category/${category.slug}`;
@@ -53,11 +60,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
-  const post = getGuideBySlug(slug);
+  const post = await fetchGuideOrBlogPost(slug);
   if (post) {
-    const title = `${post.title} | Store4Riders Guides`;
-    const description = post.description;
+    const title = post.metaTitle?.trim() || `${post.title} | Store4Riders Guides`;
+    const description =
+      post.metaDescription?.trim() ||
+      post.excerpt?.trim() ||
+      "Expert motorcycle riding guides, gear care advice, and maintenance tips by Store4Riders.";
     const canonical = `https://www.store4riders.com/guides/post/${post.slug}`;
+    const rawPublished = post.publishedAt || new Date().toISOString();
+    const rawModified = post.updatedAt || rawPublished;
+    const ogImage = normalizeExternalImageUrl(post.featuredImage);
 
     return {
       title,
@@ -71,19 +84,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         url: canonical,
         siteName: "Store4Riders",
         type: "article",
-        publishedTime: post.publishedDate,
-        modifiedTime: post.modifiedDate || post.publishedDate,
-        authors: [post.author.name],
-        section: post.categoryName,
-        images: post.featuredImage
-          ? [{ url: post.featuredImage, width: 1200, height: 630, alt: post.title }]
+        publishedTime: typeof rawPublished === "string" ? rawPublished : rawPublished.toISOString?.() || undefined,
+        modifiedTime: typeof rawModified === "string" ? rawModified : rawModified.toISOString?.() || undefined,
+        authors: [post.author?.name || "Store4Riders Team"],
+        section: post.categoryName || "Motorcycle Guides",
+        images: ogImage
+          ? [{ url: ogImage, width: 1200, height: 630, alt: post.title }]
           : [],
       },
       twitter: {
         card: "summary_large_image",
         title,
         description,
-        images: post.featuredImage ? [post.featuredImage] : [],
+        images: ogImage ? [ogImage] : [],
       },
     };
   }
@@ -96,15 +109,24 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function GuidesDynamicSlugPage({ params }: Props) {
   const { slug } = await params;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://store4riders.com";
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "https://www.store4riders.com";
 
-  const category = getCategoryBySlug(slug);
-  if (category) {
-    const posts = GUIDE_POSTS.filter((p) => p.categorySlug === category.slug);
+  const category = await fetchBlogCategoryBySlug(slug);
+  if (category && category.isActive !== false) {
+    const [postsData, categories] = await Promise.all([
+      fetchPublicBlogPosts(1, 18, category.slug),
+      fetchPublicBlogCategories(),
+    ]);
+
     const collectionSchema = buildBlogCollectionSchema(
       `${category.name} Guides`,
-      category.description || `Expert motorcycle guides and advice for ${category.name}`,
-      posts,
+      category.metaDescription?.trim() ||
+        category.description ||
+        `Expert motorcycle guides and advice for ${category.name}`,
+      postsData.items,
       `${siteUrl}/guides/${category.slug}`,
       siteUrl
     );
@@ -127,24 +149,30 @@ export default async function GuidesDynamicSlugPage({ params }: Props) {
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
         />
-        <GuidesCategoryModule categorySlug={slug} />
+        <GuidesCategoryModule
+          categorySlug={category.slug}
+          initialCategory={category}
+          initialPostsData={postsData}
+          initialCategories={categories}
+        />
       </>
     );
   }
 
-  const post = getGuideBySlug(slug);
+  const post = await fetchGuideOrBlogPost(slug);
   if (post) {
+    const relatedPosts = await fetchRelatedBlogPosts(post.slug, 3);
     const authorSchema = buildAuthorSchema(post.author, siteUrl);
     const blogPostingSchema = buildBlogPostingSchema(post, siteUrl);
-    const breadcrumbSchema = buildBreadcrumbSchema(
-      [
-        { name: "Home", url: "/" },
-        { name: "Guides", url: "/guides" },
-        { name: post.categoryName, url: `/guides/category/${post.categorySlug}` },
-        { name: post.title, url: `/guides/post/${post.slug}` },
-      ],
-      siteUrl
-    );
+    const breadcrumbItems = [
+      { name: "Home", url: "/" },
+      { name: "Guides", url: "/guides" },
+      ...(post.categorySlug && post.categoryName
+        ? [{ name: post.categoryName, url: `/guides/category/${post.categorySlug}` }]
+        : []),
+      { name: post.title, url: `/guides/post/${post.slug}` },
+    ];
+    const breadcrumbSchema = buildBreadcrumbSchema(breadcrumbItems, siteUrl);
 
     return (
       <>
@@ -160,7 +188,11 @@ export default async function GuidesDynamicSlugPage({ params }: Props) {
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
         />
-        <GuideDetailModule slug={slug} initialPost={post} />
+        <GuideDetailModule
+          slug={slug}
+          initialPost={post}
+          initialRelatedPosts={relatedPosts}
+        />
       </>
     );
   }

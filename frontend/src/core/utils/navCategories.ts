@@ -108,6 +108,7 @@ export const CATEGORY_SLUG_ALIASES: Record<string, string[]> = {
   "modular-helmets": ["modular-helmets", "modular-helmets-flip-up-helmets", "modular-flip-up", "modular-helmet"],
   "off-road-helmets": ["off-road-helmets", "off-road-helmets-motocross-helmet", "motocross-helmet", "off-road-helmet", "motocross-helmets"],
   "open-face-helmets": ["open-face-helmets", "half-face-helmets", "open-face", "open-face-helmet", "half-face-helmet"],
+  "carbon-fibre-helmets": ["carbon-fibre-helmets", "carbon-fibre-helmet", "carbon-fiber-helmets", "carbon-fiber-helmet"],
   "helmet-accessories": ["helmet-accessories", "helmet-accessories-helmet-visors", "helmet-visors", "visors", "visor"],
   "balaclava": ["balaclava", "balaclavas", "face-mask", "head-mask"],
   "bluetooth-intercoms": ["bluetooth-intercoms", "communicators", "communicator", "intercom", "bluetooth", "motorcycle-intercoms"],
@@ -154,7 +155,7 @@ export const CATEGORY_SLUG_ALIASES: Record<string, string[]> = {
   "motorcycle-other-luggage": ["motorcycle-other-luggage", "other-luggage", "other-luggages"],
 
   // Accessories
-  "motorcycle-accessories-online": ["motorcycle-accessories-online", "motorcycle-accessories", "accessories", "bike-accessories"],
+  "motorcycle-accessories-online": ["motorcycle-accessories-online", "motorcycle-accessories-bike-accessories", "motorcycle-accessories", "accessories", "bike-accessories"],
   "bike-auxiliary-lights-filters-flashers": ["bike-auxiliary-lights-filters-flashers", "auxiliary-lights-filters-flashers"],
   "bike-auxiliary-lights": ["bike-auxiliary-lights", "auxiliary-lights", "auxiliary-light"],
   "auxiliary-light-filters": ["auxiliary-light-filters", "auxiliary-light-filter"],
@@ -162,12 +163,12 @@ export const CATEGORY_SLUG_ALIASES: Record<string, string[]> = {
   "auxiliary-light-wiring-harness-switch": ["auxiliary-light-wiring-harness-switch", "auxiliary-light-wiring-harness-and-switch"],
   "off-beat-motorcycle-accessories": ["off-beat-motorcycle-accessories", "off-beat-accessories"],
   "performance-parts": ["performance-parts"],
-  "rally-tower": ["rally-tower", "rally-towers-navigation-tower"],
+  "rally-tower": ["rally-tower", "rally-towers-navigation-tower", "rally-tower-navigation-tower"],
   "bike-covers": ["bike-covers", "bike-cover"],
   "chain-care": ["chain-care"],
 
   // Spares
-  "spares": ["spares", "bike-spares"],
+  "spares": ["spares", "bike-spares", "bike-spare-parts-online"],
   "chain-sprocket-kits": ["chain-sprocket-kits", "chain-sprockets", "sprockets"],
   "iridium-spark-plug": ["iridium-spark-plug", "spark-plugs", "spark-plug"],
   "performance-air-filter-bike": ["performance-air-filter-bike", "performance-air-filters-for-bikes", "performance-air-filters", "air-filter", "air-filters"],
@@ -175,7 +176,7 @@ export const CATEGORY_SLUG_ALIASES: Record<string, string[]> = {
   "brake-pads": ["brake-pads", "brake-pad"],
 
   // Exhausts
-  "exhausts": ["exhausts", "exhaust"],
+  "exhausts": ["exhausts", "exhaust", "bike-exhausts", "bike-exhaust"],
 
   // Gadgets
   "gadgets": ["gadgets"],
@@ -245,7 +246,6 @@ export const LEGACY_NON_MENU_SLUGS = new Set<string>([
   "performance-air-filters-for-bikes",
   "smk-gullwing-helmets",
   "smk-typhoon-helmets",
-  "carbon-fibre-helmets",
   "ls2-ff800-storm-ii-helmets-touring-range",
   "ls2-ff320-stream-ii-daily-rider-range",
   "axor-brutale-dual-spoiler-helmet",
@@ -269,6 +269,30 @@ export function isCanonicalMenuAlias(slug?: string): boolean {
       return true;
     }
   }
+  return false;
+}
+
+/**
+ * Checks whether two category slugs represent the same canonical category via alias mapping.
+ */
+export function areCategorySlugsEquivalent(slugA?: string, slugB?: string): boolean {
+  const a = (slugA || "").toLowerCase().trim();
+  const b = (slugB || "").toLowerCase().trim();
+  if (!a || !b) return false;
+  if (a === b) return true;
+
+  const aliasesA = CATEGORY_SLUG_ALIASES[a]?.map((s) => s.toLowerCase().trim()) || [];
+  const aliasesB = CATEGORY_SLUG_ALIASES[b]?.map((s) => s.toLowerCase().trim()) || [];
+  if (aliasesA.includes(b) || aliasesB.includes(a)) return true;
+
+  for (const [canonical, aliases] of Object.entries(CATEGORY_SLUG_ALIASES)) {
+    const normalizedCanonical = canonical.toLowerCase().trim();
+    const normalizedAliases = aliases.map((s) => s.toLowerCase().trim());
+    const hasA = normalizedCanonical === a || normalizedAliases.includes(a);
+    const hasB = normalizedCanonical === b || normalizedAliases.includes(b);
+    if (hasA && hasB) return true;
+  }
+
   return false;
 }
 
@@ -940,3 +964,81 @@ export function resolveProductBreadcrumbs(product: {
 
   return deduped;
 }
+
+// Fast lookup set of known category slugs (used for loading skeletons)
+export const ALL_CATEGORY_SLUGS = new Set<string>();
+
+// Strict set of canonical full category URL paths from official storefront navigation
+// (excludes shop-by-brand and guides to prevent any collision with product/brand/guide slugs)
+export const CANONICAL_CATEGORY_PATHS = new Set<string>();
+
+// 1. Core category parents
+Object.values(CORE_PRODUCT_PARENTS).forEach((c) => {
+  ALL_CATEGORY_SLUGS.add(c.slug.toLowerCase());
+  const cleanUrl = c.linkUrl.replace(/^\/+|\/+$/g, "").toLowerCase();
+  if (cleanUrl) {
+    ALL_CATEGORY_SLUGS.add(cleanUrl);
+    CANONICAL_CATEGORY_PATHS.add(cleanUrl);
+  }
+});
+
+// 2. Category aliases & taxonomy keys (for skeleton detection)
+Object.entries(CATEGORY_SLUG_ALIASES).forEach(([key, aliases]) => {
+  ALL_CATEGORY_SLUGS.add(key.toLowerCase());
+  aliases.forEach((a) => ALL_CATEGORY_SLUGS.add(a.toLowerCase()));
+});
+
+// 3. Official catalog navbar URLs & subcategory paths
+DEFAULT_NAV_ITEMS.forEach((item) => {
+  if (item.id === "shop-by-brand" || item.id === "guides") return;
+
+  const cleanItemPath = item.href.replace(/^\/+|\/+$/g, "").toLowerCase();
+  if (cleanItemPath && cleanItemPath !== "#") {
+    CANONICAL_CATEGORY_PATHS.add(cleanItemPath);
+    const itemSlug = cleanItemPath.split("/").pop();
+    if (itemSlug) ALL_CATEGORY_SLUGS.add(itemSlug);
+  }
+
+  item.megaMenuItems?.forEach((group) => {
+    if (group.groupHref) {
+      const cleanGroupPath = group.groupHref.replace(/^\/+|\/+$/g, "").toLowerCase();
+      if (cleanGroupPath && cleanGroupPath !== "#") {
+        CANONICAL_CATEGORY_PATHS.add(cleanGroupPath);
+        const gSlug = cleanGroupPath.split("/").pop();
+        if (gSlug) ALL_CATEGORY_SLUGS.add(gSlug);
+      }
+    }
+    group.items?.forEach((sub) => {
+      const cleanSubPath = sub.href.replace(/^\/+|\/+$/g, "").toLowerCase();
+      if (cleanSubPath && cleanSubPath !== "#" && !cleanSubPath.startsWith("brands/") && !cleanSubPath.startsWith("guides/")) {
+        CANONICAL_CATEGORY_PATHS.add(cleanSubPath);
+        const sSlug = cleanSubPath.split("/").pop();
+        if (sSlug) ALL_CATEGORY_SLUGS.add(sSlug);
+      }
+    });
+  });
+});
+
+/**
+ * Used in loading.tsx to show the catalog skeleton instead of product skeleton.
+ */
+export function isKnownCategorySlug(slug?: string): boolean {
+  if (!slug) return false;
+  const clean = slug.toLowerCase().trim().replace(/\.html$/i, "");
+  return ALL_CATEGORY_SLUGS.has(clean);
+}
+
+/**
+ * Strictly checks whether a URL segment array matches an unambiguous canonical
+ * category path from the storefront navigation. Safe for skipping product lookups.
+ */
+export function isCanonicalCategoryPath(slugSegments: string[]): boolean {
+  if (!slugSegments || slugSegments.length === 0) return false;
+  const cleanFullPath = slugSegments
+    .map((s) => s.replace(/\.html$/i, "").toLowerCase().trim())
+    .filter(Boolean)
+    .join("/");
+  return CANONICAL_CATEGORY_PATHS.has(cleanFullPath);
+}
+
+

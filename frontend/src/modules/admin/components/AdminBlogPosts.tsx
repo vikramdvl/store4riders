@@ -346,7 +346,7 @@ export function AdminBlogPosts() {
                             {post.title}
                           </Link>
                           <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-                            <span className="font-mono">/guides/{post.slug}</span>
+                            <span className="font-mono">/guides/post/{post.slug}</span>
                             <span>•</span>
                             <span className="flex items-center gap-1">
                               <Clock size={11} /> {post.readingTimeMinutes || 5} min read
@@ -392,7 +392,7 @@ export function AdminBlogPosts() {
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Link
-                          href={`/guides/${post.slug}`}
+                          href={`/guides/post/${post.slug}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"

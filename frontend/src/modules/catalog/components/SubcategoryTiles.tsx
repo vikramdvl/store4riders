@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Shield } from "lucide-react";
 
 export interface SubcategoryItem {
@@ -227,6 +227,7 @@ export const SubcategoryTiles: React.FC<SubcategoryTilesProps> = ({
   subcategories = [],
 }) => {
   const pathname = usePathname();
+  const router = useRouter();
 
   if (!subcategories || subcategories.length === 0) {
     return null;
@@ -259,6 +260,9 @@ export const SubcategoryTiles: React.FC<SubcategoryTilesProps> = ({
             <Link
               key={item.id || item._id || item.slug || index}
               href={href}
+              onMouseEnter={() => {
+                if (href && href !== "#") router.prefetch(href);
+              }}
               className="group flex flex-col items-center select-none text-center min-w-0 w-full"
             >
               {/* Tile Image Card */}

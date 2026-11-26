@@ -13,7 +13,14 @@ export interface PaginatedBlogResponse {
 
 // ===================== PUBLIC HOOKS =====================
 
-export function usePublicBlogPosts(params: IBlogPostQuery = {}) {
+export function usePublicBlogPosts(
+  params: IBlogPostQuery = {},
+  options?: {
+    initialData?: PaginatedBlogResponse;
+    initialDataUpdatedAt?: number;
+    enabled?: boolean;
+  }
+) {
   return useQuery({
     queryKey: ["blog-posts", params],
     queryFn: async () => {
@@ -29,6 +36,9 @@ export function usePublicBlogPosts(params: IBlogPostQuery = {}) {
       const response = await apiClient.get(`/blog/posts?${query.toString()}`);
       return response.data.data as PaginatedBlogResponse;
     },
+    initialData: options?.initialData,
+    initialDataUpdatedAt: options?.initialDataUpdatedAt,
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -36,20 +46,47 @@ export function usePublicBlogPost(slug: string) {
   return useQuery({
     queryKey: ["blog-post", slug],
     queryFn: async () => {
-      const response = await apiClient.get(`/blog/posts/${slug}`);
+      const response = await apiClient.get(`/blog/posts/${encodeURIComponent(slug)}`);
       return response.data.data as IBlogPost;
     },
     enabled: !!slug,
   });
 }
 
-export function usePublicBlogCategories() {
+export function useRelatedBlogPosts(
+  slug: string,
+  limit: number = 3,
+  options?: {
+    initialData?: IBlogPost[];
+    initialDataUpdatedAt?: number;
+  }
+) {
+  return useQuery({
+    queryKey: ["blog-related", slug, limit],
+    queryFn: async () => {
+      const response = await apiClient.get(
+        `/blog/posts/${encodeURIComponent(slug)}/related?limit=${limit}`
+      );
+      return (response.data.data || []) as IBlogPost[];
+    },
+    enabled: !!slug,
+    initialData: options?.initialData,
+    initialDataUpdatedAt: options?.initialDataUpdatedAt,
+  });
+}
+
+export function usePublicBlogCategories(options?: {
+  initialData?: IBlogCategory[];
+  initialDataUpdatedAt?: number;
+}) {
   return useQuery({
     queryKey: ["blog-categories"],
     queryFn: async () => {
       const response = await apiClient.get("/blog/categories");
       return response.data.data as IBlogCategory[];
     },
+    initialData: options?.initialData,
+    initialDataUpdatedAt: options?.initialDataUpdatedAt,
   });
 }
 
@@ -95,6 +132,8 @@ export function useCreateBlogPost() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-blog-posts"] });
       queryClient.invalidateQueries({ queryKey: ["blog-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["blog-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
       toast.success("Blog post created successfully!");
     },
     onError: (error: any) => {
@@ -110,10 +149,16 @@ export function useUpdateBlogPost() {
       const response = await apiClient.put(`/blog/admin/posts/${id}`, data);
       return response.data.data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (updatedPost, variables) => {
       queryClient.invalidateQueries({ queryKey: ["admin-blog-posts"] });
       queryClient.invalidateQueries({ queryKey: ["admin-blog-post", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["blog-posts"] });
+      if (updatedPost?.slug) {
+        queryClient.invalidateQueries({ queryKey: ["blog-post", updatedPost.slug] });
+        queryClient.invalidateQueries({ queryKey: ["blog-related", updatedPost.slug] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["blog-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
       toast.success("Blog post updated successfully!");
     },
     onError: (error: any) => {
@@ -132,6 +177,8 @@ export function useDeleteBlogPost() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-blog-posts"] });
       queryClient.invalidateQueries({ queryKey: ["blog-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["blog-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
       toast.success("Blog post deleted successfully!");
     },
     onError: (error: any) => {

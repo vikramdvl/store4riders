@@ -529,6 +529,12 @@ export function SidebarFilters({
                         key={cat.fullName} 
                         className="flex items-center justify-between cursor-pointer group py-0.5 select-none"
                         style={{ paddingLeft: `${cat.indent}px` }}
+                        onMouseEnter={() => {
+                          if (!isBrandPage) {
+                            const path = cat.fullSlug ? `/${cat.fullSlug}` : `/${cat.slug}`;
+                            router.prefetch(path);
+                          }
+                        }}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <FilterCheckbox 

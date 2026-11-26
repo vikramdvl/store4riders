@@ -134,6 +134,11 @@ export function AdminBlogEditor({ id }: AdminBlogEditorProps) {
   // Populate data when editing an existing post
   useEffect(() => {
     if (post && isEditing) {
+      const matchedCategory = categories.find(
+        (c) =>
+          (post.categoryId && c._id === post.categoryId) ||
+          (post.categorySlug && c.slug === post.categorySlug)
+      );
       reset({
         title: post.title || "",
         slug: post.slug || "",
@@ -141,7 +146,7 @@ export function AdminBlogEditor({ id }: AdminBlogEditorProps) {
         excerpt: post.excerpt || "",
         featuredImage: post.featuredImage || "",
         videoUrl: post.videoUrl || "",
-        categoryId: post.categoryId || post.categorySlug || "",
+        categoryId: matchedCategory?._id || matchedCategory?.slug || post.categoryId || post.categorySlug || "",
         categoryName: post.categoryName || "",
         categorySlug: post.categorySlug || "",
         tags: post.tags || [],
@@ -161,6 +166,23 @@ export function AdminBlogEditor({ id }: AdminBlogEditorProps) {
     }
   }, [post, isEditing, reset]);
 
+  // Sync category dropdown option value if categories finish loading after post
+  useEffect(() => {
+    if (!post || !isEditing || categories.length === 0) return;
+    const currentCatId = watch("categoryId");
+    const matched = categories.find(
+      (c) =>
+        (currentCatId && (c._id === currentCatId || c.slug === currentCatId)) ||
+        (post.categorySlug && c.slug === post.categorySlug)
+    );
+    const resolvedVal = matched?._id || matched?.slug;
+    if (resolvedVal && currentCatId !== resolvedVal && !currentCatId) {
+      setValue("categoryId", resolvedVal);
+    } else if (resolvedVal && currentCatId === post.categorySlug && matched?._id && currentCatId !== matched._id) {
+      setValue("categoryId", matched._id);
+    }
+  }, [categories, post, isEditing, setValue, watch]);
+
   // Handle Cover Image Upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -171,7 +193,7 @@ export function AdminBlogEditor({ id }: AdminBlogEditorProps) {
       toast.info("Compressing cover image to WebP...");
       const compressed = await compressImageToWebP(file, 1600, 0.85);
       const s3Url = await uploadImageToS3(compressed.file);
-      setValue("featuredImage", s3Url);
+      setValue("featuredImage", s3Url, { shouldDirty: true, shouldValidate: true });
       toast.success("Cover image uploaded!");
     } catch (err: any) {
       toast.error(err.message || "Failed to upload image");
@@ -335,14 +357,17 @@ export function AdminBlogEditor({ id }: AdminBlogEditorProps) {
     try {
       const finalSlug = values.slug && values.slug.trim() ? slugify(values.slug) : slugify(values.title);
 
-      // Find category details
-      let catName = values.categoryName || "";
-      let catSlug = values.categorySlug || "";
+      // Find category details (clear name/slug if category is unselected)
+      let catName = "";
+      let catSlug = "";
       if (values.categoryId) {
         const selectedCat = categories.find((c) => c._id === values.categoryId || c.slug === values.categoryId);
         if (selectedCat) {
           catName = selectedCat.name;
           catSlug = selectedCat.slug;
+        } else {
+          catName = values.categoryName || "";
+          catSlug = values.categorySlug || "";
         }
       }
 
@@ -362,6 +387,37 @@ export function AdminBlogEditor({ id }: AdminBlogEditorProps) {
     } catch (err) {
       // Error handled by mutation onError
     }
+  };
+
+  // Surface validation errors even if they belong to a currently inactive tab
+  const onInvalid = (formErrors: Record<string, any>) => {
+    const firstKey = Object.keys(formErrors)[0];
+    if (!firstKey) return;
+
+    const firstError = formErrors[firstKey];
+    const nestedErrObj =
+      firstError && typeof firstError === "object"
+        ? (Object.values(firstError) as Array<{ message?: string }>).find(
+            (v) => typeof v?.message === "string"
+          )
+        : undefined;
+    const nestedMsg = firstError?.message || nestedErrObj?.message;
+    const errorMessage =
+      typeof nestedMsg === "string"
+        ? nestedMsg
+        : "Please check required fields before saving.";
+
+    if (["title", "slug", "excerpt", "content"].includes(firstKey)) {
+      setActiveTab("content");
+    } else if (["featuredImage", "videoUrl"].includes(firstKey)) {
+      setActiveTab("media");
+    } else if (["categoryId", "tags", "author"].includes(firstKey)) {
+      setActiveTab("taxonomy");
+    } else if (["metaTitle", "metaDescription", "metaKeywords"].includes(firstKey)) {
+      setActiveTab("seo");
+    }
+
+    toast.error(errorMessage);
   };
 
   if (isEditing && isLoadingPost) {
@@ -397,7 +453,7 @@ export function AdminBlogEditor({ id }: AdminBlogEditorProps) {
   );
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 pb-16">
+    <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-5 pb-16">
       {/* Sticky Top Header */}
       <div className="sticky top-0 z-20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white/95 backdrop-blur-xs p-4 rounded-xl border border-slate-200 shadow-2xs">
         <div className="flex items-center gap-3">
@@ -1387,7 +1443,7 @@ export function AdminBlogEditor({ id }: AdminBlogEditorProps) {
           <div>
             <div className="flex items-center gap-2 mb-2">
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand/10 text-brand">
-                {categories.find((c) => c._id === watch("categoryId"))?.name || "Riding Guide"}
+                {categories.find((c) => c._id === watch("categoryId") || c.slug === watch("categoryId"))?.name || "Riding Guide"}
               </span>
               <span className="text-xs text-slate-400">•</span>
               <span className="text-xs text-slate-500 flex items-center gap-1">

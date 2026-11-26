@@ -10,6 +10,22 @@ import { detectAttributeSetFromCategory } from "../product-specs.constants";
 import { apiClient } from "@/core/api/client";
 import { toast } from "sonner";
 
+function findCategoryNodeIdentifiers(nodes: any[], target: string): string[] {
+  if (!target || !Array.isArray(nodes)) return [];
+  for (const node of nodes) {
+    const nodeId = node._id ? String(node._id) : "";
+    const nodeSlug = node.slug ? String(node.slug) : "";
+    if (target === nodeId || target === nodeSlug) {
+      return [nodeId, nodeSlug].filter(Boolean);
+    }
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      const nested = findCategoryNodeIdentifiers(node.children, target);
+      if (nested.length > 0) return nested;
+    }
+  }
+  return [];
+}
+
 export function ProductBasicTab() {
   const [showMultiCategoryDrawer, setShowMultiCategoryDrawer] = useState(false);
   const [skuStatus, setSkuStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
@@ -621,9 +637,15 @@ export function ProductBasicTab() {
             <ModernCategorySelect
               value={categoryId}
               onChange={(catVal) => {
+                const prevPrimaryKeys = new Set<string>([
+                  ...(categoryId ? [categoryId] : []),
+                  ...findCategoryNodeIdentifiers(categoryTree, categoryId),
+                ]);
                 setCategoryId(catVal);
                 applyCategoryBlueprint(catVal);
-                setCategorySlugs((prev) => Array.from(new Set([catVal, ...prev])));
+                setCategorySlugs((prev) =>
+                  Array.from(new Set([catVal, ...prev.filter((c) => !prevPrimaryKeys.has(c))]))
+                );
               }}
               dbCategories={categoryTree}
             />

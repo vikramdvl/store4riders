@@ -14,6 +14,7 @@ export const DEFAULT_NAV_ITEMS: NavItem[] = [
           { label: "Modular / Flip Up Helmets", href: "/motorcycle-helmets/modular-helmets" },
           { label: "Off Road Helmets", href: "/motorcycle-helmets/off-road-helmets" },
           { label: "Open Face Helmets", href: "/motorcycle-helmets/open-face-helmets" },
+          { label: "Carbon Fibre Helmets", href: "/motorcycle-helmets/carbon-fibre-helmets" },
         ],
       },
       {

@@ -11,7 +11,15 @@ import { inferRichColorFromUrl, isValidCssSwatch, parseColorToBackground } from 
 import { getProductThumbnailUrl, getPreferredInStockColor, normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
 import { CATEGORY_SLUG_ALIASES } from "@/core/utils/navCategories";
 
-export const ProductsPageModule = ({ initialCategoryNode }: { initialCategoryNode?: any }) => {
+interface ProductsPageModuleProps {
+  initialCategoryNode?: any;
+  initialProductsData?: any;
+}
+
+export const ProductsPageModule = ({ 
+  initialCategoryNode, 
+  initialProductsData 
+}: ProductsPageModuleProps) => {
   const searchParams = useSearchParams();
   const params = useParams();
   
@@ -131,7 +139,22 @@ export const ProductsPageModule = ({ initialCategoryNode }: { initialCategoryNod
     [category, brand, search, page, minPrice, maxPrice, sort, dynamicParamsKey]
   );
 
-  const { data, isLoading, isFetching, error } = useProducts(productQueryParams);
+  // Check if current query is the default page 1 without active filter parameters matching initialProductsData
+  const hasFilterParams = Boolean(
+    brand ||
+    search ||
+    activeColorParam ||
+    minPrice !== undefined ||
+    maxPrice !== undefined ||
+    sort ||
+    page !== 1 ||
+    Object.keys(dynamicParams).length > 0
+  );
+
+  const { data, isLoading, isFetching, error } = useProducts(
+    productQueryParams,
+    !hasFilterParams && initialProductsData ? { initialData: initialProductsData } : undefined
+  );
   const prefetchProducts = usePrefetchProducts();
 
   // Prefetch next page in background once current page loads so clicking Next/Page 2 is instant

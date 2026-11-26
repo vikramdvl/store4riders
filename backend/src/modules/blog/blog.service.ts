@@ -4,6 +4,10 @@ import { NotFoundError, ConflictError, ValidationError } from "../../core/errors
 import { slugify } from "@store4riders/shared-utils";
 import { FilterQuery } from "mongoose";
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function extractWordStats(htmlOrText: string): { wordCount: number; readingTimeMinutes: number } {
   if (!htmlOrText) return { wordCount: 0, readingTimeMinutes: 1 };
   // Strip HTML tags to get pure text content
@@ -34,14 +38,14 @@ export class BlogService {
       filter.categoryId = query.categoryId;
     }
 
-    // Tag filter
-    if (query.tag) {
-      filter.tags = query.tag;
+    // Tag filter (case-insensitive exact match)
+    if (query.tag && query.tag.trim()) {
+      filter.tags = new RegExp(`^${escapeRegex(query.tag.trim())}$`, "i");
     }
 
     // Search query
     if (query.search && query.search.trim()) {
-      const searchRegex = new RegExp(query.search.trim(), "i");
+      const searchRegex = new RegExp(escapeRegex(query.search.trim()), "i");
       filter.$or = [
         { title: searchRegex },
         { excerpt: searchRegex },
@@ -210,14 +214,19 @@ export class BlogService {
       throw new NotFoundError("Failed to update blog post");
     }
 
-    // Recalculate category counts if category changed
-    if (categorySlug && categorySlug !== existing.categorySlug) {
-      const newCount = await BlogRepository.countPostsByCategory(categorySlug);
-      await BlogRepository.updateCategoryArticleCount(categorySlug, newCount);
+    // Recalculate category counts if category or publish status changed
+    if (categorySlug !== existing.categorySlug) {
+      if (categorySlug) {
+        const newCount = await BlogRepository.countPostsByCategory(categorySlug);
+        await BlogRepository.updateCategoryArticleCount(categorySlug, newCount);
+      }
       if (existing.categorySlug) {
         const oldCount = await BlogRepository.countPostsByCategory(existing.categorySlug);
         await BlogRepository.updateCategoryArticleCount(existing.categorySlug, oldCount);
       }
+    } else if (data.status && data.status !== existing.status && categorySlug) {
+      const count = await BlogRepository.countPostsByCategory(categorySlug);
+      await BlogRepository.updateCategoryArticleCount(categorySlug, count);
     }
 
     return updated;

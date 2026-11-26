@@ -4,9 +4,11 @@ import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound, useRouter } from "next/navigation";
+import { IBlogPost, IGuidePost } from "@store4riders/shared-types";
 import { handleRichTextClick } from "@/core/utils/cleanRichContent";
+import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
+import { useRelatedBlogPosts } from "@/core/hooks/useBlog";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
-import { getGuideBySlug, getRelatedGuides } from "../data/guides-data";
 import { getVideoEmbedInfo } from "../utils/video";
 import { GuideAuthorCard } from "./GuideAuthorCard";
 import { GuideCard } from "./GuideCard";
@@ -22,31 +24,48 @@ import {
 
 interface GuideDetailModuleProps {
   slug: string;
-  initialPost?: any;
+  initialPost?: IBlogPost | IGuidePost | null;
+  initialRelatedPosts?: IBlogPost[];
 }
 
-export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({ slug, initialPost }) => {
+export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({
+  slug,
+  initialPost,
+  initialRelatedPosts,
+}) => {
   const router = useRouter();
-  const post = initialPost || getGuideBySlug(slug);
-  const videoEmbed = getVideoEmbedInfo(post?.videoUrl);
+  const post = initialPost;
   const [copied, setCopied] = useState(false);
+
+  const { data: relatedPosts = [] } = useRelatedBlogPosts(post?.slug || slug, 3, {
+    initialData: initialRelatedPosts,
+    initialDataUpdatedAt: 0,
+  });
 
   if (!post) {
     notFound();
   }
 
-  const relatedPosts = getRelatedGuides(post.slug, 3);
+  const videoEmbed = getVideoEmbedInfo((post as IBlogPost)?.videoUrl);
+  const heroImage = normalizeExternalImageUrl(post.featuredImage);
+  const summaryText =
+    (post as IBlogPost).excerpt || (post as IGuidePost).description || "";
 
-  const formattedDate = (post?.publishedDate || post?.publishedAt) ? new Date(post.publishedDate || post.publishedAt).toLocaleDateString("en-IN", {
+  const rawPublishedDate =
+    (post as IBlogPost).publishedAt || (post as IGuidePost).publishedDate;
+  const formattedDate = rawPublishedDate
+    ? new Date(rawPublishedDate).toLocaleDateString("en-IN", {
         year: "numeric",
         month: "long",
         day: "numeric",
       })
     : "";
 
+  const authorName = post.author?.name || "Store4Riders Editorial";
+  const authorAvatar = normalizeExternalImageUrl(post.author?.avatar);
   const authorInitials =
-    post?.author?.name
-      ?.trim()
+    authorName
+      .trim()
       .split(/\s+/)
       .map((part: string) => part[0]?.toUpperCase())
       .filter(Boolean)
@@ -61,46 +80,62 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({ slug, init
     }
   };
 
-  const shareUrl = typeof window !== "undefined" ? encodeURIComponent(window.location.href) : "";
+  const shareUrl =
+    typeof window !== "undefined" ? encodeURIComponent(window.location.href) : "";
   const shareTitle = encodeURIComponent(post.title);
+
+  const hasCategory = Boolean(post.categorySlug && post.categoryName);
+  const breadcrumbItems = [
+    { label: "Home", href: "/" },
+    { label: "Guides", href: "/guides" },
+    ...(hasCategory
+      ? [
+          {
+            label: post.categoryName!,
+            href: `/guides/category/${post.categorySlug}`,
+          },
+        ]
+      : []),
+    { label: post.title },
+  ];
+
+  const authorCardData = {
+    name: post.author?.name || "Store4Riders Team",
+    url: post.author?.url || "",
+    jobTitle: post.author?.jobTitle,
+    avatar: authorAvatar || undefined,
+    bio: post.author?.bio,
+    sameAs: Array.isArray(post.author?.sameAs) ? post.author.sameAs : [],
+  };
 
   return (
     <article className="min-h-screen bg-neutral-50/50 pb-24">
-
       {/* Breadcrumb Navigation */}
-      <Breadcrumb
-        items={[
-          { label: "Home", href: "/" },
-          { label: "Guides", href: "/guides" },
-          {
-            label: post.categoryName,
-            href: `/guides/category/${post.categorySlug}`,
-          },
-          { label: post.title },
-        ]}
-      />
+      <Breadcrumb items={breadcrumbItems} />
 
       {/* Post Header */}
       <header className="bg-white border-b border-neutral-200/80 pt-10 pb-12">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Back link */}
           <Link
-            href={`/guides/category/${post.categorySlug}`}
+            href={hasCategory ? `/guides/category/${post.categorySlug}` : "/guides"}
             className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-500 hover:text-brand transition-colors mb-6 uppercase tracking-wider"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to {post.categoryName}</span>
+            <span>{hasCategory ? `Back to ${post.categoryName}` : "Back to All Guides"}</span>
           </Link>
 
           {/* Category Badge */}
-          <div className="mb-4">
-            <Link
-              href={`/guides/category/${post.categorySlug}`}
-              className="inline-block bg-brand/10 text-brand text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-full hover:bg-brand hover:text-white transition-colors"
-            >
-              {post.categoryName}
-            </Link>
-          </div>
+          {hasCategory && (
+            <div className="mb-4">
+              <Link
+                href={`/guides/category/${post.categorySlug}`}
+                className="inline-block bg-brand/10 text-brand text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-full hover:bg-brand hover:text-white transition-colors"
+              >
+                {post.categoryName}
+              </Link>
+            </div>
+          )}
 
           {/* Headline - CSS Selector matched in speakable spec */}
           <h1 className="guide-headline text-2xl sm:text-4xl lg:text-5xl font-sans font-black text-neutral-900 tracking-tight leading-tight mb-4">
@@ -108,19 +143,21 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({ slug, init
           </h1>
 
           {/* Excerpt / Summary */}
-          <p className="text-base sm:text-lg text-neutral-600 leading-relaxed mb-6 font-normal">
-            {post.description}
-          </p>
+          {summaryText && (
+            <p className="text-base sm:text-lg text-neutral-600 leading-relaxed mb-6 font-normal">
+              {summaryText}
+            </p>
+          )}
 
           {/* Metadata Bar */}
           <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-neutral-100 text-xs sm:text-sm text-neutral-600">
             {/* Author info */}
             <div className="flex items-center gap-3">
-              {post.author?.avatar ? (
+              {authorAvatar ? (
                 <div className="relative w-10 h-10 rounded-full overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
                   <Image
-                    src={post.author.avatar}
-                    alt={post.author.name || "Author"}
+                    src={authorAvatar}
+                    alt={authorName}
                     fill
                     sizes="40px"
                     className="object-cover"
@@ -133,7 +170,7 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({ slug, init
               )}
               <div>
                 <p className="font-bold text-neutral-900 leading-tight">
-                  {post.author?.name || "Store4Riders Editorial"}
+                  {authorName}
                 </p>
                 <p className="text-xs text-brand font-medium">
                   {post.author?.jobTitle || "Motorcycle Gear Specialist"}
@@ -149,18 +186,18 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({ slug, init
                   <span suppressHydrationWarning>{formattedDate}</span>
                 </span>
               )}
-              {post.readingTimeMinutes && (
+              {post.readingTimeMinutes ? (
                 <span className="flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-neutral-400" />
                   <span>{post.readingTimeMinutes} min read</span>
                 </span>
-              )}
-              {post.wordCount && (
+              ) : null}
+              {post.wordCount ? (
                 <span className="hidden sm:flex items-center gap-1.5">
                   <BookOpen className="w-4 h-4 text-neutral-400" />
                   <span>{post.wordCount.toLocaleString()} words</span>
                 </span>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -168,7 +205,7 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({ slug, init
 
       {/* Main Content Area */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mt-10">
-        {/* Featured Video Embed (if provided) */}
+        {/* Featured Video Embed (if provided) or Featured Cover Image */}
         {videoEmbed ? (
           <div className="mb-10">
             <div className="relative aspect-video w-full rounded-2xl overflow-hidden shadow-2xl border border-neutral-200/90 bg-neutral-950">
@@ -196,11 +233,10 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({ slug, init
               <span className="text-neutral-500">Official Store4Riders Channel</span>
             </div>
           </div>
-        ) : post.featuredImage ? (
-          /* Featured Cover Image */
+        ) : heroImage ? (
           <div className="relative aspect-[16/9] w-full rounded-2xl overflow-hidden shadow-lg border border-neutral-200/80 mb-10 bg-neutral-100">
             <Image
-              src={post.featuredImage}
+              src={heroImage}
               alt={post.title}
               fill
               priority
@@ -258,7 +294,7 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({ slug, init
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <a
                 href={`https://api.whatsapp.com/send?text=${shareTitle}%20${shareUrl}`}
                 target="_blank"
@@ -284,6 +320,7 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({ slug, init
                 Facebook
               </a>
               <button
+                type="button"
                 onClick={handleCopyLink}
                 className="px-3.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
               >
@@ -297,8 +334,8 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({ slug, init
         {/* Author Bio Card */}
         <div className="mb-14">
           <GuideAuthorCard
-            author={post.author}
-            publishedDate={post?.publishedDate || post?.publishedAt}
+            author={authorCardData}
+            publishedDate={typeof rawPublishedDate === "string" ? rawPublishedDate : rawPublishedDate?.toISOString?.()}
             readingTimeMinutes={post.readingTimeMinutes}
           />
         </div>
@@ -309,7 +346,7 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({ slug, init
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
-                  Related Guides & Tips
+                  Related Guides &amp; Tips
                 </h3>
                 <p className="text-xs text-neutral-500 mt-1">
                   Continue exploring rider knowledge and gear recommendations.

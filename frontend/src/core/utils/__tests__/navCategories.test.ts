@@ -5,6 +5,9 @@ import {
   isLegacyNonMenuCategory,
   CORE_PRODUCT_PARENTS,
   resolveProductBreadcrumbs,
+  isCanonicalCategoryPath,
+  isKnownCategorySlug,
+  areCategorySlugsEquivalent,
 } from "../navCategories";
 
 describe("navCategories Suite — Storefront Navbar & Admin Categories Tree", () => {
@@ -37,6 +40,7 @@ describe("navCategories Suite — Storefront Navbar & Admin Categories Tree", ()
     expect(helmetSubSlugs).toContain("modular-helmets");
     expect(helmetSubSlugs).toContain("off-road-helmets");
     expect(helmetSubSlugs).toContain("open-face-helmets");
+    expect(helmetSubSlugs).toContain("carbon-fibre-helmets");
     expect(helmetSubSlugs).toContain("helmet-accessories");
     expect(helmetSubSlugs).toContain("balaclava");
     expect(helmetSubSlugs).toContain("helmet-cleaners");
@@ -212,7 +216,16 @@ describe("navCategories Suite — Storefront Navbar & Admin Categories Tree", ()
     expect(isLegacyNonMenuCategory("sale")).toBe(true);
     expect(isLegacyNonMenuCategory("merchandise")).toBe(true);
     expect(isLegacyNonMenuCategory("full-face-helmets")).toBe(false);
+    expect(isLegacyNonMenuCategory("carbon-fibre-helmets")).toBe(false);
     expect(isLegacyNonMenuCategory("premium-full-face-helmets")).toBe(false);
+  });
+
+  it("correctly identifies equivalent category aliases without false positives", () => {
+    expect(areCategorySlugsEquivalent("performance-air-filter-bike", "performance-air-filters-for-bikes")).toBe(true);
+    expect(areCategorySlugsEquivalent("communicators", "bluetooth-intercoms")).toBe(true);
+    expect(areCategorySlugsEquivalent("touring-gear", "motorcycle-touring-gear")).toBe(true);
+    expect(areCategorySlugsEquivalent("full-face-helmets", "carbon-fibre-helmets")).toBe(false);
+    expect(areCategorySlugsEquivalent("bike-phone-holders", "motorcycle-smart-display")).toBe(false);
   });
 
   it("prioritizes database category name when admin renames categories", () => {
@@ -325,6 +338,41 @@ describe("navCategories Suite — Storefront Navbar & Admin Categories Tree", ()
         { label: "FULL FACE HELMETS", href: "/motorcycle-helmets/full-face-helmets" },
         { label: "Axor Apex Sport Helmet" },
       ]);
+    });
+  });
+
+  describe("isCanonicalCategoryPath — Fast-Path Safety", () => {
+    it("matches canonical official navbar category paths strictly", () => {
+      expect(isCanonicalCategoryPath(["motorcycle-helmets"])).toBe(true);
+      expect(isCanonicalCategoryPath(["motorcycle-helmets", "full-face-helmets"])).toBe(true);
+      expect(isCanonicalCategoryPath(["motorcycle-helmets", "carbon-fibre-helmets"])).toBe(true);
+      expect(isCanonicalCategoryPath(["motorcycle-helmets", "full-face-helmets.html"])).toBe(true);
+      expect(isCanonicalCategoryPath(["riding-gear"])).toBe(true);
+      expect(isCanonicalCategoryPath(["riding-gear", "riding-jackets"])).toBe(true);
+      expect(isCanonicalCategoryPath(["riding-gear", "riding-jackets", "protectors-armour"])).toBe(true);
+      expect(isCanonicalCategoryPath(["riding-gear-for-women"])).toBe(true);
+      expect(isCanonicalCategoryPath(["bike-spares", "brake-pads"])).toBe(true);
+      expect(isCanonicalCategoryPath(["motorcycle-helmets", "balaclava"])).toBe(true);
+    });
+
+    it("does NOT match product slugs, multi-segment product URLs, brands, or guides", () => {
+      expect(isCanonicalCategoryPath(["furygan-jet-d3o-riding-gloves"])).toBe(false);
+      expect(isCanonicalCategoryPath(["riding-gear", "gloves", "furygan-jet-d3o-riding-gloves"])).toBe(false);
+      expect(isCanonicalCategoryPath(["axor-apex-helmet-sport-touring-performance"])).toBe(false);
+      expect(isCanonicalCategoryPath(["smk-twister-helmet"])).toBe(false);
+      expect(isCanonicalCategoryPath(["balaclava"])).toBe(false);
+      expect(isCanonicalCategoryPath(["brake-pads"])).toBe(false);
+      expect(isCanonicalCategoryPath(["motul"])).toBe(false);
+      expect(isCanonicalCategoryPath(["brands", "motul"])).toBe(false);
+      expect(isCanonicalCategoryPath(["guides", "category", "expert-tips"])).toBe(false);
+      expect(isCanonicalCategoryPath([])).toBe(false);
+    });
+
+    it("keeps brand/guide slugs excluded from isKnownCategorySlug", () => {
+      expect(isKnownCategorySlug("motul")).toBe(false);
+      expect(isKnownCategorySlug("furygan")).toBe(false);
+      expect(isKnownCategorySlug("expert-tips")).toBe(false);
+      expect(isKnownCategorySlug("full-face-helmets")).toBe(true);
     });
   });
 });

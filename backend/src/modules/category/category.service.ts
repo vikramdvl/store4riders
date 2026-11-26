@@ -113,6 +113,10 @@ export class CategoryService {
 
   static async getCategoryBySlug(slug: string): Promise<ICategory | null> {
     const cleanSlug = slug.replace(/\.html$/i, "");
+    const cacheKey = `cat_slug_v2_${cleanSlug}`;
+    const cached = await getCache(cacheKey);
+    if (cached) return cached as ICategory;
+
     let cat = await CategoryRepository.findBySlug(cleanSlug);
     if (!cat && cleanSlug.endsWith("s")) {
       cat = await CategoryRepository.findBySlug(cleanSlug.slice(0, -1));
@@ -143,6 +147,8 @@ export class CategoryService {
       } else {
         (cat as any).heroCategories = [];
       }
+
+      await setCache(cacheKey, cat, 3600);
     }
 
     return cat;

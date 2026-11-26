@@ -1,4 +1,5 @@
 import { slugify } from "@store4riders/shared-utils";
+import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
 import {
   IGuidePost,
   IBlogPost,
@@ -108,7 +109,7 @@ export function buildBlogPostingSchema(
     keywords: Array.isArray(post.tags) ? post.tags.join(", ") : `${categoryName}, motorcycle riding gear, store4riders`,
     image: {
       "@type": "ImageObject",
-      url: post.featuredImage || `${siteUrl}/Store4riders-Logo.jpg`,
+      url: normalizeExternalImageUrl(post.featuredImage) || `${siteUrl}/Store4riders-Logo.jpg`,
       width: 1200,
       height: 630,
     },
@@ -182,7 +183,7 @@ export function buildBlogCollectionSchema(
       description: post.description || post.excerpt,
       url: `${siteUrl}/guides/post/${post.slug}`,
       datePublished: post.publishedDate || post.publishedAt,
-      image: post.featuredImage,
+      image: normalizeExternalImageUrl(post.featuredImage) || undefined,
     })),
   };
 }

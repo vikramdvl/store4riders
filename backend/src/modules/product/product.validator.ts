@@ -186,7 +186,12 @@ export class ProductValidator {
       const isHexId = /^[0-9a-fA-F]{24}$/.test(category.trim());
       const categoryMatchCondition: any = isHexId
         ? { categoryId: category.trim() }
-        : { categorySlugs: { $in: searchSlugs } };
+        : {
+            $or: [
+              { categorySlugs: { $in: searchSlugs } },
+              { categoryId: { $in: searchSlugs } },
+            ],
+          };
 
       // Clean up Magento's messy tagging: Exclude cross-category contamination
       const excludeConditions: any[] = [];

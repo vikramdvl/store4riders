@@ -155,6 +155,9 @@ export const NavMobileDrawer: React.FC<NavMobileDrawerProps> = ({
                                   <Link
                                     href={item.href}
                                     onClick={onClose}
+                                    onMouseEnter={() => {
+                                      if (item.href && item.href !== "#") router.prefetch(item.href);
+                                    }}
                                     className="inline-flex items-center gap-1.5 text-xs font-bold text-brand hover:underline"
                                   >
                                     <span>Explore All {item.label}</span>
@@ -193,6 +196,9 @@ export const NavMobileDrawer: React.FC<NavMobileDrawerProps> = ({
                                         <Link
                                           href={group.groupHref}
                                           onClick={onClose}
+                                          onMouseEnter={() => {
+                                            if (group.groupHref) router.prefetch(group.groupHref);
+                                          }}
                                           className="mb-2 block cursor-pointer group/cat px-1 mt-3 first:mt-0"
                                         >
                                           <h4 className="text-[12.5px] font-bold text-neutral-900 uppercase tracking-widest border-b border-neutral-200/60 pb-1.5 flex items-start gap-2 leading-snug group-hover/cat:text-brand transition-colors">
@@ -216,6 +222,9 @@ export const NavMobileDrawer: React.FC<NavMobileDrawerProps> = ({
                                           <Link
                                             href={link.href}
                                             onClick={onClose}
+                                            onMouseEnter={() => {
+                                              if (link.href && link.href !== "#") router.prefetch(link.href);
+                                            }}
                                             className={`cursor-pointer transition-colors duration-150 flex items-center gap-2.5 group/item w-full ${
                                               !shouldShowHeader
                                                 ? "text-[13px] font-medium text-neutral-700 hover:text-brand hover:bg-neutral-50 rounded-xl px-3 py-2"

@@ -82,6 +82,47 @@ describe("BlogService", () => {
         BlogService.updatePost("non-existent-id", { title: "Test" })
       ).rejects.toThrow(NotFoundError);
     });
+
+    it("should recalculate category count when status changes within same category", async () => {
+      vi.spyOn(BlogRepository, "findPostById").mockResolvedValue({
+        _id: "post123",
+        title: "Helmet Guide",
+        slug: "helmet-guide",
+        content: "content",
+        status: "draft",
+        categorySlug: "choosing-correct-riding-gear",
+      } as any);
+      vi.spyOn(BlogRepository, "updatePost").mockResolvedValue({
+        _id: "post123",
+        status: "published",
+        categorySlug: "choosing-correct-riding-gear",
+      } as any);
+      vi.spyOn(BlogRepository, "countPostsByCategory").mockResolvedValue(12);
+      const updateCountSpy = vi.spyOn(BlogRepository, "updateCategoryArticleCount").mockResolvedValue(undefined);
+
+      await BlogService.updatePost("post123", { status: "published" });
+
+      expect(updateCountSpy).toHaveBeenCalledWith("choosing-correct-riding-gear", 12);
+    });
+  });
+
+  describe("getPosts", () => {
+    it("should escape regex special characters in search and tag filters", async () => {
+      const findPostsSpy = vi.spyOn(BlogRepository, "findPosts").mockResolvedValue({
+        items: [],
+        totalCount: 0,
+      });
+
+      await BlogService.getPosts({
+        search: "helmet (ECE 22.06)+",
+        tag: "ECE+22.06",
+      });
+
+      const filterArg = findPostsSpy.mock.calls[0][0] as any;
+      expect(filterArg.tags).toBeInstanceOf(RegExp);
+      expect(filterArg.$or).toHaveLength(3);
+      expect(() => filterArg.$or[0].title.test("helmet (ECE 22.06)+")).not.toThrow();
+    });
   });
 
   describe("deletePost", () => {

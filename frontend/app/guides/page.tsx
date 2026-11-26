@@ -2,36 +2,17 @@ import type { Metadata } from "next";
 import { getRobotsMetadata } from "@/core/utils/seo-schema";
 import {
   GuidesHubModule,
-  GUIDE_POSTS,
+  fetchGuidesPageSeo,
+  fetchPublicBlogCategories,
+  fetchPublicBlogPosts,
   buildBlogCollectionSchema,
   buildBreadcrumbSchema,
 } from "@/modules/guides";
 
-export const revalidate = 60;
-
-const rawApiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
-const API_BASE = rawApiBase.includes("/v1")
-  ? rawApiBase
-  : rawApiBase.endsWith("/api")
-  ? `${rawApiBase}/v1`
-  : `${rawApiBase}/api/v1`;
-
-async function getGuidesPageSeo() {
-  try {
-    const res = await fetch(`${API_BASE}/blog/page-seo`, {
-      next: { revalidate: 60 },
-      signal: AbortSignal.timeout(2500),
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json?.data || null;
-  } catch {
-    return null;
-  }
-}
+export const revalidate = 30;
 
 export async function generateMetadata(): Promise<Metadata> {
-  const seo = await getGuidesPageSeo();
+  const seo = await fetchGuidesPageSeo();
   const title =
     seo?.metaTitle?.trim() || "Motorcycle Guides & Expert Advice | Store4Riders";
   const description =
@@ -82,11 +63,17 @@ export default async function GuidesPage({
   const resolvedParams = searchParams ? await searchParams : {};
   const initialTag = resolvedParams?.tag || "";
   const initialSearch = resolvedParams?.q || "";
-  const seo = await getGuidesPageSeo();
+
+  const [seo, postsData, categories] = await Promise.all([
+    fetchGuidesPageSeo(),
+    fetchPublicBlogPosts(1, 18, "", initialTag, initialSearch.trim()),
+    fetchPublicBlogCategories(),
+  ]);
+
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
-    "https://store4riders.com";
+    "https://www.store4riders.com";
   const title =
     seo?.metaTitle?.trim() || "Motorcycle Guides & Expert Advice";
   const description =
@@ -96,7 +83,7 @@ export default async function GuidesPage({
   const blogSchema = buildBlogCollectionSchema(
     title,
     description,
-    GUIDE_POSTS,
+    postsData.items,
     `${siteUrl}/guides`,
     siteUrl
   );
@@ -123,6 +110,8 @@ export default async function GuidesPage({
         heroDescription={seo?.heroDescription}
         initialTag={initialTag}
         initialSearch={initialSearch}
+        initialPostsData={postsData}
+        initialCategories={categories}
       />
     </>
   );

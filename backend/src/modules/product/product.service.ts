@@ -1327,25 +1327,7 @@ export class ProductService {
         );
       }
     }
-    const canonicalSlugs = resolveCanonicalCategorySlugs({
-      name: data.name,
-      magentoCategories: data.magentoCategories,
-      categorySlugs: data.categorySlugs,
-    });
-    const categorySlugs = [...new Set([...(data.categorySlugs || []), ...canonicalSlugs])];
-
-    let categoryId = data.categoryId;
-    if (!categoryId && categorySlugs.length > 0) {
-      try {
-        const { CategoryModel } = await import("../category/category.model");
-        const matchedCat = await CategoryModel.findOne({ slug: { $in: categorySlugs } }).lean().exec();
-        if (matchedCat) {
-          categoryId = (matchedCat as any)._id.toString();
-        }
-      } catch (e) {
-        // Non-blocking fallback
-      }
-    }
+    const { categoryId, categorySlugs } = await this.resolveAndEnrichCategoryAssignment(data);
 
     // Sanitize colorImages keys: MongoDB BSON keys cannot contain dots (.)
     if (data.colorImages && typeof data.colorImages === "object") {
@@ -1415,6 +1397,104 @@ export class ProductService {
     return product;
   }
 
+  /**
+   * Preserves exact admin-assigned categories without auto-mapping into parent or
+   * name-guessed categories. Resolves a category ObjectId to its own slug so storefront
+   * slug queries still work if an ID was submitted, and retains legacy Magento CSV
+   * canonical resolution only when raw magentoCategories are provided without explicit slugs.
+   */
+  private static async resolveAndEnrichCategoryAssignment(data: {
+    name?: string;
+    magentoCategories?: string;
+    categoryId?: string;
+    categorySlugs?: string[];
+  }): Promise<{ categoryId?: string; categorySlugs: string[] }> {
+    const isHexId = (val: string) => /^[0-9a-fA-F]{24}$/.test(val);
+    const seedSlugs = new Set<string>(
+      Array.isArray(data.categorySlugs)
+        ? data.categorySlugs
+            .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+            .map((s) => s.trim())
+        : []
+    );
+
+    const rawCategoryId = typeof data.categoryId === "string" ? data.categoryId.trim() : "";
+    if (rawCategoryId && !isHexId(rawCategoryId)) {
+      seedSlugs.add(rawCategoryId);
+    }
+
+    // Legacy Magento CSV imports pass magentoCategories without admin-chosen categorySlugs/categoryId.
+    const hasExplicitAdminSelection = seedSlugs.size > 0 || Boolean(rawCategoryId);
+    if (!hasExplicitAdminSelection && data.magentoCategories) {
+      const canonicalSlugs = resolveCanonicalCategorySlugs({
+        name: data.name,
+        magentoCategories: data.magentoCategories,
+        categorySlugs: [],
+      });
+      for (const slug of canonicalSlugs) {
+        if (slug) seedSlugs.add(slug);
+      }
+    }
+
+    let resolvedCategoryId = data.categoryId;
+
+    const hexIds = new Set<string>();
+    if (rawCategoryId && isHexId(rawCategoryId)) {
+      hexIds.add(rawCategoryId);
+    }
+    const slugCandidates = new Set<string>();
+    for (const entry of seedSlugs) {
+      if (isHexId(entry)) {
+        hexIds.add(entry);
+      } else {
+        slugCandidates.add(entry);
+      }
+    }
+
+    if (hexIds.size > 0 || slugCandidates.size > 0) {
+      try {
+        const { CategoryModel } = await import("../category/category.model");
+        const orClauses: Record<string, unknown>[] = [];
+        if (hexIds.size > 0) {
+          orClauses.push({ _id: { $in: Array.from(hexIds) } });
+        }
+        if (slugCandidates.size > 0) {
+          orClauses.push({ slug: { $in: Array.from(slugCandidates) } });
+        }
+
+        const matchedCats = await CategoryModel.find({ $or: orClauses })
+          .select("_id slug")
+          .lean()
+          .exec();
+
+        if (!resolvedCategoryId && matchedCats.length > 0) {
+          resolvedCategoryId = String((matchedCats[0] as any)._id);
+        }
+
+        for (const catDoc of matchedCats as Array<{ _id?: unknown; slug?: string }>) {
+          const curId = catDoc._id ? String(catDoc._id) : "";
+          const catSlug = typeof catDoc.slug === "string" ? catDoc.slug.trim() : "";
+          if (!catSlug) continue;
+
+          // Replace raw ObjectIds with that exact category's own slug (without adding parents).
+          if (curId && seedSlugs.has(curId)) {
+            seedSlugs.delete(curId);
+            seedSlugs.add(catSlug);
+          } else if (curId && rawCategoryId === curId && seedSlugs.size === 0) {
+            seedSlugs.add(catSlug);
+          }
+        }
+      } catch {
+        // Non-blocking fallback when Category lookup is unavailable (e.g. disconnected unit tests)
+      }
+    }
+
+    return {
+      categoryId: resolvedCategoryId,
+      categorySlugs: Array.from(seedSlugs),
+    };
+  }
+
   static async updateProduct(id: string, data: Partial<IProduct>): Promise<IProduct> {
     if (data.specialPriceFromDate !== undefined) {
       data.specialPriceFromDate = parseDateOrNull(data.specialPriceFromDate) as any;
@@ -1453,26 +1533,27 @@ export class ProductService {
       data.slug = slugify(data.name);
     }
 
-    if (data.name || data.magentoCategories || data.categorySlugs) {
-      const canonicalSlugs = resolveCanonicalCategorySlugs({
-        name: data.name,
+    const hasExistingSlugs = Array.isArray(existingDoc.categorySlugs) && existingDoc.categorySlugs.length > 0;
+    if (
+      data.categorySlugs !== undefined ||
+      data.categoryId !== undefined ||
+      (data.magentoCategories && !hasExistingSlugs)
+    ) {
+      const enriched = await this.resolveAndEnrichCategoryAssignment({
+        name: data.name ?? existingDoc.name,
         magentoCategories: data.magentoCategories,
+        categoryId: data.categoryId,
         categorySlugs: data.categorySlugs,
       });
-      if (canonicalSlugs.length > 0) {
-        data.categorySlugs = [...new Set([...(data.categorySlugs || []), ...canonicalSlugs])];
+      if (
+        data.categorySlugs !== undefined ||
+        data.categoryId !== undefined ||
+        enriched.categorySlugs.length > 0
+      ) {
+        data.categorySlugs = enriched.categorySlugs;
       }
-    }
-
-    if (!data.categoryId && data.categorySlugs && data.categorySlugs.length > 0) {
-      try {
-        const { CategoryModel } = await import("../category/category.model");
-        const matchedCat = await CategoryModel.findOne({ slug: { $in: data.categorySlugs } }).lean().exec();
-        if (matchedCat) {
-          data.categoryId = (matchedCat as any)._id.toString();
-        }
-      } catch (e) {
-        // Non-blocking fallback
+      if (!data.categoryId && enriched.categoryId && (data.categorySlugs !== undefined || !existingDoc.categoryId)) {
+        data.categoryId = enriched.categoryId;
       }
     }
 

@@ -3,16 +3,17 @@
 import React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { IGuidePost } from "@store4riders/shared-types";
+import { IBlogPost, IGuidePost } from "@store4riders/shared-types";
+import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
 import { Clock, Calendar, ArrowRight, BookOpen } from "lucide-react";
 
 interface GuideCardProps {
-  post: IGuidePost;
+  post: IBlogPost | IGuidePost;
   priority?: boolean;
 }
 
 export const GuideCard: React.FC<GuideCardProps> = ({ post, priority = false }) => {
-  const rawDate = post.publishedDate || (post as any).publishedAt;
+  const rawDate = (post as IBlogPost).publishedAt || (post as IGuidePost).publishedDate;
   const formattedDate = rawDate
     ? new Date(rawDate).toLocaleDateString("en-IN", {
         month: "short",
@@ -21,14 +22,18 @@ export const GuideCard: React.FC<GuideCardProps> = ({ post, priority = false }) 
       })
     : "";
 
+  const authorName = post.author?.name || "Store4Riders Team";
   const authorInitials =
-    post.author?.name
-      ?.trim()
+    authorName
+      .trim()
       .split(/\s+/)
       .map((part: string) => part[0]?.toUpperCase())
       .filter(Boolean)
       .slice(0, 2)
-      .join("") || "VM";
+      .join("") || "SR";
+
+  const imageUrl = normalizeExternalImageUrl(post.featuredImage);
+  const excerpt = (post as IBlogPost).excerpt || (post as IGuidePost).description || "";
 
   return (
     <article className="group bg-white rounded-2xl border border-neutral-200/90 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col h-full hover:-translate-y-1">
@@ -37,22 +42,30 @@ export const GuideCard: React.FC<GuideCardProps> = ({ post, priority = false }) 
         href={`/guides/post/${post.slug}`}
         className="relative aspect-[16/10] w-full overflow-hidden bg-neutral-100 block shrink-0"
       >
-        <Image
-          src={post.featuredImage}
-          alt={post.title}
-          fill
-          priority={priority}
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          className="object-cover group-hover:scale-105 transition-transform duration-500"
-        />
+        {imageUrl ? (
+          <Image
+            src={imageUrl}
+            alt={post.title}
+            fill
+            priority={priority}
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            className="object-cover group-hover:scale-105 transition-transform duration-500"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-100 to-neutral-200">
+            <BookOpen className="w-10 h-10 text-neutral-300" />
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-        
+
         {/* Category Pill Over Image */}
-        <div className="absolute top-3 left-3 z-10">
-          <span className="bg-white/95 backdrop-blur-md text-neutral-900 text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-sm border border-neutral-100">
-            {post.categoryName}
-          </span>
-        </div>
+        {post.categoryName && (
+          <div className="absolute top-3 left-3 z-10">
+            <span className="bg-white/95 backdrop-blur-md text-neutral-900 text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-sm border border-neutral-100">
+              {post.categoryName}
+            </span>
+          </div>
+        )}
       </Link>
 
       {/* Content */}
@@ -65,12 +78,12 @@ export const GuideCard: React.FC<GuideCardProps> = ({ post, priority = false }) 
               <span suppressHydrationWarning>{formattedDate}</span>
             </span>
           )}
-          {post.readingTimeMinutes && (
+          {post.readingTimeMinutes ? (
             <span className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-neutral-400" />
               {post.readingTimeMinutes} min read
             </span>
-          )}
+          ) : null}
         </div>
 
         {/* Title */}
@@ -82,7 +95,7 @@ export const GuideCard: React.FC<GuideCardProps> = ({ post, priority = false }) 
 
         {/* Description Excerpt */}
         <p className="text-xs sm:text-sm text-neutral-600 line-clamp-2 leading-relaxed mb-4 flex-1">
-          {post.description || (post as any).excerpt}
+          {excerpt}
         </p>
 
         {/* Footer: Author & Read More */}
@@ -91,8 +104,8 @@ export const GuideCard: React.FC<GuideCardProps> = ({ post, priority = false }) 
             {post.author?.avatar ? (
               <div className="relative w-6 h-6 rounded-full overflow-hidden border border-slate-200 shrink-0">
                 <Image
-                  src={post.author.avatar}
-                  alt={post.author.name || "Author"}
+                  src={normalizeExternalImageUrl(post.author.avatar)}
+                  alt={authorName}
                   fill
                   sizes="24px"
                   className="object-cover"
@@ -104,7 +117,7 @@ export const GuideCard: React.FC<GuideCardProps> = ({ post, priority = false }) 
               </div>
             )}
             <span className="text-xs font-semibold text-neutral-700">
-              {post.author.name}
+              {authorName}
             </span>
           </div>
 

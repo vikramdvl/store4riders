@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEFAULT_NAV_ITEMS, NAV_SUBMENU_SECTIONS } from "../nav.constants";
+import { resolveStorefrontNavItems } from "../navOverlay.utils";
 import { isLegacyNonMenuCategory } from "@/core/utils/navCategories";
 
 describe("Navbar & Submenu Navigation Integrity Suite", () => {
@@ -140,5 +141,158 @@ describe("Navbar & Submenu Navigation Integrity Suite", () => {
     expect(groups).toContain("Boots & Protection");
     expect(groups).toContain("Luggage & Accessories");
     expect(groups).toContain("Parts & Performance");
+  });
+
+  describe("resolveStorefrontNavItems — DB Overlay & Deduplication", () => {
+    it("shows custom subcategories created under Gadgets (e.g. Motorcycle Smart Display) both by parentId and by explicit gadgets:Gadgets section", () => {
+      const dbCategories = [
+        {
+          _id: "cat_gadgets",
+          name: "Gadgets",
+          slug: "gadgets",
+          includeInMenu: true,
+          children: [
+            {
+              _id: "cat_smart_display",
+              name: "Motorcycle Smart Display",
+              slug: "motorcycle-smart-display",
+              parentId: "cat_gadgets",
+              includeInMenu: true,
+              menuNavSection: "",
+            },
+            {
+              _id: "cat_gps_tracker",
+              name: "GPS Trackers",
+              slug: "gps-trackers",
+              parentId: "cat_gadgets",
+              includeInMenu: true,
+              menuNavSection: "gadgets:Gadgets",
+            },
+            {
+              _id: "cat_bt_alias",
+              name: "Bluetooth Intercoms",
+              slug: "bluetooth-intercoms",
+              parentId: "cat_gadgets",
+              includeInMenu: true,
+              menuNavSection: "",
+            },
+          ],
+        },
+      ];
+
+      const resolved = resolveStorefrontNavItems(DEFAULT_NAV_ITEMS, [], dbCategories);
+      const gadgetsNav = resolved.find((item) => item.id === "gadgets");
+      const gadgetItems = gadgetsNav?.megaMenuItems?.[0]?.items || [];
+      const hrefs = gadgetItems.map((i) => i.href);
+      const labels = gadgetItems.map((i) => i.label);
+
+      expect(hrefs).toContain("/gadgets/motorcycle-smart-display");
+      expect(labels).toContain("Motorcycle Smart Display");
+      expect(hrefs).toContain("/gadgets/gps-trackers");
+      // Alias "bluetooth-intercoms" must NOT duplicate "Communicators"
+      expect(hrefs).not.toContain("/gadgets/bluetooth-intercoms");
+      expect(hrefs).toContain("/gadgets/communicators");
+    });
+
+    it("prevents duplicate Performance Air Filter and Touring Gear entries from legacy alias DB categories", () => {
+      const dbCategories = [
+        {
+          _id: "cat_spares",
+          name: "Bike Spare Parts Online",
+          slug: "bike-spares",
+          includeInMenu: true,
+          children: [
+            {
+              _id: "cat_air_canonical",
+              name: "Performance Air Filters",
+              slug: "performance-air-filter-bike",
+              parentId: "cat_spares",
+              includeInMenu: true,
+            },
+            {
+              _id: "cat_air_legacy",
+              name: "Performance Air Filters for bikes",
+              slug: "performance-air-filters-for-bikes",
+              parentId: "cat_spares",
+              includeInMenu: true,
+            },
+          ],
+        },
+        {
+          _id: "cat_riding_gear",
+          name: "Riding Gear",
+          slug: "riding-gear",
+          includeInMenu: true,
+          children: [
+            {
+              _id: "cat_touring_legacy",
+              name: "Motorcycle Touring Gear",
+              slug: "motorcycle-touring-gear",
+              parentId: "cat_riding_gear",
+              includeInMenu: true,
+              menuNavSection: "riding-gear:Specialized Gear",
+            },
+          ],
+        },
+      ];
+
+      const resolved = resolveStorefrontNavItems(DEFAULT_NAV_ITEMS, [], dbCategories);
+
+      const sparesNav = resolved.find((item) => item.id === "spares");
+      const sparesItems = sparesNav?.megaMenuItems?.[0]?.items || [];
+      const airFilterMatches = sparesItems.filter((i) =>
+        i.label.toLowerCase().includes("air filter")
+      );
+      expect(airFilterMatches).toHaveLength(1);
+      expect(airFilterMatches[0].href).toBe("/bike-spares/performance-air-filter-bike");
+
+      const gearNav = resolved.find((item) => item.id === "riding-gear");
+      const specializedGroup = gearNav?.megaMenuItems?.find(
+        (g) => g.group === "Specialized Gear"
+      );
+      const touringMatches = (specializedGroup?.items || []).filter((i) =>
+        i.label.toLowerCase().includes("touring gear")
+      );
+      expect(touringMatches).toHaveLength(1);
+    });
+
+    it("includes Carbon Fibre Helmets under Helmets -> Types and respects includeInMenu toggle", () => {
+      const enabledTree = [
+        {
+          _id: "cat_helmets",
+          name: "Motorcycle Helmets",
+          slug: "motorcycle-helmets",
+          includeInMenu: true,
+          children: [
+            {
+              _id: "cat_carbon",
+              name: "Carbon Fibre Helmets",
+              slug: "carbon-fibre-helmets",
+              parentId: "cat_helmets",
+              includeInMenu: true,
+              menuNavSection: "helmets:Types",
+            },
+          ],
+        },
+      ];
+
+      const resolvedVisible = resolveStorefrontNavItems(DEFAULT_NAV_ITEMS, [], enabledTree);
+      const typesVisible = resolvedVisible
+        .find((i) => i.id === "helmets")
+        ?.megaMenuItems?.find((g) => g.group === "Types")?.items || [];
+      expect(typesVisible.some((i) => i.href === "/motorcycle-helmets/carbon-fibre-helmets")).toBe(true);
+
+      const hiddenTree = [
+        {
+          ...enabledTree[0],
+          children: [{ ...enabledTree[0].children[0], includeInMenu: false }],
+        },
+      ];
+      const resolvedHidden = resolveStorefrontNavItems(DEFAULT_NAV_ITEMS, [], hiddenTree);
+      const typesHidden = resolvedHidden
+        .find((i) => i.id === "helmets")
+        ?.megaMenuItems?.find((g) => g.group === "Types")?.items || [];
+      expect(typesHidden.some((i) => i.href === "/motorcycle-helmets/carbon-fibre-helmets")).toBe(false);
+    });
   });
 });

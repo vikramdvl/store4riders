@@ -1,54 +1,34 @@
-import { getRobotsMetadata } from "@/core/utils/seo-schema";
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { getRobotsMetadata } from "@/core/utils/seo-schema";
 import {
   GuidesCategoryModule,
-  getCategoryBySlug,
-  GUIDE_CATEGORIES,
-  GUIDE_POSTS,
+  fetchBlogCategoryBySlug,
+  fetchPublicBlogCategories,
+  fetchPublicBlogPosts,
   buildBlogCollectionSchema,
   buildBreadcrumbSchema,
 } from "@/modules/guides";
 
-export const revalidate = 60;
-
-const rawApiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
-const API_BASE = rawApiBase.includes("/v1")
-  ? rawApiBase
-  : rawApiBase.endsWith("/api")
-  ? `${rawApiBase}/v1`
-  : `${rawApiBase}/api/v1`;
-
-async function getCategoryFromApi(slug: string) {
-  try {
-    const res = await fetch(`${API_BASE}/blog/categories/${slug}`, {
-      next: { revalidate: 60 },
-      signal: AbortSignal.timeout(2500),
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json?.data || null;
-  } catch {
-    return null;
-  }
-}
+export const revalidate = 30;
+export const dynamicParams = true;
 
 interface Props {
   params: Promise<{ categorySlug: string }>;
 }
 
 export async function generateStaticParams() {
-  return GUIDE_CATEGORIES.map((cat) => ({
+  const categories = await fetchPublicBlogCategories();
+  return categories.map((cat) => ({
     categorySlug: cat.slug,
   }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { categorySlug } = await params;
-  const apiCat = await getCategoryFromApi(categorySlug);
-  const staticCat = getCategoryBySlug(categorySlug);
-  const category = apiCat || staticCat;
+  const category = await fetchBlogCategoryBySlug(categorySlug);
 
-  if (!category) {
+  if (!category || category.isActive === false) {
     return {
       title: "Guides Category Not Found | Store4Riders",
       description: "The requested guides category could not be found.",
@@ -95,43 +75,55 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function GuidesCategoryPage({ params }: Props) {
   const { categorySlug } = await params;
-  const apiCat = await getCategoryFromApi(categorySlug);
-  const staticCat = getCategoryBySlug(categorySlug);
-  const category = apiCat || staticCat;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://store4riders.com";
+  const [category, categories] = await Promise.all([
+    fetchBlogCategoryBySlug(categorySlug),
+    fetchPublicBlogCategories(),
+  ]);
 
-  if (category) {
-    const posts = GUIDE_POSTS.filter((p) => p.categorySlug === category.slug);
-    const collectionSchema = buildBlogCollectionSchema(
-      `${category.name} Guides`,
-      category.metaDescription?.trim() || category.description || `Expert motorcycle guides and advice for ${category.name}`,
-      posts,
-      `${siteUrl}/guides/category/${category.slug}`,
-      siteUrl
-    );
-    const breadcrumbSchema = buildBreadcrumbSchema(
-      [
-        { name: "Home", url: "/" },
-        { name: "Guides", url: "/guides" },
-        { name: category.name, url: `/guides/category/${category.slug}` },
-      ],
-      siteUrl
-    );
-
-    return (
-      <>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionSchema) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
-        />
-        <GuidesCategoryModule categorySlug={categorySlug} />
-      </>
-    );
+  if (!category || category.isActive === false) {
+    notFound();
   }
 
-  return <GuidesCategoryModule categorySlug={categorySlug} />;
+  const postsData = await fetchPublicBlogPosts(1, 18, category.slug);
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "https://www.store4riders.com";
+
+  const collectionSchema = buildBlogCollectionSchema(
+    `${category.name} Guides`,
+    category.metaDescription?.trim() ||
+      category.description ||
+      `Expert motorcycle guides and advice for ${category.name}`,
+    postsData.items,
+    `${siteUrl}/guides/category/${category.slug}`,
+    siteUrl
+  );
+  const breadcrumbSchema = buildBreadcrumbSchema(
+    [
+      { name: "Home", url: "/" },
+      { name: "Guides", url: "/guides" },
+      { name: category.name, url: `/guides/category/${category.slug}` },
+    ],
+    siteUrl
+  );
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
+      />
+      <GuidesCategoryModule
+        categorySlug={category.slug}
+        initialCategory={category}
+        initialPostsData={postsData}
+        initialCategories={categories}
+      />
+    </>
+  );
 }
