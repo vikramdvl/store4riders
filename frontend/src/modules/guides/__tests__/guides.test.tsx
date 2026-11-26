@@ -95,6 +95,7 @@ import {
   fetchPublicBlogCategories,
   fetchBlogCategoryBySlug,
   fetchRelatedBlogPosts,
+  fetchStaticBlogPostSlugs,
 } from "../utils/getPost";
 
 describe("Guides Storefront Live Blog Regression Suite", () => {
@@ -435,5 +436,39 @@ describe("Guides Storefront Live Blog Regression Suite", () => {
       }
       fetchSpy.mockRestore();
     }
+  });
+
+  it("fetchStaticBlogPostSlugs caps build-time prerender count and fetchGuideOrBlogPost retries 429", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, data: { items: mockPosts } }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: new Headers({ "retry-after": "0" }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, data: mockPosts[0] }),
+      } as Response);
+
+    const slugs = await fetchStaticBlogPostSlugs();
+    expect(slugs).toEqual(["choosing-right-riding-boots", "choosing-a-motorcycle-smart-display"]);
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("/blog/posts?page=1&limit=15"),
+      expect.any(Object)
+    );
+
+    const post = await fetchGuideOrBlogPost("choosing-right-riding-boots");
+    expect(post?.slug).toBe("choosing-right-riding-boots");
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+
+    fetchSpy.mockRestore();
   });
 });

@@ -32,6 +32,22 @@ export function getBlogApiBase(): string {
 const BLOG_FETCH_TIMEOUT_MS = 10000;
 const BLOG_REVALIDATE_SECONDS = 3600;
 const BLOG_TRANSIENT_RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const STATIC_BLOG_PRERENDER_LIMIT = 15;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRateLimitDelayMs(res: Response, attempt: number, isBuildPhase: boolean): number {
+  const retryAfterRaw = res.headers?.get?.("retry-after");
+  if (retryAfterRaw) {
+    const parsedSec = Number(retryAfterRaw);
+    if (Number.isFinite(parsedSec) && parsedSec >= 0) {
+      return Math.min(parsedSec * 1000, 65_000);
+    }
+  }
+  return isBuildPhase ? 15_000 * (attempt + 1) : 1_500 * (attempt + 1);
+}
 
 function isConnectionRefusedError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
@@ -51,8 +67,9 @@ function isConnectionRefusedError(err: unknown): boolean {
 async function fetchBlogWithRetry(url: string): Promise<Response | null> {
   let lastError: unknown;
   const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+  let maxAttempts = 2;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       const res = await fetch(url, {
         next: { revalidate: BLOG_REVALIDATE_SECONDS },
@@ -62,6 +79,12 @@ async function fetchBlogWithRetry(url: string): Promise<Response | null> {
         return res;
       }
       lastError = new Error(`Blog API responded with status ${res.status}`);
+      if (res.status === 429) {
+        maxAttempts = 4;
+        if (attempt + 1 < maxAttempts) {
+          await sleep(getRateLimitDelayMs(res, attempt, isBuildPhase));
+        }
+      }
     } catch (err) {
       if (isBuildPhase && isConnectionRefusedError(err)) {
         return null;
@@ -203,7 +226,7 @@ export async function fetchStaticBlogCategorySlugs(): Promise<string[]> {
  */
 export async function fetchStaticBlogPostSlugs(): Promise<string[]> {
   try {
-    const res = await fetch(`${getBlogApiBase()}/blog/posts?page=1&limit=100`, {
+    const res = await fetch(`${getBlogApiBase()}/blog/posts?page=1&limit=${STATIC_BLOG_PRERENDER_LIMIT}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(2500),
     });
