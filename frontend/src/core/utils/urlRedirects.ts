@@ -30,13 +30,13 @@ export interface CachedRedirectRule {
   statusCode: 301 | 302;
 }
 
-const REDIRECT_MAP_TTL_MS = 10_000;
+const REDIRECT_MAP_TTL_MS = 300_000;
 let cachedMap: Map<string, CachedRedirectRule> | null = null;
 let cachedMapExpiresAt = 0;
 
 /**
  * Lightweight in-memory TTL cache for Edge/Middleware URL redirect lookups.
- * Keeps normal storefront page loads at 0ms overhead while syncing admin changes within 10s.
+ * Keeps normal storefront page loads at 0ms overhead while syncing admin changes within 5 minutes.
  */
 export async function getCachedUrlRedirectMap(): Promise<Map<string, CachedRedirectRule>> {
   const now = Date.now();

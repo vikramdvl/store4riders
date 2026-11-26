@@ -37,7 +37,7 @@ const API_BASE = rawApiBase.includes("/v1")
 const getProduct = cache(async (slug: string) => {
   try {
     const res = await fetch(`${API_BASE}/products/${encodeURIComponent(slug)}`, {
-      next: { revalidate: 300 },
+      next: { revalidate: 3600 },
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
@@ -98,7 +98,7 @@ const getCategoryInitialProducts = cache(async (category: string) => {
     const prodRes = await fetch(
       `${API_BASE}/products?category=${encodeURIComponent(category)}&limit=12`,
       {
-        next: { revalidate: 300 },
+        next: { revalidate: 3600 },
         signal: AbortSignal.timeout(6000),
       }
     );

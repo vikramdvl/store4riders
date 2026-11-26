@@ -87,7 +87,7 @@ export default async function Home() {
 
     const [prodResult, settingsResult, hConfig, reviewsResult] = await Promise.allSettled([
       fetch(`${fetchUrl}?limit=50`, { 
-        next: { revalidate: 300 },
+        next: { revalidate: 3600 },
         signal: AbortSignal.timeout(3500),
       }),
       fetch(settingsUrl, {

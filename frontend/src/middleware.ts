@@ -48,6 +48,8 @@ export async function middleware(request: NextRequest) {
   const userAgent = (request.headers.get("user-agent") || "").toLowerCase();
   if (
     userAgent.includes("bytespider") ||
+    userAgent.includes("ccbot") ||
+    userAgent.includes("ahrefsbot") ||
     userAgent.includes("semrushbot") ||
     userAgent.includes("dotbot") ||
     userAgent.includes("mj12bot")

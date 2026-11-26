@@ -40,7 +40,7 @@ const getBrandInitialProducts = cache(async (slug: string) => {
   try {
     const prodUrl = `${API_BASE}/products?brand=${encodeURIComponent(slug)}&limit=12`;
     const prodRes = await fetch(prodUrl, {
-      next: { revalidate: 300 },
+      next: { revalidate: 3600 },
       signal: AbortSignal.timeout(5000),
     });
     if (!prodRes.ok) return undefined;
