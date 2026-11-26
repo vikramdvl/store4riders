@@ -159,7 +159,7 @@ export function SystemHealthTab({ report, isLoading }: SystemHealthTabProps) {
             </p>
           </div>
           <span className="text-[11px] font-mono text-slate-400">
-            Checked {format(new Date(report.checkedAt), "HH:mm:ss")}
+            Checked {format(new Date(report.checkedAt), "hh:mm:ss a")}
           </span>
         </div>
 

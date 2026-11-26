@@ -155,12 +155,12 @@ export function BlockedIpsTab({
                       {item.blockedBy?.email || item.blockedBy?.name || "Admin"}
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      {format(new Date(item.createdAt), "dd MMM yyyy, HH:mm")}
+                      {format(new Date(item.createdAt), "dd MMM yyyy, hh:mm a")}
                     </div>
                   </td>
                   <td className="py-3 px-4 whitespace-nowrap font-mono text-slate-600">
                     {item.expiresAt
-                      ? format(new Date(item.expiresAt), "dd MMM yyyy, HH:mm")
+                      ? format(new Date(item.expiresAt), "dd MMM yyyy, hh:mm a")
                       : "Permanent"}
                   </td>
                   <td className="py-3 px-4 text-right whitespace-nowrap">

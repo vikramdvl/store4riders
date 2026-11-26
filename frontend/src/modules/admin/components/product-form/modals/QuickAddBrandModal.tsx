@@ -220,9 +220,9 @@ export function QuickAddBrandModal() {
                   name: newBrandName.trim(),
                   slug: slugToUse,
                   logo: newBrandLogo || undefined,
-                  showInMenu: newBrandShowInMenu,
-                  menuGroup: groupsArr[0] || "Popular Brands",
-                  menuGroups: groupsArr.length > 0 ? groupsArr : ["Popular Brands"],
+                  showInMenu: Boolean(newBrandShowInMenu),
+                  menuGroup: newBrandShowInMenu ? (groupsArr[0] || "Popular Brands") : "",
+                  menuGroups: newBrandShowInMenu ? (groupsArr.length > 0 ? groupsArr : ["Popular Brands"]) : [],
                   isActive: true,
                 });
                 setBrand(newBrandName.trim());

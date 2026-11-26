@@ -14,6 +14,7 @@ import Footer from "@/modules/homepage/components/Footer";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { useBrands, useBrandsPageConfig } from "@/core/hooks/useBrands";
 import { IBrand, IBrandsPageConfig } from "@store4riders/shared-types";
+import { resolveBrandLogo } from "../constants/brandLogos";
 
 /**
  * High-resolution brand logo fallbacks for official catalog brands.
@@ -83,6 +84,50 @@ const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const DEFAULT_HERO_TITLE = "Shop By Brand";
 const DEFAULT_HERO_DESCRIPTION =
   "Store4Riders is an online multi-brand riding gear store launched in 2016 for fellow riders looking out for quality motorcycle riding gear. We house brands ranging from premium brands to more affordable riding gear brands like etc. Other than riding gear, we offer a host of accessories, luggage and performance parts for bike riders. We deliver all products across India. Check out the brands we have on offer.";
+
+const getBrandInitials = (name: string) => {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+};
+
+const DirectoryBrandLogo: React.FC<{
+  logoUrl: string | null;
+  name: string;
+  width?: number;
+  height?: number;
+  initialsSize?: "sm" | "md";
+}> = ({ logoUrl, name, width = 95, height = 45, initialsSize = "md" }) => {
+  const [hasError, setHasError] = useState(false);
+  const initials = getBrandInitials(name);
+
+  if (!logoUrl || hasError) {
+    const sizeClasses =
+      initialsSize === "sm"
+        ? "w-10 h-10 rounded-xl bg-neutral-100 text-neutral-900 group-hover:bg-brand group-hover:text-white font-extrabold text-xs"
+        : "w-11 h-11 rounded-xl bg-neutral-100 text-neutral-900 group-hover:bg-brand group-hover:text-white font-extrabold text-sm";
+
+    return (
+      <div className={`${sizeClasses} flex items-center justify-center border border-neutral-200/60 transition-colors`}>
+        {initials}
+      </div>
+    );
+  }
+
+  return (
+    <Image
+      src={logoUrl}
+      alt={name}
+      width={width}
+      height={height}
+      unoptimized
+      className="object-contain max-h-11 max-w-[85%] transition-transform duration-200 group-hover:scale-105"
+      onError={() => setHasError(true)}
+    />
+  );
+};
 
 interface BrandsDirectoryModuleProps {
   initialConfig?: IBrandsPageConfig | null;
@@ -186,15 +231,7 @@ export const BrandsDirectoryModule: React.FC<BrandsDirectoryModuleProps> = ({ in
   };
 
   const getBrandLogo = (brand: IBrand) => {
-    return brand.logo || BRAND_LOGOS[brand.slug] || null;
-  };
-
-  const getBrandInitials = (name: string) => {
-    const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase();
+    return resolveBrandLogo(brand);
   };
 
   return (
@@ -422,19 +459,13 @@ export const BrandsDirectoryModule: React.FC<BrandsDirectoryModuleProps> = ({ in
 
                         {/* Logo Container */}
                         <div className="h-14 sm:h-16 w-full flex items-center justify-center my-2 rounded-xl bg-neutral-50 group-hover:bg-red-50/30 p-2 border border-neutral-100 group-hover:border-red-100 transition-colors">
-                          {logoUrl ? (
-                            <Image
-                              src={logoUrl}
-                              alt={brand.name}
-                              width={95}
-                              height={45}
-                              className="object-contain max-h-11 max-w-[85%] transition-transform duration-200 group-hover:scale-105"
-                            />
-                          ) : (
-                            <div className="w-11 h-11 rounded-xl bg-neutral-100 text-neutral-900 group-hover:bg-brand group-hover:text-white font-extrabold text-sm flex items-center justify-center border border-neutral-200/60 transition-colors">
-                              {getBrandInitials(brand.name)}
-                            </div>
-                          )}
+                          <DirectoryBrandLogo
+                            logoUrl={logoUrl}
+                            name={brand.name}
+                            width={95}
+                            height={45}
+                            initialsSize="md"
+                          />
                         </div>
 
                         {/* Brand Name Footer */}
@@ -498,19 +529,13 @@ export const BrandsDirectoryModule: React.FC<BrandsDirectoryModuleProps> = ({ in
                           </div>
                         )}
                         <div className="h-14 sm:h-16 w-full flex items-center justify-center my-2 rounded-xl bg-neutral-50 group-hover:bg-red-50/30 p-2 border border-neutral-100 group-hover:border-red-100 transition-colors">
-                          {logoUrl ? (
-                            <Image
-                              src={logoUrl}
-                              alt={brand.name}
-                              width={90}
-                              height={42}
-                              className="object-contain max-h-11 max-w-[85%] transition-transform duration-200 group-hover:scale-105"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-xl bg-neutral-100 text-neutral-900 group-hover:bg-brand group-hover:text-white font-extrabold text-xs flex items-center justify-center border border-neutral-200/60 transition-colors">
-                              {getBrandInitials(brand.name)}
-                            </div>
-                          )}
+                          <DirectoryBrandLogo
+                            logoUrl={logoUrl}
+                            name={brand.name}
+                            width={90}
+                            height={42}
+                            initialsSize="sm"
+                          />
                         </div>
 
                         <div className="border-t border-neutral-100 pt-3 flex items-center justify-between mt-1">

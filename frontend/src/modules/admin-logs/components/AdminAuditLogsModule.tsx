@@ -454,7 +454,7 @@ export function AdminAuditLogsModule() {
                             {format(new Date(log.createdAt), "dd MMM yyyy")}
                           </div>
                           <div className="font-mono text-[11px] text-slate-400">
-                            {format(new Date(log.createdAt), "HH:mm:ss")}
+                            {format(new Date(log.createdAt), "hh:mm:ss a")}
                           </div>
                         </td>
 

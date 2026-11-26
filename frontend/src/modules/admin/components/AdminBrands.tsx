@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { Plus, Edit2, Trash2, Upload, X, Check, Image as ImageIcon, ExternalLink, Globe, Download, HelpCircle, Search, EyeOff } from "lucide-react";
+import { Plus, Edit2, Trash2, Upload, X, Check, Image as ImageIcon, ExternalLink, Globe, Download, HelpCircle, Search, EyeOff, RefreshCw } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
-import { useBrands, useCreateBrand, useUpdateBrand, useDeleteBrand } from "@/core/hooks/useBrands";
+import { usePaginatedBrands, useCreateBrand, useUpdateBrand, useDeleteBrand } from "@/core/hooks/useBrands";
+import { Pagination } from "@/components/ui/Pagination";
 import { IBrand } from "@store4riders/shared-types";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,6 +19,7 @@ import { apiClient } from "@/core/api/client";
 import { toast } from "sonner";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { DEFAULT_NAV_ITEMS } from "@/modules/homepage/components/navbar/nav.constants";
+import { resolveBrandLogo } from "@/modules/brands/constants/brandLogos";
 
 const PRESET_MENU_GROUPS = [
   "Helmet Brands",
@@ -55,6 +57,18 @@ const detectBrandGroup = (brandName: string, brandSlug: string): string[] => {
   return ["Riding Gear"];
 };
 
+export const isBrandInSubmenu = (brand: Partial<IBrand> | null | undefined): boolean => {
+  if (!brand) return false;
+  const val = brand.showInMenu;
+  if (val === false || (val as any) === "false" || (val as any) === 0 || (val as any) === "0") {
+    return false;
+  }
+  if (val === true || (val as any) === "true" || (val as any) === 1 || (val as any) === "1") {
+    return true;
+  }
+  return false;
+};
+
 type BrandFormValues = {
   name: string;
   slug: string;
@@ -69,14 +83,82 @@ type BrandFormValues = {
   metaKeywords?: string;
 };
 
+function BrandLogoCell({ logo, name, slug }: { logo?: string; name: string; slug?: string }) {
+  const [imgError, setImgError] = useState(false);
+  const initials = (name || "BR").substring(0, 2).toUpperCase();
+  const effectiveLogo = resolveBrandLogo({ logo, name, slug });
+
+  if (!effectiveLogo || imgError) {
+    return (
+      <div className="w-10 h-10 bg-slate-100 border border-slate-200 rounded flex items-center justify-center text-slate-500 text-xs font-bold shrink-0">
+        {initials}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-10 h-10 bg-white border border-slate-200 rounded p-0.5 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
+      <Image 
+        src={effectiveLogo} 
+        alt={name} 
+        fill 
+        sizes="40px" 
+        unoptimized
+        className="object-contain p-1"
+        onError={() => setImgError(true)}
+      />
+    </div>
+  );
+}
+
 export function AdminBrands() {
-  const { data: brands = [], isLoading } = useBrands(true);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(15);
+  const [brandSearch, setBrandSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [submenuFilter, setSubmenuFilter] = useState<"all" | "in_submenu" | "hidden">("all");
+  const [sectionFilter, setSectionFilter] = useState<string>("all");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(brandSearch);
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [brandSearch]);
+
+  const {
+    data: paginatedData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = usePaginatedBrands(
+    {
+      page,
+      limit,
+      search: debouncedSearch,
+      status: statusFilter,
+      submenu: submenuFilter,
+      section: sectionFilter,
+      includeInactive: true,
+    },
+    {
+      staleTime: 10 * 1000,
+      refetchOnMount: "always",
+    }
+  );
+
+  const brands = paginatedData?.items || [];
+  const totalCount = paginatedData?.totalCount || 0;
+  const totalPages = paginatedData?.totalPages || 1;
+
   const createBrand = useCreateBrand();
   const updateBrand = useUpdateBrand();
   const deleteBrand = useDeleteBrand();
 
-  const [brandSearch, setBrandSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBrand, setEditingBrand] = useState<IBrand | null>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -132,7 +214,7 @@ export function AdminBrands() {
     resolver: zodResolver(createBrandSchema),
     defaultValues: { 
       isActive: true, 
-      showInMenu: true, 
+      showInMenu: false, 
       menuGroup: "",
       menuGroups: [],
       metaTitle: "",
@@ -169,9 +251,9 @@ export function AdminBrands() {
       logo: "", 
       description: "", 
       isActive: true, 
-      showInMenu: true, 
-      menuGroup: "Helmet Brands",
-      menuGroups: ["Helmet Brands"],
+      showInMenu: false, 
+      menuGroup: "",
+      menuGroups: [],
       metaTitle: "",
       metaDescription: "",
       metaKeywords: "",
@@ -186,6 +268,7 @@ export function AdminBrands() {
         ? brand.faqs.map((f) => ({ question: f.question, answer: f.answer }))
         : []
     );
+    const inSubmenu = isBrandInSubmenu(brand);
     const rawGroups = brand.menuGroups && brand.menuGroups.length > 0
       ? brand.menuGroups
       : brand.menuGroup
@@ -194,15 +277,19 @@ export function AdminBrands() {
 
     const initialGroups = rawGroups.length > 0
       ? rawGroups
-      : detectBrandGroup(brand.name, brand.slug);
+      : inSubmenu
+      ? detectBrandGroup(brand.name, brand.slug)
+      : [];
+
+    const effectiveLogo = brand.logo || resolveBrandLogo(brand) || "";
 
     reset({
       name: brand.name,
       slug: brand.slug,
-      logo: brand.logo || "",
+      logo: effectiveLogo,
       description: brand.description || "",
-      isActive: brand.isActive,
-      showInMenu: brand.showInMenu !== false,
+      isActive: brand.isActive !== false,
+      showInMenu: inSubmenu,
       menuGroup: initialGroups[0] || brand.menuGroup || "",
       menuGroups: initialGroups,
       metaTitle: brand.metaTitle || "",
@@ -213,7 +300,8 @@ export function AdminBrands() {
   };
 
   const handleToggleShowInMenu = (brand: IBrand) => {
-    const nextShowInMenu = brand.showInMenu === false ? true : false;
+    const isCurrentlyIn = isBrandInSubmenu(brand);
+    const nextShowInMenu = !isCurrentlyIn;
     const existingGroups = (brand.menuGroups && brand.menuGroups.length > 0)
       ? brand.menuGroups
       : brand.menuGroup
@@ -224,8 +312,8 @@ export function AdminBrands() {
       id: brand._id,
       data: {
         showInMenu: nextShowInMenu,
-        menuGroups: existingGroups,
-        menuGroup: existingGroups[0] || "",
+        menuGroups: nextShowInMenu ? existingGroups : [],
+        menuGroup: nextShowInMenu ? (existingGroups[0] || "") : "",
       },
     });
   };
@@ -250,22 +338,26 @@ export function AdminBrands() {
   };
 
   const onSubmit = (data: BrandFormValues) => {
+    const isShowInMenu = Boolean(data.showInMenu);
     const watchedGroups = watch("menuGroups");
     const watchedSingle = watch("menuGroup");
-    const selectedGroups: string[] = (
-      Array.isArray(watchedGroups) && watchedGroups.length > 0
-        ? watchedGroups
-        : Array.isArray(data.menuGroups) && data.menuGroups.length > 0
-        ? data.menuGroups
-        : watchedSingle
-        ? [watchedSingle]
-        : []
-    ).filter((g): g is string => typeof g === "string");
+    const selectedGroups: string[] = isShowInMenu
+      ? (
+          Array.isArray(watchedGroups) && watchedGroups.length > 0
+            ? watchedGroups
+            : Array.isArray(data.menuGroups) && data.menuGroups.length > 0
+            ? data.menuGroups
+            : watchedSingle
+            ? [watchedSingle]
+            : []
+        ).filter((g): g is string => typeof g === "string")
+      : [];
 
     const currentDesc = watch("description") ?? data.description ?? "";
     const cleanFaqs = faqs.filter((f) => f.question.trim() && f.answer.trim());
     const payload = {
       ...data,
+      showInMenu: isShowInMenu,
       description: currentDesc,
       menuGroup: selectedGroups[0] || "",
       menuGroups: selectedGroups,
@@ -298,17 +390,7 @@ export function AdminBrands() {
     }
   };
 
-  const filteredBrands = brands.filter((brand) => {
-    const q = brandSearch.toLowerCase().trim();
-    const matchesSearch = !q || brand.name.toLowerCase().includes(q) || brand.slug.toLowerCase().includes(q);
-    const matchesStatus =
-      statusFilter === "all"
-        ? true
-        : statusFilter === "active"
-        ? brand.isActive !== false
-        : brand.isActive === false;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredBrands = brands;
 
   return (
     <div className="space-y-6">
@@ -328,6 +410,19 @@ export function AdminBrands() {
           >
             <Globe size={16} className="text-brand" />
             <span>/brands Page SEO</span>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              await refetch();
+              toast.success("Brand catalog refreshed");
+            }}
+            disabled={isFetching}
+            className="flex items-center space-x-2 text-slate-700 bg-white hover:bg-slate-50 border-slate-200 cursor-pointer"
+            title="Refetch latest brand catalog from server"
+          >
+            <RefreshCw size={16} className={isFetching ? "animate-spin text-brand" : "text-slate-600"} />
+            <span>{isFetching ? "Refreshing..." : "Refresh"}</span>
           </Button>
           <Button
             variant="outline"
@@ -394,32 +489,77 @@ export function AdminBrands() {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Status Filter */}
             <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-semibold">
               <button
                 type="button"
-                onClick={() => setStatusFilter("all")}
-                className={`px-2.5 py-1 rounded-md transition-all ${statusFilter === "all" ? "bg-slate-800 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
+                onClick={() => { setStatusFilter("all"); setPage(1); }}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${statusFilter === "all" ? "bg-slate-800 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
               >
-                All ({brands.length})
+                All Status
               </button>
               <button
                 type="button"
-                onClick={() => setStatusFilter("active")}
-                className={`px-2.5 py-1 rounded-md transition-all ${statusFilter === "active" ? "bg-emerald-600 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
+                onClick={() => { setStatusFilter("active"); setPage(1); }}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${statusFilter === "active" ? "bg-emerald-600 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
               >
-                Active ({brands.filter(b => b.isActive !== false).length})
+                Active
               </button>
               <button
                 type="button"
-                onClick={() => setStatusFilter("inactive")}
-                className={`px-2.5 py-1 rounded-md transition-all ${statusFilter === "inactive" ? "bg-amber-600 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
+                onClick={() => { setStatusFilter("inactive"); setPage(1); }}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${statusFilter === "inactive" ? "bg-amber-600 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
               >
-                Inactive ({brands.filter(b => b.isActive === false).length})
+                Inactive
               </button>
             </div>
-            <span className="text-xs text-slate-500 font-medium ml-2">
-              Showing <span className="font-bold text-slate-800">{filteredBrands.length}</span> brands
+
+            {/* Submenu Filter */}
+            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => { setSubmenuFilter("all"); setPage(1); }}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${submenuFilter === "all" ? "bg-slate-700 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
+              >
+                Menu: All
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSubmenuFilter("in_submenu"); setPage(1); }}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${submenuFilter === "in_submenu" ? "bg-emerald-700 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
+                title="Brands shown in storefront top dropdown"
+              >
+                In Menu
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSubmenuFilter("hidden"); setPage(1); }}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${submenuFilter === "hidden" ? "bg-slate-500 text-white shadow-2xs" : "text-slate-600 hover:text-slate-900"}`}
+                title="Brands hidden from storefront top dropdown"
+              >
+                Hidden
+              </button>
+            </div>
+
+            {/* Section Filter */}
+            <div className="flex items-center gap-1.5">
+              <select
+                value={sectionFilter}
+                onChange={(e) => { setSectionFilter(e.target.value); setPage(1); }}
+                className="text-xs py-1 px-2.5 bg-white border border-slate-200 rounded-lg text-slate-700 font-medium focus:ring-1 focus:ring-brand focus:outline-none shadow-2xs"
+              >
+                <option value="all">All Sections</option>
+                {PRESET_MENU_GROUPS.map((grp) => (
+                  <option key={grp} value={grp}>
+                    {grp}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <span className="text-xs text-slate-500 font-medium ml-1">
+              Total <span className="font-bold text-slate-800">{totalCount}</span> brands
             </span>
           </div>
         </div>
@@ -452,21 +592,7 @@ export function AdminBrands() {
                 <tr key={brand._id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
-                      {brand.logo ? (
-                        <div className="relative w-10 h-10 bg-slate-50 border border-slate-200 rounded p-1 flex items-center justify-center overflow-hidden">
-                          <Image 
-                            src={brand.logo} 
-                            alt={brand.name} 
-                            fill 
-                            sizes="40px" 
-                            className="object-contain p-1" 
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-10 h-10 bg-slate-100 border border-slate-200 rounded flex items-center justify-center text-slate-400 text-xs font-bold">
-                          {brand.name.substring(0, 2).toUpperCase()}
-                        </div>
-                      )}
+                      <BrandLogoCell logo={brand.logo} name={brand.name} slug={brand.slug} />
                       <div>
                         <span className="font-semibold text-slate-800 block">{brand.name}</span>
                         {brand.description && (
@@ -486,17 +612,17 @@ export function AdminBrands() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-slate-500 font-mono text-xs">{brand.slug}</td>
+                  <td className="px-6 py-4 font-mono text-xs">{brand.slug}</td>
                   <td className="px-6 py-4">
                     <button
                       type="button"
                       onClick={() => handleToggleShowInMenu(brand)}
                       className="group flex flex-wrap items-center gap-1.5 text-left cursor-pointer focus:outline-none"
-                      title={`Click to ${brand.showInMenu !== false ? "hide from" : "show in"} storefront menu`}
+                      title={`Click to ${isBrandInSubmenu(brand) ? "hide from" : "show in"} storefront menu`}
                     >
-                      {brand.showInMenu !== false ? (
+                      {isBrandInSubmenu(brand) ? (
                         <>
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0 group-hover:bg-emerald-100 transition-colors">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0 group-hover:bg-emerald-100 transition-colors">
                             <Globe size={11} />
                             In Submenu
                           </span>
@@ -554,6 +680,63 @@ export function AdminBrands() {
             </tbody>
           </table>
         )}
+
+        {/* Error Banner */}
+        {isError && (
+          <div className="p-6 m-4 bg-red-50 border border-red-200 rounded-xl text-center">
+            <p className="text-sm font-semibold text-red-700">Failed to load brand catalog</p>
+            <p className="text-xs text-red-500 mt-1">{(error as any)?.message || "Please check backend connection"}</p>
+            <Button variant="outline" onClick={() => refetch()} className="mt-3 text-xs">
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {/* Pagination & Count Bar */}
+        <div className="p-4 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-3 bg-white text-xs text-slate-600">
+          <div className="flex items-center gap-3">
+            <span>
+              Showing{" "}
+              <span className="font-bold text-slate-800">
+                {totalCount === 0 ? 0 : (page - 1) * limit + 1}
+              </span>
+              {" – "}
+              <span className="font-bold text-slate-800">
+                {Math.min(page * limit, totalCount)}
+              </span>{" "}
+              of <span className="font-bold text-slate-800">{totalCount}</span> brands
+            </span>
+
+            <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
+              <span className="text-slate-400">Per page:</span>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="py-1 px-2 border border-slate-200 rounded text-xs font-semibold bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand shadow-2xs"
+              >
+                <option value={10}>10</option>
+                <option value={15}>15</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+          </div>
+
+          {totalPages > 1 && (
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalCount={totalCount}
+              pageSize={limit}
+              itemLabel="brands"
+              onPageChange={(newPage) => setPage(newPage)}
+            />
+          )}
+        </div>
       </div>
 
       <Modal
@@ -601,6 +784,7 @@ export function AdminBrands() {
                     alt="Brand Logo Preview" 
                     fill 
                     sizes="56px" 
+                    unoptimized
                     className="object-contain p-1" 
                   />
                   <button

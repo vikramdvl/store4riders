@@ -586,7 +586,7 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
                     <p className="text-neutral-800">{note.text}</p>
                     <div className="flex justify-between items-center mt-2 text-[10px] uppercase font-bold text-neutral-400">
                       <span>{note.author}</span>
-                      <span>{format(new Date(note.timestamp), "MMM dd, HH:mm")}</span>
+                      <span>{format(new Date(note.timestamp), "MMM dd, hh:mm a")}</span>
                     </div>
                   </div>
                 ))

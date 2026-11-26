@@ -137,7 +137,7 @@ export function AuditLogDetailDrawer({
               {formatActionTitle(log.action)}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5 font-mono">
-              {format(new Date(log.createdAt), "dd MMM yyyy, HH:mm:ss")}
+              {format(new Date(log.createdAt), "dd MMM yyyy, hh:mm:ss a")}
             </p>
           </div>
           <button

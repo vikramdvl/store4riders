@@ -261,7 +261,8 @@ export function resolveStorefrontNavItems(
         if (isBrandNav && Array.isArray(dbBrands)) {
           const matchedDbBrand = dbBrands.find((b) => isMatchingBrand(subItem, b));
           if (matchedDbBrand) {
-            if (matchedDbBrand.showInMenu === false || matchedDbBrand.isActive === false) {
+            const isHidden = matchedDbBrand.showInMenu === false || (matchedDbBrand.showInMenu as any) === "false" || matchedDbBrand.isActive === false;
+            if (isHidden) {
               return false;
             }
 
@@ -299,7 +300,8 @@ export function resolveStorefrontNavItems(
         });
 
         dbBrands.forEach((b) => {
-          if (b.isActive === false || b.showInMenu === false) return;
+          const isInMenu = b.showInMenu === true || (b.showInMenu as any) === "true";
+          if (b.isActive === false || !isInMenu) return;
 
           const brandGroups = (
             Array.isArray(b.menuGroups) && b.menuGroups.length > 0

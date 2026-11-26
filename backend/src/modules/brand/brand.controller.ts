@@ -6,7 +6,31 @@ import { ApiResponse } from "../../core/response/ApiResponse";
 
 export class BrandController {
   static async getAll(req: NextRequest) {
-    const includeInactive = req.nextUrl.searchParams.get("includeInactive") === "true";
+    const searchParams = req.nextUrl.searchParams;
+    const includeInactive = searchParams.get("includeInactive") === "true";
+
+    // Paginated response if `page` or `limit` parameter is present
+    if (searchParams.has("page") || searchParams.has("limit")) {
+      const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "20", 10) || 20));
+      const search = searchParams.get("search") || undefined;
+      const status = searchParams.get("status") as "all" | "active" | "inactive" | null;
+      const submenu = searchParams.get("submenu") as "all" | "in_submenu" | "hidden" | null;
+      const section = searchParams.get("section") || undefined;
+
+      const { items, totalCount } = await BrandService.getPaginatedBrands({
+        page,
+        limit,
+        includeInactive,
+        search,
+        status: status || "all",
+        submenu: submenu || "all",
+        section: section || "all",
+      });
+
+      return ApiResponse.paginated(items, totalCount, page, limit);
+    }
+
     const brands = await BrandService.getAllBrands(includeInactive);
     return ApiResponse.success(brands, "Brands fetched successfully");
   }

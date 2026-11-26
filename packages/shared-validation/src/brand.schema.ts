@@ -5,15 +5,22 @@ export const brandFaqSchema = z.object({
   answer: z.string().min(1),
 });
 
-export const createBrandSchema = z.object({
+const booleanCoerce = z
+  .union([z.boolean(), z.string(), z.number()])
+  .transform((val) => {
+    if (val === true || val === "true" || val === 1 || val === "1") return true;
+    return false;
+  });
+
+export const brandBaseSchema = z.object({
   name: z.string().min(2).max(100),
   slug: z.string().min(2).max(100),
   aliases: z.array(z.string()).optional(),
   logo: z.string().optional(),
   description: z.string().optional(),
   faqs: z.array(brandFaqSchema).optional(),
-  isActive: z.boolean().default(true),
-  showInMenu: z.boolean().default(true).optional(),
+  isActive: booleanCoerce.optional(),
+  showInMenu: booleanCoerce.optional(),
   menuGroup: z.string().optional(),
   menuGroups: z.array(z.string()).optional(),
   metaTitle: z.string().max(300).optional().or(z.literal("")),
@@ -21,4 +28,9 @@ export const createBrandSchema = z.object({
   metaKeywords: z.string().max(2000).optional().or(z.literal("")),
 });
 
-export const updateBrandSchema = createBrandSchema.partial();
+export const createBrandSchema = brandBaseSchema.extend({
+  isActive: booleanCoerce.default(true),
+  showInMenu: booleanCoerce.default(false),
+});
+
+export const updateBrandSchema = brandBaseSchema.partial();

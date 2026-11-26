@@ -412,4 +412,28 @@ describe("Guides Storefront Live Blog Regression Suite", () => {
 
     fetchSpy.mockRestore();
   });
+
+  it("fetchGuideOrBlogPost and fetchBlogCategoryBySlug return null on ECONNREFUSED during production build", async () => {
+    const prevPhase = process.env.NEXT_PHASE;
+    process.env.NEXT_PHASE = "phase-production-build";
+
+    const connRefusedErr = Object.assign(new TypeError("fetch failed"), {
+      cause: { code: "ECONNREFUSED" },
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(connRefusedErr);
+
+    try {
+      const post = await fetchGuideOrBlogPost("waterproof-riding-gear");
+      const category = await fetchBlogCategoryBySlug("waterproof-riding-gear");
+      expect(post).toBeNull();
+      expect(category).toBeNull();
+    } finally {
+      if (prevPhase === undefined) {
+        delete process.env.NEXT_PHASE;
+      } else {
+        process.env.NEXT_PHASE = prevPhase;
+      }
+      fetchSpy.mockRestore();
+    }
+  });
 });

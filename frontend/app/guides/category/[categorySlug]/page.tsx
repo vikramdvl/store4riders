@@ -7,6 +7,7 @@ import {
   fetchBlogCategoryBySlug,
   fetchPublicBlogCategories,
   fetchPublicBlogPosts,
+  fetchStaticBlogCategorySlugs,
   buildBlogCollectionSchema,
   buildBreadcrumbSchema,
 } from "@/modules/guides";
@@ -20,9 +21,9 @@ interface Props {
 }
 
 export async function generateStaticParams() {
-  const categories = await fetchPublicBlogCategories();
-  return categories.map((cat) => ({
-    categorySlug: cat.slug,
+  const categorySlugs = await fetchStaticBlogCategorySlugs();
+  return categorySlugs.map((categorySlug) => ({
+    categorySlug,
   }));
 }
 

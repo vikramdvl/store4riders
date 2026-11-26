@@ -33,8 +33,25 @@ const BLOG_FETCH_TIMEOUT_MS = 10000;
 const BLOG_REVALIDATE_SECONDS = 3600;
 const BLOG_TRANSIENT_RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
-async function fetchBlogWithRetry(url: string): Promise<Response> {
+function isConnectionRefusedError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const anyErr = err as { code?: string; cause?: { code?: string; errors?: Array<{ code?: string }> } };
+  if (anyErr.code === "ECONNREFUSED" || anyErr.code === "ENOTFOUND") return true;
+  if (anyErr.cause) {
+    if (anyErr.cause.code === "ECONNREFUSED" || anyErr.cause.code === "ENOTFOUND") return true;
+    if (Array.isArray(anyErr.cause.errors)) {
+      return anyErr.cause.errors.some(
+        (e) => e?.code === "ECONNREFUSED" || e?.code === "ENOTFOUND"
+      );
+    }
+  }
+  return false;
+}
+
+async function fetchBlogWithRetry(url: string): Promise<Response | null> {
   let lastError: unknown;
+  const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await fetch(url, {
@@ -46,6 +63,9 @@ async function fetchBlogWithRetry(url: string): Promise<Response> {
       }
       lastError = new Error(`Blog API responded with status ${res.status}`);
     } catch (err) {
+      if (isBuildPhase && isConnectionRefusedError(err)) {
+        return null;
+      }
       lastError = err;
     }
   }
@@ -96,7 +116,7 @@ export const fetchBlogCategoryBySlug = cache(async (slug: string): Promise<IBlog
   const res = await fetchBlogWithRetry(
     `${getBlogApiBase()}/blog/categories/${encodeURIComponent(slug)}`
   );
-  if (res.status === 404) return null;
+  if (!res || res.status === 404) return null;
   if (!res.ok) {
     throw new Error(`Failed to fetch blog category "${slug}" (status ${res.status})`);
   }
@@ -150,13 +170,51 @@ export const fetchGuideOrBlogPost = cache(async (slug: string): Promise<IBlogPos
     `${getBlogApiBase()}/blog/posts/${encodeURIComponent(targetSlug)}`
   );
 
-  if (res.status === 404) return null;
+  if (!res || res.status === 404) return null;
   if (!res.ok) {
     throw new Error(`Failed to fetch blog post "${targetSlug}" (status ${res.status})`);
   }
   const json = await res.json();
   return json?.data || null;
 });
+
+/**
+ * Fetches live category slugs specifically for generateStaticParams without
+ * relying on stale `.next/cache` entries when the backend API is offline during build.
+ */
+export async function fetchStaticBlogCategorySlugs(): Promise<string[]> {
+  try {
+    const res = await fetch(`${getBlogApiBase()}/blog/categories`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const categories: IBlogCategory[] = Array.isArray(json?.data) ? json.data : [];
+    return categories.map((cat) => cat.slug).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetches live post slugs specifically for generateStaticParams without
+ * relying on stale `.next/cache` entries when the backend API is offline during build.
+ */
+export async function fetchStaticBlogPostSlugs(): Promise<string[]> {
+  try {
+    const res = await fetch(`${getBlogApiBase()}/blog/posts?page=1&limit=100`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const items: IBlogPost[] = Array.isArray(json?.data?.items) ? json.data.items : [];
+    return items.map((post) => post.slug).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 
 export const fetchRelatedBlogPosts = cache(
   async (slug: string, limit = 3): Promise<IBlogPost[]> => {

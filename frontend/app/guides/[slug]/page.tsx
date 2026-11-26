@@ -10,6 +10,8 @@ import {
   fetchGuideOrBlogPost,
   fetchPublicBlogCategories,
   fetchPublicBlogPosts,
+  fetchStaticBlogCategorySlugs,
+  fetchStaticBlogPostSlugs,
   fetchRelatedBlogPosts,
   buildAuthorSchema,
   buildBlogPostingSchema,
@@ -25,13 +27,14 @@ interface Props {
 }
 
 export async function generateStaticParams() {
-  const [categories, postsData] = await Promise.all([
-    fetchPublicBlogCategories(),
-    fetchPublicBlogPosts(1, 100),
+  const [catSlugs, postSlugs] = await Promise.all([
+    fetchStaticBlogCategorySlugs(),
+    fetchStaticBlogPostSlugs(),
   ]);
-  const catSlugs = categories.map((cat) => ({ slug: cat.slug }));
-  const postSlugs = postsData.items.map((post) => ({ slug: post.slug }));
-  return [...catSlugs, ...postSlugs];
+  return [
+    ...catSlugs.map((slug) => ({ slug })),
+    ...postSlugs.map((slug) => ({ slug })),
+  ];
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

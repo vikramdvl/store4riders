@@ -4,7 +4,61 @@ import { IBrand, IBrandsPageConfig } from "@store4riders/shared-types";
 import { toast } from "sonner";
 import { revalidateStorefrontPaths } from "../utils/revalidateStorefront";
 
-export function useBrands(includeInactive?: boolean, initialData?: IBrand[]) {
+export interface UseBrandsOptions {
+  staleTime?: number;
+  refetchOnMount?: boolean | "always";
+}
+
+export interface BrandListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: "all" | "active" | "inactive";
+  submenu?: "all" | "in_submenu" | "hidden";
+  section?: string;
+  includeInactive?: boolean;
+}
+
+export interface PaginatedBrandsResponse {
+  items: IBrand[];
+  totalCount: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export function usePaginatedBrands(params: BrandListParams, options?: UseBrandsOptions) {
+  const {
+    page = 1,
+    limit = 20,
+    search = "",
+    status = "all",
+    submenu = "all",
+    section = "all",
+    includeInactive = true,
+  } = params;
+
+  return useQuery({
+    queryKey: ["brands", "paginated", { page, limit, search, status, submenu, section, includeInactive }],
+    queryFn: async () => {
+      const sp = new URLSearchParams();
+      sp.set("page", String(page));
+      sp.set("limit", String(limit));
+      if (includeInactive) sp.set("includeInactive", "true");
+      if (search) sp.set("search", search);
+      if (status && status !== "all") sp.set("status", status);
+      if (submenu && submenu !== "all") sp.set("submenu", submenu);
+      if (section && section !== "all") sp.set("section", section);
+
+      const response = await apiClient.get(`/brands?${sp.toString()}`);
+      return response.data.data as PaginatedBrandsResponse;
+    },
+    staleTime: options?.staleTime !== undefined ? options.staleTime : 30 * 1000,
+    refetchOnMount: options?.refetchOnMount,
+  });
+}
+
+export function useBrands(includeInactive?: boolean, initialData?: IBrand[], options?: UseBrandsOptions) {
   return useQuery({
     queryKey: ["brands", Boolean(includeInactive)],
     queryFn: async () => {
@@ -13,7 +67,8 @@ export function useBrands(includeInactive?: boolean, initialData?: IBrand[]) {
       return response.data.data as IBrand[];
     },
     initialData,
-    staleTime: 15 * 60 * 1000,
+    staleTime: options?.staleTime !== undefined ? options.staleTime : 30 * 1000,
+    refetchOnMount: options?.refetchOnMount,
   });
 }
 

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { BrandModel } from "./brand.model";
 import { IBrand } from "@store4riders/shared-types";
 
@@ -12,7 +13,11 @@ export class BrandRepository {
   }
 
   static async findById(id: string): Promise<IBrand | null> {
-    return BrandModel.findById(id).lean().exec() as unknown as IBrand | null;
+    if (mongoose.isValidObjectId(id)) {
+      return BrandModel.findById(id).lean().exec() as unknown as IBrand | null;
+    }
+    const cleanSlug = id.replace(/^brand-/, "").toLowerCase().trim();
+    return BrandModel.findOne({ slug: cleanSlug }).lean().exec() as unknown as IBrand | null;
   }
 
   static async findBySlug(slug: string): Promise<IBrand | null> {
@@ -33,12 +38,35 @@ export class BrandRepository {
   }
 
   static async update(id: string, data: Partial<IBrand>): Promise<IBrand | null> {
-    return BrandModel.findByIdAndUpdate(id, data, { new: true })
+    if (mongoose.isValidObjectId(id)) {
+      return BrandModel.findByIdAndUpdate(id, data, { new: true })
+        .lean()
+        .exec() as unknown as IBrand | null;
+    }
+    const cleanSlug = id.replace(/^brand-/, "").toLowerCase().trim();
+    return BrandModel.findOneAndUpdate(
+      { $or: [{ slug: cleanSlug }, { slug: id }] },
+      data,
+      { new: true, upsert: true }
+    )
       .lean()
       .exec() as unknown as IBrand | null;
   }
 
   static async delete(id: string): Promise<IBrand | null> {
-    return BrandModel.findByIdAndDelete(id).lean().exec() as unknown as IBrand | null;
+    if (mongoose.isValidObjectId(id)) {
+      return BrandModel.findByIdAndDelete(id).lean().exec() as unknown as IBrand | null;
+    }
+    const cleanSlug = id.replace(/^brand-/, "").toLowerCase().trim();
+    return BrandModel.findOneAndDelete({ slug: cleanSlug }).lean().exec() as unknown as IBrand | null;
+  }
+
+  static async insertManySafe(brands: Partial<IBrand>[]): Promise<void> {
+    if (!brands || brands.length === 0) return;
+    try {
+      await BrandModel.insertMany(brands, { ordered: false });
+    } catch {
+      // Ignore duplicate key errors if already inserted
+    }
   }
 }

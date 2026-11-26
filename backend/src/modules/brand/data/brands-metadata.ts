@@ -9,6 +9,8 @@ export interface BrandMetadataRecord {
   description: string;
   faqs: Array<{ question: string; answer: string }>;
   productCount?: number;
+  logo?: string;
+  menuGroup?: string;
 }
 
 export const BRANDS_METADATA: BrandMetadataRecord[] = [
@@ -20,6 +22,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Axor Helmets- Official Axor Helmet Range, Prices & Models | Store4Riders",
     metaDescription: "Shop genuine Axor helmets- from commuter to full-face sport designs. Compare Axor helmet price, view Axor black helmet options, and get fitment guidance, warranty details, and fast dispatch.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, axor helmets, axor helmet price",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/axor-logo_bw_100x51.png",
     h1: "Axor Helmets",
     productCount: 50,
     description: `<p><strong>Ride safer. Ride smarter. Ride Axor.</strong> Discover the Axor helmets collection built for everyday riders and performance seekers alike. Axor blends modern safety features, comfortable fit, and bold styling so you can ride with confidence. Whether you want a lightweight commuter lid, a ventilated full-face, or a sleek Axor black helmet, find authentic Axor options and transparent Axor helmet price information right here.</p>
@@ -75,6 +78,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "SMK Helmets India | Buy SMK Helmets Online – Price from ₹3,990",
     metaDescription: "Shop 100% genuine SMK helmets online in India. SMK helmets price starts at ₹3,990. ISI/ECE certified, free shipping, COD & EMI available.",
     metaKeywords: "smk helmets price, smk helmets, smk helmet, smk helmets india",
+    logo: "/brands/smk.svg",
     h1: "SMK Helmets",
     productCount: 62,
     description: `<p><strong>European styling meets world-class manufacturing.</strong> SMK is a premier helmet brand combining Italian design finesse with Studds' four decades of manufacturing expertise. Conceptualized in Europe and engineered in India, SMK helmets provide modern safety features, superior aerodynamics, and bold styling so you can ride with confidence.</p>
@@ -130,6 +134,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Rynox Gear India: Rynox Jackets, Gloves & Riding Luggage | Store4Riders",
     metaDescription: "Explore genuine Rynox riding gear in India. Shop CE-certified Rynox jackets, gloves, tank bags, saddlebags, and H2Go waterproof rain gear designed for Indian roads with fast dispatch and EMI.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, rynox gear, rynox jackets, rynox gloves",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/new-rynox-logo-black.png",
     h1: "Rynox Gear",
     productCount: 46,
     description: `<p><strong>Engineered for Indian roads and weather.</strong> Rynox Gear is India's leading motorcycle protective apparel brand, designing high-performance riding gear specifically for Indian climate extremes—from high-temperature summers and heavy monsoon rains to rugged mountain passes.</p>
@@ -177,6 +182,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Rolon Chain Sprocket Kits Online | Best Price - Store4Riders",
     metaDescription: "Buy 100% genuine Rolon chain sprocket kits for your bike at the best price. Direct OEM fitment, brass and noise-free variants for 130+ motorcycle models with fast delivery across India.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, rolon chain sprocket, rolon brass chain",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/rolon.jpg",
     h1: "Rolon",
     productCount: 64,
     description: `<h2>Rolon Chain Sprocket Kits: Genuine OEM Fitment and Price Promise</h2>
@@ -246,6 +252,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Genuine Royal Enfield Riding gear and helmets online",
     metaDescription: "Shop genuine Royal Enfield helmets, riding jackets, gloves, pants, and boots delivered across India, with fast shipping and EMI at checkout.",
     metaKeywords: "royal enfield helmet price, royal enfield helmet half face, royal enfield open face helmet, royal enfield riding gear",
+    logo: "/brands/royal-enfield.svg",
     h1: "Royal Enfield",
     productCount: 20,
     description: `<h2>Royal Enfield</h2>
@@ -281,6 +288,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Clan Shoes India | Waterproof Riding Boots with D3O | Store4Riders",
     metaDescription: "Shop Clan shoes online, waterproof riding boots built with D3O protection for everyday wear. Explore Scout, Torque, and Stealth ranges with fast delivery across India.",
     metaKeywords: "shoes, clan shoes, clan riding boots, waterproof motorcycle sneakers, d3o riding shoes",
+    logo: "/brands/clan-shoes.svg",
     h1: "Clan shoes",
     productCount: 5,
     description: `<p>Riding boots often get left at home because they're bulky and uncomfortable for everyday use. Clan shoes are designed to look and feel like sneakers while still providing real protection.</p>
@@ -333,6 +341,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy TVS Racing Performance Gear online | TVS Helmets | TVS Riding Jacket",
     metaDescription: "TVS Racing Performance Gear for enthusiast riders, quality products at budget-friendly prices. Range includes TVS helmets, XPOD helmets, riding jackets, and gloves.",
     metaKeywords: "tvs helmet, tvs riding jacket, xpod helmet, tvs riding gloves, tvs riding gear full set",
+    logo: "/brands/tvs-racing.svg",
     h1: "TVS Racing performance gear",
     productCount: 25,
     description: `<p>TVS Motor Company is India's third-largest two-wheeler manufacturer, with annual sales above 3 million units and exports to more than 60 countries.</p>
@@ -369,6 +378,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Raida Gears | Raida Bike cover | Raida Riding Jacket| Raida Boots",
     metaDescription: "Shop riding gear by Raida Gears, \"Made in India\", bike covers, gloves, jackets, base layers, boots and pants with free shipping across India.",
     metaKeywords: "raida gears, raidagears, raida gear, raida riding gear, raida india, raida bag, raida riding pants, raida riding gears, bike cover, raida bike cover, waterproof bike cover, bike rain cover, raida riding jacket, raida boots",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Raida.png",
     h1: "Raida Gears",
     productCount: 46,
     description: `<p>Raida Gears was founded in 2015 to supply quality riding products and accessories to Indian motorcycle riders. The brand works to match international quality standards and continually improves its products. It presents itself as "Made in India."</p>
@@ -405,6 +415,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "BluArmor Helmet Communicators | BluArmor C30 | Store4Riders",
     metaDescription: "Shop BluArmor helmet intercom systems, including the BluArmor C30 with mesh connectivity for up to 20 riders. Built for two-wheeler riders with 1-year warranty.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, bluarmor, bluarmor c30",
+    logo: "/brands/bluarmor.svg",
     h1: "BluArmor",
     productCount: 5,
     description: `<p>BluArmor makes helmet communicators for two-wheeler riders. The C30 is its most popular model and uses the RIDEGRID mesh intercom, which keeps a group connected as riders spread out, rather than relying on a direct Bluetooth link.</p>
@@ -448,6 +459,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "LS2 Helmets India | Buy LS2 Helmet Online - Store4Riders",
     metaDescription: "Shop genuine LS2 full-face helmets online, compare prices, sizes and colours, with EMI and COD options.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, ls2 helmets",
+    logo: "/brands/ls2.svg",
     h1: "LS2 Helmets",
     productCount: 27,
     description: `<p>Founded in 2007, LS2 is a helmet brand backed by about three decades of manufacturing experience from its parent company, MHR. It is sold in over 125 countries.</p>
@@ -494,6 +506,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Falco Boots in India @ Store4Riders.com | Falco boots",
     metaDescription: "Falco Riding Boots - Italian style with Value for Money pricing. Explore the range of Falco Riding boots in India.",
     metaKeywords: "falco riding boots, falco boots, falco motorcycle boots india, falco boots for sale, falco boots d3o, falco boots size chart, falco marshall boots, falco avantour 2, falco motorcycle boots review",
+    logo: "https://www.store4riders.com/media/codazon_cache/brand/120x120/Background.png",
     h1: "Falco",
     productCount: 10,
     description: `<p>Starting from the company headquarter based in Cornuda (near Venice in Italy), in the cradle of a major sportswear industrial district Gianni Falco srl has reached a respected position among market leaders growing to a global brand presence. Falco Riding Boots are known to provide Italian style with Value for Money pricing.</p>
@@ -518,6 +531,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Forma Adventure Boots India | Forma Riding Boots | Forma Shoes",
     metaDescription: "Get the top quality Italian Forma riding boots. Forma adventure low boots, adventure high boots, Forma Ice Pro, Forma Freccia available. Free delivery across India. Only genuine products. EMI option available.",
     metaKeywords: "forma riding boots, forma motorcycle boots, forma adventure boots, forma boots, forma shoes, forma boots india, forma riding boots india, forma riding shoes, forma shoes india, forma adventure boots india",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Forma.png",
     h1: "Forma Boots",
     productCount: 2,
     description: `<h3><strong>Forma Adventure Boots:</strong></h3>
@@ -550,6 +564,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "BMC Air Filter for Bike | Genuine BMC Filters | Store4Riders",
     metaDescription: "Shop genuine BMC air filter options for your motorcycle. Washable and reusable performance air filters with cotton gauze construction and 2-year warranty.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, bmc air filter, bike air filter",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/BMC_Air_filter_logo.png",
     h1: "BMC Air Filter",
     productCount: 26,
     description: `<p>BMC has a motorsport background, supplying air filters to race teams before moving the same construction into road bike filters.</p>
@@ -594,6 +609,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "K&N Air Filter for Bike | Genuine K&N Filters | Store4Riders",
     metaDescription: "Shop genuine K&N air filter options for your motorcycle. Washable, reusable high-flow air cleaners with Million Mile Limited Warranty.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, kn air filter, k&n bike filter",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/K_N-Logo.png",
     h1: "K&N Bike Air Filter",
     productCount: 12,
     description: `<p>K&amp;N Engineering is an industry pioneer with over 50 years of filtration innovation. K&amp;N performance motorcycle filters use oiled, layered cotton gauze rather than restrictive disposable paper elements.</p>
@@ -637,6 +653,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "MadDog Lights: Mad Dog Fog Lights for Bike | Store4Riders",
     metaDescription: "Shop genuine MadDog lights. Maddog fog lights for bike designed and made in India, across the Scout, Delta and Alpha range.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, maddog lights, maddog fog lights",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/maddog-logo-2.png",
     h1: "MadDog",
     productCount: 25,
     description: `<p>MadDog designs its auxiliary lights specifically for Indian roads and riding conditions. Its anti-glare TIR optics and 5000K warm-white color temperature are engineered for maximum clarity on unlit highways and in foggy conditions without blinding oncoming traffic.</p>
@@ -684,6 +701,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Get Biking Brotherhood Riding Gear | BBG Riding Jacket | BBG Riding Boots",
     metaDescription: "Biking Brotherhood offers riding gear like riding jackets, pants, gloves, boots and motorcycle luggage with 6-month manufacturer warranty and fast shipping across India.",
     metaKeywords: "biking brotherhood, bbg riding jacket, bbg riding boots, biking brotherhood jacket, bbg jacket, bbg, biker brotherhood, bbg gears",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/9biking.png",
     h1: "Biking Brotherhood",
     productCount: 25,
     description: `<p>Biking Brotherhood Gears makes protective gear for motorcycle riding and racing. Veteran riders with more than 20 years of racing and touring experience founded the company to help riders pursue motorsport safely.</p>
@@ -720,6 +738,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Amaroq Motorcycle Boots online",
     metaDescription: "Explore AMAROQ motorcycle boots combining performance, durability and style with 6-month warranty and lifelong support from AMAROQ.",
     metaKeywords: "riding boots, riding boots for men, bike riding boots, best riding boots, motorcycle boots, amaroq boots",
+    logo: "/brands/amaroq.svg",
     h1: "Amaroq Motorcycle Boots",
     productCount: 4,
     description: `<p>AMAROQ began when a group of passionate bikers set out to create motorcycle footwear that combined real riding protection, rugged durability, and modern urban style. Designed through extensive materials research and collaborations with professional riders, AMAROQ boots embody the spirit of freedom and adventure.</p>
@@ -744,6 +763,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Vesrah brake pads | Vesrah ceramic brake pads online",
     metaDescription: "Explore the range of Vesrah brake pads here. Japanese sintered and ceramic brake pads delivered across India.",
     metaKeywords: "vesrah brake pads, vesrah ceramic brake pads, bike brake pads, brake pads, ceramic brake pads, brake pads price",
+    logo: "/brands/vesrah.svg",
     h1: "Vesrah Brake Pads",
     productCount: 15,
     description: `<p>Vesrah, a Japanese company with manufacturing heritage dating back to 1950, is a world-renowned brake pad specialty manufacturer.</p>
@@ -768,6 +788,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy MotoTech Adventure & Motorcycle touring Products online",
     metaDescription: "Get the best riding gear and accessories by MotoTech now. All genuine products with warranty.",
     metaKeywords: "mototech, mototech riding jacket, mototech jacket, moto tech jacket",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/MotoTech.png",
     h1: "MotoTech Gear",
     productCount: 15,
     description: `<p>MotoTech manufactures genuine and quality motorbiking products and accessories that assist in self-protection, carrying luggage, securing luggage and convenient riding. Mototech Riding Jacket, Bungee Cords, Bungee Nets, Balaclava, Armoured Riding Pants, Riding Boots, Riding Gloves, Armour Inserts are some of the products of MotoTech.</p>`,
@@ -791,6 +812,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Lone Ranger Riding Jacket | Lone Ranger Gloves",
     metaDescription: "Shop Lone Ranger riding jackets, Kevlar denims, gloves, boots, touring bags, backpacks, magnetic tank bags, and leather motorcycle accessories with warranty.",
     metaKeywords: "lone ranger jacket, lone ranger riding jacket, lone ranger gloves, lone ranger india, loneranger, lone ranger",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Lone-Ranger.png",
     h1: "Lone Ranger",
     productCount: 5,
     description: `<h2>Lone Ranger</h2>
@@ -822,6 +844,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "NGK Iridium Spark Plugs Online | Store4Riders",
     metaDescription: "Shop genuine NGK iridium spark plugs, including the NGK Iridium IX range. Laser-welded iridium tip for superior ignition, longer life, and BS6 compatibility.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, ngk spark plugs, ngk iridium",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/NGK.png",
     h1: "NGK Spark Plugs",
     productCount: 26,
     description: `<p>NGK has been manufacturing spark plugs since 1936. Many motorcycle makers fit NGK plugs as original equipment, and their iridium range is built to the same production standards.</p>
@@ -866,6 +889,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "BOBO Mobile Holder for Bike | Waterproof & Anti-Vibration | Store4Riders",
     metaDescription: "Shop genuine BOBO mobile phone holders for bike with anti-vibration jaw-grip dampers, waterproof touchscreen cases, and wireless fast charging.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, bobo mobile holder, bike phone holder",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/BOBO-Logo-Blue-Black.png",
     h1: "BOBO Gears",
     productCount: 23,
     description: `<p>BOBO was founded in 2018 to make phone mounts that stay secure on rough Indian roads. Its designs include a jaw-grip clamp that leaves the phone visible and vibration dampers that keep the screen readable at speed.</p>
@@ -910,6 +934,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Race Dynamics Products online",
     metaDescription: "Buy genuine Race Dynamics ECU and electronic components online. R&D recognized electronic engine controls and FlashX hazard modules.",
     metaKeywords: "race dynamics flashx, powertronic, race dynamics ecu",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/RaceDynamics_Logohi-res_Primary.png",
     h1: "Race Dynamics",
     productCount: 16,
     description: `<p>Race Dynamics India Pvt. Ltd. is a privately owned automotive research and development company based in Bangalore. It has operated since 2004 and became a private limited company in 2008. The Government of India's Department of Scientific and Industrial Research recognises it. It is described as the first company in India to work successfully on automotive electronic engine control for motorsports, aftermarket, and OEM applications.</p>
@@ -934,6 +959,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Scala Riding Jacket & Gear Online | Store4Riders",
     metaDescription: "Shop Scala riding jackets, scala gloves and scala rain jacket options built for Indian roads and Indian weather. 6-month warranty and 5-year armour cover.",
     metaKeywords: "scala gears, scala riding jacket, scala gloves, scala rain jacket",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/scala.png",
     h1: "Scala Gears",
     productCount: 10,
     description: `<p>Scala Gears was founded by an Indian motorcyclist who designed gear for local roads rather than adapting a global product. The range includes riding jackets, gloves, and pants for city traffic and long highway trips.</p>
@@ -985,6 +1011,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Get Pro-Spec Performance Parts today | Store4Riders",
     metaDescription: "Pro-Spec is committed to providing high quality unique motorcycle solutions designed and made in India at unbeatable prices.",
     metaKeywords: "pro-spec performance parts, pro-spec, easy cruise, visor extender",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Pro-Spec-logo.png",
     h1: "Pro-Spec Performance Parts",
     productCount: 9,
     description: `<p>Pro-Spec is committed to providing you with high quality unique solutions designed and made in India for passionate motorcyclists at an unbeatable price and support.</p>
@@ -1009,6 +1036,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Furygan India | Furygan Riding Gear",
     metaDescription: "Buy Furygan riding jackets, gloves, pants, riding bags, protection guards at best prices. Fast delivery across India.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, furygan",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/furygan_logo.jpg",
     h1: "Furygan",
     productCount: 5,
     description: `<h2>Furygan</h2>
@@ -1036,6 +1064,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Shad motorcycle Top Box online",
     metaDescription: "Get the best quality motorcycle top box / top case from SHAD delivered to your home. Fast shipping across India.",
     metaKeywords: "shad luggage, shad top box, SHAD Top Case SH29, SHAD Top Case SH39, SHAD Top Case SH42 Black",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/SHAD-LOGO-PNG.png",
     h1: "Shad",
     productCount: 7,
     description: `<p>SHAD is owned by NAD S.L. and was founded in 1973 in Barcelona, Spain. The brand designs and manufactures OEM top cases and comfort seats for major motorcycle manufacturers globally.</p>
@@ -1060,6 +1089,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Cramster by Rynox - Riding Jacket and Gloves available",
     metaDescription: "Get Cramster riding jackets, Cramster riding gloves, and touring luggage with fast shipping across India.",
     metaKeywords: "cramster jackets, cramster riding jacket, cramster riding gloves, cramster",
+    logo: "/brands/cramster.svg",
     h1: "Cramster",
     productCount: 5,
     description: `<p>Cramster is India's pioneer motorcycle apparel and touring luggage brand. Operating for over two decades, it built a legendary cult following among Indian riders by delivering rugged durability, functional ergonomics, and timeless style.</p>
@@ -1084,6 +1114,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Invictus Gears - Motorcycle Saddlebags & Touring Luggage",
     metaDescription: "Shop Invictus Gears motorcycle saddlebags and tail bags. 100% made in India luggage designed to fit all bikes universally.",
     metaKeywords: "invictus gears, invictus saddle bag, motorcycle luggage, tail bag",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Invictus.png",
     h1: "Invictus",
     productCount: 5,
     description: `<p>Invictus Gears was created in 2018 for providing riders of all bikes the safest possible way of carrying their luggage on long distances.</p>
@@ -1110,6 +1141,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Barrel Exhaust online | Royal Enfield Exhaust",
     metaDescription: "Shop genuine Barrel Exhaust systems for Royal Enfield, Bajaj Avenger 220, Hero XPulse, Ghost 2.0, dB killers, and accessories with warranty.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, barrel exhaust, royal enfield exhaust",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Barrel-Exhaust.png",
     h1: "Barrel Exhaust",
     productCount: 1,
     description: `<p><strong>Barrel Exhaust</strong>: A premier motorcycle accessory brand that rethought exhaust design and built a reputation as a world-class automotive accessory brand.</p>
@@ -1134,6 +1166,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Snell Motorcycle Gear & Accessories | Store4Riders",
     metaDescription: "Motorcycle Helmets, sprockets, air filters, riding jackets, gloves, boots and other riding accessories.",
     metaKeywords: "Biker helmets, riding jacket, biker gloves, motorcycle helmet, riding boots, snell",
+    logo: "/brands/snell.svg",
     h1: "Snell",
     productCount: 0,
     description: `<p>Snell offers a focused range of motorcycle parts and rider accessories designed for performance, everyday reliability, and value for money.</p>`,
@@ -1153,6 +1186,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Get the high quality riding gear by Fly Racing | EMI available",
     metaDescription: "Fly racing boots and apparel available in India with free shipping and 6-month manufacturer warranty.",
     metaKeywords: "fly racing, fly maverik, fly racing boots",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Flyracing-logo_1_.png",
     h1: "Fly Racing",
     productCount: 5,
     description: `<p>Fly Racing makes apparel, accessories, and hard parts for motocross, off-road, and street riding. Inspired by racing, built for adventure, and engineered for high performance, the brand has operated since 1998.</p>
@@ -1177,6 +1211,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Mototrendz Products online",
     metaDescription: "Mototrendz Customization is a top player in automotive customization services and motorcycle protective accessories in Mumbai.",
     metaKeywords: "mototrendz, Fork Seal Covers, ktm accessories, motorcycle accessories",
+    logo: "/brands/mototrendz.svg",
     h1: "Mototrendz",
     productCount: 8,
     description: `<p>Mototrendz Customization is a leading specialist in motorcycle accessories and engineering solutions based in Mumbai. With an in-house team of engineers and designers, Mototrendz develops products that balance engineering precision, aesthetics, and ergonomics, including fork seal covers and tank pads.</p>`,
@@ -1200,6 +1235,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy AutoStreet Biker T-Shirts | Motorcycle T shirts online",
     metaDescription: "Buy AutoStreet biker t-shirts and enthusiast apparel with fast delivery across India.",
     metaKeywords: "biker t shirts, motorcycle t shirts, bike t shirt",
+    logo: "/brands/autostreet.svg",
     h1: "AutoStreet",
     productCount: 9,
     description: `<p>AutoStreet is an automotive merchandise company that makes high-quality motoring apparel and lifestyle accessories for motorcycle and car enthusiasts. Its range includes themed 100% cotton T-shirts, jackets, hoodies, stickers, and casual riding lifestyle gear.</p>`,
@@ -1223,6 +1259,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "66Bhp Motorcycle Maintenance & Accessories | Store4Riders",
     metaDescription: "Motorcycle helmets, chain lubes, crash guards, and performance accessories from 66Bhp.",
     metaKeywords: "66bhp, 66bhp chain lube, 66bhp crash guard",
+    logo: "/brands/66bhp.svg",
     h1: "66Bhp",
     productCount: 5,
     description: `<p>66Bhp provides specialized motorcycle maintenance fluids, chain lubes, crash protection, and riding accessories engineered for enthusiasts seeking dependable reliability.</p>`,
@@ -1242,6 +1279,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Moto Vanguard Luggage Solutions",
     metaDescription: "Buy top quality motorcycle top boxes, panniers, and luggage solutions by Moto Vanguard with 37 years of manufacturing experience.",
     metaKeywords: "bike top box, motorcycle top box, motorbike top box, aluminium top box, top box aluminium, bike back box, aluminium top box for bike",
+    logo: "/brands/moto-vanguard.svg",
     h1: "Moto Vanguard",
     productCount: 6,
     description: `<p>With 37 years of precision manufacturing experience in engineering products, Moto Vanguard provides robust solutions for all your motorcycle touring luggage needs.</p>
@@ -1266,6 +1304,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Explore the range of MOTOREX Oil of Switzerland here",
     metaDescription: "Explore MOTOREX Oil of Switzerland. Premium motorcycle engine oils, chain cleaners, chain sprays, and fluids backed by over 100 years of Swiss quality.",
     metaKeywords: "motorex, bike chain oil, chain spray, chain clean, motorex oil",
+    logo: "/brands/motorex.svg",
     h1: "MotoreX",
     productCount: 1,
     description: `<p>Founded in 1917 as REX and rebranded as MOTOREX in 1947, MOTOREX Oil of Switzerland has focused on the highest standards of lubrication technology and services for over a century.</p>
@@ -1295,6 +1334,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy SAS-TEC Motorcycle Armor & Protectors Online | Store4Riders",
     metaDescription: "Shop SAS-TEC German engineered CE Level 2 viscoelastic motorcycle armor protectors for shoulders, elbows, back, and chest.",
     metaKeywords: "sas-tec, sastec, motorcycle armor, ce level 2 armor, viscoelastic protector",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/SAS-TEC-Logo-.jpg",
     h1: "SAS-TEC",
     productCount: 10,
     description: `<p>SAS-TEC is an innovative German safety manufacturer specializing in viscoelastic PU armor inserts for motorcycle protective apparel. Renowned worldwide for shock absorption, SAS-TEC protectors remain soft and flexible to wear while offering maximum CE Level 2 impact protection upon crash impact.</p>`,
@@ -1318,6 +1358,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Safe-Tech Protectors | CE Level 2 Armor Inserts | Store4Riders",
     metaDescription: "Buy genuine Safe-Tech CE Level 2 armor protectors for riding jackets and pants. High impact absorption with ergonomic ventilation.",
     metaKeywords: "safe-tech protectors, safe-tech, ce level 2 armor, motorcycle armor inserts",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Safe-tech.jpg",
     h1: "Safe-Tech Protectors",
     productCount: 8,
     description: `<p>Safe-Tech is an Italian protective armor specialist engineering certified impact pads for motorcycle jackets and riding pants. Safe-Tech protectors feature lightweight, highly ventilated thermoplastic and viscoelastic designs offering certified CE Level 1 and Level 2 protection.</p>`,
@@ -1341,6 +1382,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Shoerella Waterproof Rain Shoe Covers Online | Store4Riders",
     metaDescription: "Protect your shoes and boots with Shoerella waterproof silicone and rubber rain shoe covers for motorcyclists.",
     metaKeywords: "shoerella, waterproof shoe cover, rain shoe cover, motorcycle shoe protector",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Shoerella-logo.jpg",
     h1: "Shoerella",
     productCount: 4,
     description: `<p>Shoerella produces flexible, reusable waterproof silicone shoe and boot covers designed to slip over standard footwear or riding boots during torrential rain, keeping shoes clean and dry.</p>`,
@@ -1364,6 +1406,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Parani Bluetooth Helmet Intercom Online | Parani M10 & A10 | Store4Riders",
     metaDescription: "Shop genuine Parani Bluetooth helmet communicators engineered by Sena. Explore Parani M10 and A10 intercom systems with crystal clear audio, long battery life, and 1-year warranty.",
     metaKeywords: "parani, parani m10, parani a10, parani intercom, parani engineered by sena, bluetooth intercom, helmet communicator, sena intercom",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/PARANI-LOGO.png",
     h1: "Parani Helmet Communicators",
     productCount: 6,
     description: `<p><strong>Parani — Engineered by Sena.</strong> Parani delivers reliable motorcycle Bluetooth intercom technology backed by Sena's world-leading audio engineering at an accessible price point for everyday riders, weekend tourers, and daily commuters.</p>
@@ -1410,6 +1453,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Moto Torque Motorcycle Crash Guards & Exhausts | Store4Riders",
     metaDescription: "Shop heavy-duty Moto Torque crash guards, bash plates, luggage racks, and performance exhausts with precision engineering.",
     metaKeywords: "moto torque, mototorque, crash guard, bash plate, royal enfield crash guard",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/MOTO-TORQUE-LOGO.jpg",
     h1: "Moto Torque",
     productCount: 8,
     description: `<p>Moto Torque engineers heavy-duty motorcycle protection and touring accessories designed to withstand aggressive adventure riding. From precision cold-bent crash guards and aircraft-grade aluminum sump guards to performance exhaust headers, Moto Torque ensures your motorcycle is shielded in every terrain.</p>`,
@@ -1433,6 +1477,7 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Carberry Vibration Reduction Plate | Store4Riders",
     metaDescription: "Carberry precision engineering components and vibration reduction systems for Royal Enfield motorcycles.",
     metaKeywords: "carberry, carberry vibration plate, royal enfield vibration, carberry motorcycles",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Carberry.png",
     h1: "Carberry",
     productCount: 2,
     description: `<p>Carberry is famous in the motorcycling world for its mechanical innovation, notably developing custom V-Twin engines based on Royal Enfield powerplants. Their vibration-reduction cam support plates are engineered to stabilize the crankshaft and significantly reduce engine vibration on classic pushrod engines.</p>`,
@@ -1452,14 +1497,546 @@ export const BRANDS_METADATA: BrandMetadataRecord[] = [
     metaTitle: "Buy Quipco Outdoor, Rain Gear & Balaclavas | Store4Riders",
     metaDescription: "Shop Quipco all-weather riding balaclavas, skull caps, waterproof dry bags, and motorcycle touring accessories.",
     metaKeywords: "quipco, quipco balaclava, dry bag, waterproof riding gear",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Quipco.jpg",
     h1: "Quipco",
     productCount: 5,
+    menuGroup: "Luggage & Accessories",
     description: `<p>Quipco develops versatile outdoor and motorcycling accessories, including thermal balaclavas, quick-dry skull caps, windproof neck tubes, and heavy-duty roll-top dry bags designed for challenging weather expeditions.</p>`,
     faqs: [
       {
         question: "What is Quipco best known for?",
         answer: "Quipco is celebrated for its moisture-wicking and thermal balaclavas, neck warmers, and waterproof dry bags.",
       },
+    ],
+  },
+
+  // 45. AGV Helmets
+  {
+    name: "AGV",
+    slug: "agv",
+    aliases: ["agv-helmets", "agvhelmets"],
+    metaTitle: "AGV Helmets India | Buy Premium AGV Motorcycle Helmets Online",
+    metaDescription: "Shop genuine AGV helmets in India. Explore AGV Pista GP RR, K6 S, K3, K1 S with official warranty, express shipping, and EMI at Store4Riders.",
+    metaKeywords: "agv helmets, agv pista gp rr, agv k6 s, agv k3, agv k1 s, buy agv helmet india",
+    logo: "/brands/agv.svg",
+    h1: "AGV Helmets",
+    description: `<p>AGV (Amisano Gino Valenza) is an iconic Italian motorcycle helmet manufacturer founded in 1947, synonymous with MotoGP world champions including Valentino Rossi. AGV helmets represent the pinnacle of aerodynamic development, optical clarity, carbon composite construction, and ultimate impact safety.</p>`,
+    faqs: [
+      {
+        question: "Are AGV helmets ECE and DOT certified?",
+        answer: "Yes, genuine AGV helmets meet or exceed strict global safety standards including ECE 22.06, DOT, and FIM homologation for track models.",
+      },
+      {
+        question: "Which AGV helmet is best for daily street and touring?",
+        answer: "The AGV K6 S and AGV K3 are outstanding versatile options offering ultra-lightweight comfort, wide field of vision, and premium ventilation.",
+      },
+    ],
+  },
+
+  // 46. HJC Helmets
+  {
+    name: "HJC",
+    slug: "hjc",
+    aliases: ["hjc-helmets", "hjchelmets"],
+    metaTitle: "HJC Helmets India | Official HJC Full Face & Modular Helmets",
+    metaDescription: "Explore HJC motorcycle helmets at Store4Riders. Certified RPHA 1, RPHA 71, RPHA 12, and i71 models with wind-tunnel engineered aerodynamics.",
+    metaKeywords: "hjc helmets, rpha 1, rpha 71, rpha 12, hjc i71, hjc india",
+    logo: "/brands/hjc.svg",
+    h1: "HJC Helmets",
+    description: `<p>HJC has specialized in manufacturing motorcycle helmets since 1971. Known worldwide for their advanced wind tunnel testing facility, premium PIM+ composite shells, and official Marvel and DC licensed editions, HJC delivers world-class safety and comfort.</p>`,
+    faqs: [
+      {
+        question: "What is HJC RPHA series?",
+        answer: "RPHA (Revolutionary Performance Helmet Advantage) is HJC's flagship race and sport-touring range featuring carbon-glass hybrid composite matrix shells.",
+      },
+    ],
+  },
+
+  // 47. MT Helmets
+  {
+    name: "MT Helmets",
+    slug: "mt-helmets",
+    aliases: ["mt", "mthelmets", "mt-helmet"],
+    metaTitle: "MT Helmets Online India | ECE 22.06 Certified Helmets Best Price",
+    metaDescription: "Buy MT Helmets in India with ECE 22.06 & DOT certification. Explore MT Thunder 4 SV, Blade 2 SV, Revenge 2, and Targo Pro at Store4Riders.",
+    metaKeywords: "mt helmets, mt thunder 4 sv, mt revenge 2, mt blade 2 sv, mt helmet price",
+    logo: "/brands/mt.svg",
+    h1: "MT Helmets",
+    description: `<p>Manufactories Tomas, S.A. (MT Helmets) from Spain is one of the world's most trusted helmet manufacturers. MT pioneered affordable ECE 22.06 safety certification with its acclaimed Thunder 4 SV, providing riders with top-tier impact protection, internal drop-down sun visors, and Pinlock-ready optical shields.</p>`,
+    faqs: [
+      {
+        question: "Are MT Helmets ECE 22.06 certified?",
+        answer: "Yes, MT was among the first global brands to achieve full ECE 22.06 homologation across models like the Thunder 4 SV and Jarama.",
+      },
+    ],
+  },
+
+  // 48. Alpinestars
+  {
+    name: "Alpinestars",
+    slug: "alpinestars",
+    aliases: ["alpinestar", "astars"],
+    metaTitle: "Alpinestars Riding Gear India | Jackets, Boots, Gloves & Protection",
+    metaDescription: "Shop authentic Alpinestars motorcycle riding gear in India. Premium CE-certified jackets, racing suits, Tech-Air compatible gear, gloves, and riding boots.",
+    metaKeywords: "alpinestars, alpinestars jackets, alpinestars boots, alpinestars gloves, buy alpinestars india",
+    logo: "/brands/alpinestars.svg",
+    h1: "Alpinestars",
+    description: `<p>Alpinestars is the world-leading manufacturer of professional motorsport racing products, motorcycle airbag protection, high-performance apparel, and technical footwear. Engineered in Asolo, Italy, Alpinestars gear protects MotoGP and Superbike champions worldwide.</p>`,
+    faqs: [
+      {
+        question: "Are Alpinestars products CE certified?",
+        answer: "Yes, Alpinestars jackets, pants, boots, and gloves adhere to European CE safety certifications with Level 1 and Level 2 impact protectors.",
+      },
+    ],
+  },
+
+  // 49. Shima
+  {
+    name: "Shima",
+    slug: "shima",
+    aliases: ["shima-gears", "shimaprotectors"],
+    metaTitle: "Shima Motorcycle Riding Gear India | Jackets, Gloves & Boots",
+    metaDescription: "Discover Shima European designed motorcycle riding gear. High-abrasion cordura jackets, leather track gloves, and reinforced waterproof boots.",
+    metaKeywords: "shima riding gear, shima jackets, shima gloves, shima boots, shima india",
+    logo: "/brands/shima.svg",
+    h1: "Shima",
+    description: `<p>Shima is a European riding gear brand established in 2009, dedicated to combining ergonomic riding comfort, modern urban aesthetics, and dependable impact resistance for sport, touring, and daily urban riders.</p>`,
+    faqs: [
+      {
+        question: "Where is Shima gear designed?",
+        answer: "Shima riding gear is designed and engineered in Europe with SAP (Shima ArmorPlus) memory foam protectors.",
+      },
+    ],
+  },
+
+  // 50. ViaTerra
+  {
+    name: "ViaTerra",
+    slug: "viaterra",
+    aliases: ["viaterra-gear", "viaterra-gears"],
+    metaTitle: "ViaTerra Motorcycle Luggage & Riding Gear Online | Store4Riders",
+    metaDescription: "Shop authentic ViaTerra motorcycle tank bags, tail bags, saddlebags, riding gloves, and monsoon waterproof gear designed for Indian terrain.",
+    metaKeywords: "viaterra, viaterra tank bag, viaterra saddle bag, viaterra tail bag, viaterra gloves",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/VIATERRA_LOGO_PNG.png",
+    h1: "ViaTerra",
+    description: `<p>ViaTerra crafts durable, purpose-built motorcycle luggage and rider apparel tested thoroughly on Indian terrain and Himalayan expeditions. Known for their modular tank bags, heavy-duty Cordura saddlebags, and ergonomic riding gloves.</p>`,
+    faqs: [
+      {
+        question: "Are ViaTerra bags waterproof?",
+        answer: "ViaTerra luggage either features roll-top waterproof construction or includes dedicated 100% waterproof storm covers with high visibility reflectives.",
+      },
+    ],
+  },
+
+  // 51. DSG
+  {
+    name: "DSG",
+    slug: "dsg",
+    aliases: ["dsg-gear", "dsg-gears"],
+    metaTitle: "DSG Riding Gear Online | Jackets, Pants & Gloves at Store4Riders",
+    metaDescription: "Explore DSG riding gear. Proven multi-climate mesh jackets, reinforced riding denims, and touring gloves built for endurance riders.",
+    metaKeywords: "dsg riding gear, dsg jackets, dsg gloves, dsg evo, dsg india",
+    logo: "/brands/dsg.svg",
+    h1: "DSG",
+    description: `<p>DSG is one of India's pioneer motorcycle riding gear brands, providing battle-tested riding jackets, waterproof touring pants, and leather gloves tailored specifically for hot weather, monsoon downpours, and winter touring.</p>`,
+    faqs: [
+      {
+        question: "Is DSG gear suitable for hot Indian summers?",
+        answer: "Yes, DSG mesh jackets are renowned for extensive airflow panels while retaining high abrasion-resistant 600D fabric and CE certified armor.",
+      },
+    ],
+  },
+
+  // 52. Macna
+  {
+    name: "Macna",
+    slug: "macna",
+    aliases: ["macna-gears", "macna-india"],
+    metaTitle: "Macna Motorcycle Gear India | Dutch Innovation Riding Apparel",
+    metaDescription: "Buy Macna Dutch engineered riding jackets, gloves, and protective pants with NightEye technology at Store4Riders.",
+    metaKeywords: "macna, macna jackets, macna nighteye, macna gloves, macna riding gear",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/macna-100x51.png",
+    h1: "Macna",
+    description: `<p>Macna is a Dutch motorcycle gear manufacturer celebrated for practical innovation such as NightEye microscopic glass-bead reflective technology, summer cooling vests, and Easy Cuff glove systems.</p>`,
+    faqs: [
+      {
+        question: "What is Macna NightEye technology?",
+        answer: "NightEye reflects headlights directly back to the source, making a dark jacket glow brightly at night without looking like safety gear during the day.",
+      },
+    ],
+  },
+
+  // 53. Motul
+  {
+    name: "Motul",
+    slug: "motul",
+    aliases: ["motul-oil", "motul-india"],
+    metaTitle: "Motul Engine Oil, Chain Lube & Cleaners Online | Store4Riders",
+    metaDescription: "Buy authentic Motul 300V, 7100 4T synthetic engine oils, C1 chain clean, and C2 chain lube at Store4Riders with fast delivery.",
+    metaKeywords: "motul engine oil, motul 7100, motul 300v, motul chain lube, motul c1 c2",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Motul-logo.png",
+    h1: "Motul",
+    menuGroup: "Parts & Performance",
+    description: `<p>Motul is a French lubricant giant with over 170 years of heritage. Creators of the first semi-synthetic and 100% synthetic Ester-based motor oils, Motul produces unmatched engine lubricants, brake fluids, and chain maintenance products.</p>`,
+    faqs: [
+      {
+        question: "What is the difference between Motul 7100 and 300V?",
+        answer: "Motul 7100 is a 100% synthetic Ester oil formulated for high-mileage road performance and daily reliability, while 300V is an ultra-high performance racing oil formulated with double ester technology for peak horsepower.",
+      },
+    ],
+  },
+
+  // 54. Moto Fusion
+  {
+    name: "Moto Fusion",
+    slug: "moto-fusion",
+    aliases: ["motofusion"],
+    metaTitle: "Moto Fusion Tail Tidies, Radiator Guards & Accessories | Store4Riders",
+    metaDescription: "Precision laser-cut tail tidies, frame sliders, radiator guards, and luggage racks by Moto Fusion for popular performance motorcycles.",
+    metaKeywords: "moto fusion, tail tidy, radiator guard, motorcycle accessories",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/mf.png",
+    h1: "Moto Fusion",
+    menuGroup: "Luggage & Accessories",
+    description: `<p>Moto Fusion specializes in CNC precision-machined and laser-cut motorcycle bodywork accessories, including fender eliminator tail tidies, aluminum radiator grilles, and heavy-duty top rack plates.</p>`,
+    faqs: [
+      {
+        question: "Are Moto Fusion tail tidies plug-and-play?",
+        answer: "Yes, Moto Fusion products are precision engineered to mount to OEM chassis points with no permanent frame modification needed.",
+      },
+    ],
+  },
+
+  // 55. Motospunk
+  {
+    name: "Motospunk",
+    slug: "motospunk",
+    aliases: ["moto-spunk"],
+    metaTitle: "Motospunk Crash Protection & Touring Accessories | Store4Riders",
+    metaDescription: "Shop Motospunk crash guards, bash plates, luggage carriers, and highway footpegs engineered for adventure touring bikes.",
+    metaKeywords: "motospunk, crash guard, bash plate, adventure bike accessories",
+    logo: "/brands/motospunk.svg",
+    h1: "Motospunk",
+    menuGroup: "Luggage & Accessories",
+    description: `<p>Motospunk designs and builds rugged crash protection cages, aluminum sump guards, and modular touring luggage racks for adventure tourers and dual-sport motorcycles.</p>`,
+    faqs: [
+      {
+        question: "What coating is used on Motospunk crash guards?",
+        answer: "Motospunk uses industrial electro-powder coating to resist scratches, stone chipping, and rust.",
+      },
+    ],
+  },
+
+  // 56. Axxis Helmets
+  {
+    name: "Axxis",
+    slug: "axxis",
+    aliases: ["axxis-helmets"],
+    metaTitle: "Axxis Helmets India | Buy ECE Certified Helmets Online",
+    metaDescription: "Shop sporty and colorful Axxis helmets at Store4Riders. Certified full face and street helmets with quick-release visors.",
+    metaKeywords: "axxis helmets, axxis draken, axxis hawk, axxis helmet price",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Axxis-Logo-2.png",
+    h1: "Axxis Helmets",
+    description: `<p>Axxis Helmets brings vibrant European graphics, high-impact polycarbonate shells, and stringent DOT/ECE safety certifications to passionate street riders.</p>`,
+    faqs: [
+      {
+        question: "Are Axxis visors Pinlock ready?",
+        answer: "Yes, most Axxis full face helmets come with Max Vision Pinlock prepared optical visors.",
+      },
+    ],
+  },
+
+  // 57. Vega Helmets
+  {
+    name: "Vega",
+    slug: "vega",
+    aliases: ["vega-helmets"],
+    metaTitle: "Vega Helmets Online India | Full Face, Open Face & Off-Road Helmets",
+    metaDescription: "Explore Vega helmets for daily commuting and touring. Reliable ISI and DOT certified helmets with anti-scratch visors.",
+    metaKeywords: "vega helmets, vega bolt, vega crux, vega off road helmet",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/vega100x75.png",
+    h1: "Vega Helmets",
+    description: `<p>Vega Helmets is an Indian motorcycling pioneer delivering trusted, durable, and comfortable helmets suited for every daily commute and weekend road trip.</p>`,
+    faqs: [
+      {
+        question: "Are Vega helmets ISI certified?",
+        answer: "Yes, all official Vega models conform to ISI standards with select models meeting international DOT safety benchmarks.",
+      },
+    ],
+  },
+
+  // 58. Vemar Helmets
+  {
+    name: "Vemar",
+    slug: "vemar",
+    aliases: ["vemar-helmets"],
+    metaTitle: "Vemar Helmets India | Italian Engineered Motorcycle Helmets",
+    metaDescription: "Shop Vemar Italian motorcycle helmets at Store4Riders. Lightweight composite shell full face and dual sport adventure helmets.",
+    metaKeywords: "vemar helmets, vemar kona, vemar storm, vemar india",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/vemar-100x51.png",
+    h1: "Vemar Helmets",
+    description: `<p>Vemar Helmets originated in Grosseto, Italy in 1975, pioneering composite fiber helmets for racing and adventure riding with aggressive aerodynamics.</p>`,
+    faqs: [
+      {
+        question: "What shell material does Vemar use?",
+        answer: "Vemar utilizes tri-composite (Carbon, Aramid, Fiberglass) and R-3P reinforced polymer shells.",
+      },
+    ],
+  },
+
+  // 59. Knox
+  {
+    name: "Knox",
+    slug: "knox",
+    aliases: ["knox-armour", "knox-protection"],
+    metaTitle: "Knox Armor & Riding Apparel India | Tor & Urbane Pro Shirts",
+    metaDescription: "Buy Knox UK impact protectors, armored shirts, and patented Dual Compound Scaphoid Protection System gloves at Store4Riders.",
+    metaKeywords: "knox armor, knox urbane pro, knox sps, knox gloves, knox protection",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/knox.png",
+    h1: "Knox",
+    description: `<p>Planet Knox is the British pioneer of motorcycle body armor. Knox invented the patented SPS (Scaphoid Protection System) that prevents wrist fractures and revolutionized riding jackets with their CE Class AA armored shirts.</p>`,
+    faqs: [
+      {
+        question: "What is the Knox Scaphoid Protection System (SPS)?",
+        answer: "Knox SPS features palm sliders that slide across tarmac on impact instead of catching and gripping, eliminating hyper-extension and scaphoid bone fractures.",
+      },
+    ],
+  },
+
+  // 60. Sena
+  {
+    name: "Sena",
+    slug: "sena",
+    aliases: ["sena-technologies", "sena-bluetooth"],
+    metaTitle: "Sena Motorcycle Bluetooth & Mesh Intercoms | Store4Riders",
+    metaDescription: "Shop Sena 50S, 50R, spider, and SMH5 Bluetooth communication systems with Harman Kardon sound and Mesh 2.0 at Store4Riders.",
+    metaKeywords: "sena bluetooth, sena 50s, sena 50r, sena intercom, buy sena india",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/SENA-LOGO.png",
+    h1: "Sena",
+    description: `<p>Sena Technologies is the undisputed global leader in motorcycle Bluetooth and Mesh intercom communication systems, featuring crystal-clear Harman Kardon audio and one-click Mesh networking.</p>`,
+    faqs: [
+      {
+        question: "What is the advantage of Sena Mesh 2.0 over standard Bluetooth?",
+        answer: "Mesh 2.0 connects virtually unlimited riders simultaneously and automatically reconnects anyone who temporarily moves out of range.",
+      },
+    ],
+  },
+
+  // 61. Dirtsack
+  {
+    name: "Dirtsack",
+    slug: "dirtsack",
+    aliases: ["dirtsack-luggage"],
+    metaTitle: "Dirtsack Waterproof Motorcycle Luggage | Store4Riders",
+    metaDescription: "Shop Dirtsack Frogman waterproof luggage, speedbags, and tank bags designed for off-road touring and endurance rides.",
+    metaKeywords: "dirtsack, frogman, waterproof motorcycle luggage, dirtsack tail bag",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/Dirtsack.png",
+    h1: "Dirtsack",
+    description: `<p>Dirtsack is dedicated to bulletproof, 100% submersible waterproof soft luggage for adventure motorcyclists, famous for the ultra-tough Frogman roll-top collection.</p>`,
+    faqs: [
+      {
+        question: "Are Dirtsack Frogman bags completely submersible?",
+        answer: "Yes, Frogman series uses welded radio-frequency seams and heavy-duty TPU/PVC tarpaulin for 100% dust and waterproof performance.",
+      },
+    ],
+  },
+
+  // 62. Apollo Tyres
+  {
+    name: "Apollo",
+    slug: "apollo",
+    aliases: ["apollo-tyres", "apollo-tires"],
+    metaTitle: "Apollo Motorcycle Radial Tyres | Alpha S1 & H1 | Store4Riders",
+    metaDescription: "Buy Apollo Alpha radial motorcycle tires in India. High-grip dual-compound steel-belted radial tyres for performance bikes.",
+    metaKeywords: "apollo tyres, apollo alpha h1, apollo alpha s1, motorcycle tyres india",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/APOLLO.png",
+    h1: "Apollo",
+    description: `<p>Apollo Tyres transformed the Indian motorcycle performance tyre market with its Alpha steel-belted radial range, providing exceptional cornering stability and wet grip.</p>`,
+    faqs: [
+      {
+        question: "What is the Apollo Alpha H1 tire designed for?",
+        answer: "Alpha H1 is designed for track and aggressive road riding with W-rated speed capability and zero-degree steel-belted construction.",
+      },
+    ],
+  },
+
+  // 63. Michelin
+  {
+    name: "Michelin",
+    slug: "michelin",
+    aliases: ["michelin-tyres", "michelin-tires"],
+    metaTitle: "Michelin Motorcycle Tyres Online India | Road 5, Road 6, Pilot Street",
+    metaDescription: "Buy genuine Michelin motorcycle tyres at Store4Riders. Explore Michelin Road 5, Road 6, Pilot Street 2, and Anakee adventure tires.",
+    metaKeywords: "michelin tyres, michelin road 5, michelin road 6, michelin pilot street 2",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/MICHELIN.jpg",
+    h1: "Michelin",
+    description: `<p>Michelin is the official tire supplier to MotoGP and a world benchmark in dual-compound 2CT tyre technology, delivering unmatched wet braking and high-mileage longevity.</p>`,
+    faqs: [
+      {
+        question: "Why are Michelin Road series tires so popular for touring?",
+        answer: "Michelin Road 5 and Road 6 utilize patented X-Sipe technology and 100% silica compounds for class-leading wet braking and cornering grip even after thousands of kilometers.",
+      },
+    ],
+  },
+
+  // 64. Pirelli
+  {
+    name: "Pirelli",
+    slug: "pirelli",
+    aliases: ["pirelli-tyres", "pirelli-tires"],
+    metaTitle: "Pirelli Motorcycle Tyres India | Diablo Rosso, Angel ST & Scorpion",
+    metaDescription: "Shop authentic Pirelli motorcycle tires at Store4Riders. Track-tested Diablo Rosso IV, Angel GT touring, and Scorpion adventure dual-sport tyres.",
+    metaKeywords: "pirelli tyres, diablo rosso iv, pirelli angel gt, pirelli scorpion rally",
+    logo: "https://s3.ap-south-2.amazonaws.com/store4riders/brand-logos/PIRELLI.jpg",
+    h1: "Pirelli",
+    description: `<p>Pirelli is the sole official tyre supplier to the FIM Superbike World Championship, renowned for the Diablo performance racing series and Angel sport-touring tyres.</p>`,
+    faqs: [
+      {
+        question: "What is Pirelli Diablo Rosso known for?",
+        answer: "Diablo Rosso tyres deliver rapid warm-up times, race-derived profiles, and maximum edge grip for sport and superbike riders.",
+      },
+    ],
+  },
+
+  // BlueBurns
+  {
+    name: "BlueBurns",
+    slug: "blueburns",
+    aliases: ["blueburns-riding-gear","blue-burns"],
+    metaTitle: "BlueBurns Riding Gear India | Buy Online | Store4Riders",
+    metaDescription: "Shop authentic BlueBurns motorcycle apparel, protective gear and accessories with official warranty at Store4Riders.",
+    metaKeywords: "blueburns, blueburns riding gear, motorcycle accessories india",
+    logo: "/brands/blueburns.svg",
+    h1: "BlueBurns",
+    productCount: 8,
+    description: `<p>BlueBurns manufactures dedicated riding accessories and motorcycle protective gear tailored for Indian touring and urban commuting conditions.</p>`,
+    faqs: [
+          {
+                "question": "What products does BlueBurns offer?",
+                "answer": "BlueBurns specializes in motorcycle accessories, touring comfort gear, and protective riding wear."
+          }
+    ],
+  },
+
+  // Inline 4
+  {
+    name: "Inline 4",
+    slug: "inline-4",
+    aliases: ["inline4","inline-four"],
+    metaTitle: "Inline 4 Motorcycle Apparel & Accessories | Store4Riders",
+    metaDescription: "Explore Inline 4 motorcycle merchandise, riding gear, and moto lifestyle apparel at Store4Riders.",
+    metaKeywords: "inline 4, inline 4 riding gear, motorcycle apparel india",
+    logo: "/brands/inline-4.svg",
+    h1: "Inline 4",
+    productCount: 12,
+    description: `<p>Inline 4 delivers motorcycling lifestyle merchandise, touring apparel, and accessories crafted for passionate superbike and sportbike enthusiasts.</p>`,
+    faqs: [
+          {
+                "question": "Are Inline 4 products genuine?",
+                "answer": "Yes, all Inline 4 apparel and riding accessories sold at Store4Riders are 100% authentic."
+          }
+    ],
+  },
+
+  // REVLOX
+  {
+    name: "REVLOX",
+    slug: "revlox",
+    aliases: ["revlox-helmets","revlox-gears"],
+    metaTitle: "REVLOX Motorcycle Helmets & Accessories | Store4Riders",
+    metaDescription: "Shop REVLOX certified motorcycle helmets, visors and accessories with fast dispatch across India.",
+    metaKeywords: "revlox, revlox helmets, buy revlox online",
+    logo: "/brands/revlox.svg",
+    h1: "REVLOX",
+    productCount: 15,
+    description: `<p>REVLOX engineers ergonomic motorcycle helmets and protective gear offering certified impact resistance, dual-visor convenience, and sharp styling.</p>`,
+    faqs: [
+          {
+                "question": "Are REVLOX helmets certified?",
+                "answer": "Yes, REVLOX helmets adhere to standard safety requirements including ISI certification."
+          }
+    ],
+  },
+
+  // RS Taichi
+  {
+    name: "RS Taichi",
+    slug: "rs-taichi",
+    aliases: ["taichi","rstaichi"],
+    metaTitle: "RS Taichi Premium Japanese Riding Gear India | Store4Riders",
+    metaDescription: "Shop authentic RS Taichi riding jackets, gloves, waterproof riding shoes, and CE armor from Japan at Store4Riders.",
+    metaKeywords: "rs taichi, rs taichi india, rs taichi riding jacket, buy rs taichi",
+    logo: "/brands/rs-taichi.svg",
+    h1: "RS Taichi",
+    productCount: 22,
+    menuGroup: "Riding Gear",
+    description: `<p>Founded in Japan, RS Taichi is globally revered for precision-crafted motorcycle racing suits, DRYMASTER waterproof jackets, technical gloves, and advanced CE Level 2 protective armor.</p>`,
+    faqs: [
+          {
+                "question": "Why is RS Taichi considered a premium brand?",
+                "answer": "RS Taichi utilizes Japanese engineering, innovative DRYMASTER membranes, and rigorous track testing to deliver supreme safety, fit, and ventilation."
+          }
+    ],
+  },
+
+  // Randy Sun
+  {
+    name: "Randy Sun",
+    slug: "randy-sun",
+    aliases: ["randysun"],
+    metaTitle: "Randy Sun 100% Waterproof Breathable Riding Socks | Store4Riders",
+    metaDescription: "Shop Randy Sun waterproof motorcycle socks and outdoor gear at Store4Riders. Keep your feet completely dry on every rainy expedition.",
+    metaKeywords: "randy sun, waterproof socks, motorcycle waterproof socks india",
+    logo: "/brands/randy-sun.svg",
+    h1: "Randy Sun",
+    productCount: 6,
+    description: `<p>Randy Sun pioneers 100% waterproof and breathable membrane socks engineered to keep riders' feet dry and comfortable inside boots during heavy monsoons and river crossings.</p>`,
+    faqs: [
+          {
+                "question": "Are Randy Sun socks truly 100% waterproof?",
+                "answer": "Yes, Randy Sun socks feature a 3-layer poreless membrane that completely prevents water entry while allowing sweat vapor to escape."
+          }
+    ],
+  },
+
+  // Red Rooster
+  {
+    name: "Red Rooster",
+    slug: "red-rooster",
+    aliases: ["red-rooster-performance","rrp"],
+    metaTitle: "Red Rooster Performance Exhausts India | Store4Riders",
+    metaDescription: "Buy authentic Red Rooster Performance (RRP) stainless steel free-flow exhausts for Royal Enfield, KTM and Yamaha at Store4Riders.",
+    metaKeywords: "red rooster exhaust, red rooster performance, rrp exhaust india",
+    logo: "/brands/red-rooster.svg",
+    h1: "Red Rooster Performance",
+    productCount: 14,
+    menuGroup: "Parts & Performance",
+    description: `<p>Red Rooster Performance (RRP) manufactures race-derived SS304 aircraft-grade stainless steel performance exhausts delivering improved throttle response, horsepower gains, and a signature bass exhaust rumble.</p>`,
+    faqs: [
+          {
+                "question": "Does Red Rooster exhaust rust?",
+                "answer": "No, Red Rooster exhausts are crafted from pure commercial-grade 304 stainless steel, ensuring zero rust and lifetime durability."
+          }
+    ],
+  },
+
+  // THH Helmets
+  {
+    name: "THH Helmets",
+    slug: "thh-helmets",
+    aliases: ["thh","thh-helmet"],
+    metaTitle: "THH Helmets India | Buy Certified Motorcycle Helmets | Store4Riders",
+    metaDescription: "Shop THH full-face, off-road and modular helmets meeting ECE and DOT safety standards at Store4Riders.",
+    metaKeywords: "thh helmets, thh motocross helmet, buy thh helmets india",
+    logo: "/brands/thh-helmets.svg",
+    h1: "THH Helmets",
+    productCount: 18,
+    menuGroup: "Helmet Brands",
+    description: `<p>THH (Tong Ho Hsing) is an international helmet brand with extensive composite shell expertise, producing high-impact DOT/ECE approved motocross, enduro, and aerodynamic street helmets.</p>`,
+    faqs: [
+          {
+                "question": "Are THH helmets good for off-road riding?",
+                "answer": "Yes, THH off-road and motocross helmets provide wide goggle ports, high ventilation flow, and lightweight impact-absorbing composite shells."
+          }
     ],
   },
 ];

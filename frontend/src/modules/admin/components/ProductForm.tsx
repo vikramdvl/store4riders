@@ -91,8 +91,8 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
   const [newBrandName, setNewBrandName] = useState("");
   const [newBrandSlug, setNewBrandSlug] = useState("");
   const [newBrandLogo, setNewBrandLogo] = useState("");
-  const [newBrandShowInMenu, setNewBrandShowInMenu] = useState(true);
-  const [newBrandMenuGroup, setNewBrandMenuGroup] = useState("Popular Brands");
+  const [newBrandShowInMenu, setNewBrandShowInMenu] = useState(false);
+  const [newBrandMenuGroup, setNewBrandMenuGroup] = useState("");
   const [isUploadingBrandLogo, setIsUploadingBrandLogo] = useState(false);
   const brandLogoInputRef = useRef<HTMLInputElement | null>(null);
 

@@ -6,7 +6,7 @@ import { redirectIfMatchedOrNotFound } from "@/core/utils/urlRedirects";
 import {
   GuideDetailModule,
   fetchGuideOrBlogPost,
-  fetchPublicBlogPosts,
+  fetchStaticBlogPostSlugs,
   fetchRelatedBlogPosts,
   buildAuthorSchema,
   buildBlogPostingSchema,
@@ -21,9 +21,9 @@ interface Props {
 }
 
 export async function generateStaticParams() {
-  const postsData = await fetchPublicBlogPosts(1, 100);
-  return postsData.items.map((post) => ({
-    slug: post.slug,
+  const postSlugs = await fetchStaticBlogPostSlugs();
+  return postSlugs.map((slug) => ({
+    slug,
   }));
 }
 

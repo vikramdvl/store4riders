@@ -21,6 +21,16 @@ export const errorHandler = (error: unknown): NextResponse => {
     return ApiResponse.error(error.message, 400);
   }
 
+  // MongoDB Duplicate Key Error (E11000)
+  if (typeof error === "object" && error !== null && (error as any).code === 11000) {
+    const dupFields = Object.keys((error as any).keyPattern || {});
+    const fieldLabel = dupFields[0] || "value";
+    return ApiResponse.error(
+      `Duplicate ${fieldLabel} already exists. Please use a unique value.`,
+      409
+    );
+  }
+
   // JWT errors
   if (error instanceof Error && (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError")) {
     return ApiResponse.error("Invalid or expired authentication token", 401);

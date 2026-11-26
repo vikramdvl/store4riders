@@ -67,7 +67,7 @@ export function PaymentLogsTab({ enabled }: { enabled: boolean }) {
               logs.map((item) => (
                 <tr key={item._id || item.id || item.gatewayOrderId} className="hover:bg-slate-50">
                   <td className="py-3 px-4 font-mono text-slate-700 whitespace-nowrap">
-                    {format(new Date(item.createdAt), "dd MMM yyyy, HH:mm:ss")}
+                    {format(new Date(item.createdAt), "dd MMM yyyy, hh:mm:ss a")}
                   </td>
                   <td className="py-3 px-4 font-semibold uppercase text-slate-800">
                     {item.gateway}
