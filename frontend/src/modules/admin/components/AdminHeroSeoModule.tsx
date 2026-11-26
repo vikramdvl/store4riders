@@ -626,7 +626,10 @@ export function AdminHeroSeoModule() {
                   value={activeSlide.imageUrl}
                   onChange={(newUrl) => updateSlide(activeSlideIdx, { imageUrl: newUrl })}
                   aspectRatio="aspect-[21/9]"
-                  hint="Recommended: 1920x800px or larger. Automatically converted to lossless .webp in browser."
+                  maxDimension={2048}
+                  quality={0.88}
+                  passthroughMaxBytes={500 * 1024}
+                  hint="Recommended: 1920x800px or larger. Optimized up to 2048px @ 88% WebP for crisp visuals & small file size."
                 />
               </div>
 

@@ -11,3 +11,19 @@ export function updateQueryUrlShallow(url: string, options?: { replace?: boolean
     window.history.pushState(null, "", url);
   }
 }
+
+/**
+ * Syncs the `page` query parameter in the browser URL (omits `?page=1`) without triggering an RSC reload.
+ */
+export function syncPageQueryParam(page: number): void {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  if (page > 1) {
+    params.set("page", String(page));
+  } else {
+    params.delete("page");
+  }
+  const query = params.toString();
+  const nextUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+  updateQueryUrlShallow(nextUrl);
+}

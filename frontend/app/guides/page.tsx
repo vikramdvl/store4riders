@@ -58,15 +58,17 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function GuidesPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ tag?: string; q?: string }>;
+  searchParams?: Promise<{ tag?: string; q?: string; page?: string }>;
 }) {
   const resolvedParams = searchParams ? await searchParams : {};
   const initialTag = resolvedParams?.tag || "";
   const initialSearch = resolvedParams?.q || "";
+  const parsedPage = parseInt(resolvedParams?.page || "1", 10);
+  const initialPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
   const [seo, postsData, categories] = await Promise.all([
     fetchGuidesPageSeo(),
-    fetchPublicBlogPosts(1, 18, "", initialTag, initialSearch.trim()),
+    fetchPublicBlogPosts(initialPage, 18, "", initialTag, initialSearch.trim()),
     fetchPublicBlogCategories(),
   ]);
 
@@ -110,6 +112,7 @@ export default async function GuidesPage({
         heroDescription={seo?.heroDescription}
         initialTag={initialTag}
         initialSearch={initialSearch}
+        initialPage={initialPage}
         initialPostsData={postsData}
         initialCategories={categories}
       />

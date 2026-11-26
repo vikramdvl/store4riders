@@ -15,6 +15,7 @@ export const dynamicParams = true;
 
 interface Props {
   params: Promise<{ categorySlug: string }>;
+  searchParams?: Promise<{ page?: string }>;
 }
 
 export async function generateStaticParams() {
@@ -73,8 +74,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function GuidesCategoryPage({ params }: Props) {
-  const { categorySlug } = await params;
+export default async function GuidesCategoryPage({ params, searchParams }: Props) {
+  const [{ categorySlug }, resolvedSearchParams] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve<{ page?: string }>({}),
+  ]);
+  const parsedPage = parseInt(resolvedSearchParams?.page || "1", 10);
+  const initialPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+
   const [category, categories] = await Promise.all([
     fetchBlogCategoryBySlug(categorySlug),
     fetchPublicBlogCategories(),
@@ -84,7 +91,7 @@ export default async function GuidesCategoryPage({ params }: Props) {
     notFound();
   }
 
-  const postsData = await fetchPublicBlogPosts(1, 18, category.slug);
+  const postsData = await fetchPublicBlogPosts(initialPage, 18, category.slug);
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
@@ -120,6 +127,7 @@ export default async function GuidesCategoryPage({ params }: Props) {
       />
       <GuidesCategoryModule
         categorySlug={category.slug}
+        initialPage={initialPage}
         initialCategory={category}
         initialPostsData={postsData}
         initialCategories={categories}

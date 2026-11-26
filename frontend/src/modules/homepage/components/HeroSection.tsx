@@ -116,21 +116,16 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 src={slide.imageUrl}
                 alt={slide.title ? `Hero background: ${slide.title}` : `Hero background ${index + 1}`}
                 fill
+                unoptimized
                 priority={index === 0}
                 fetchPriority={index === 0 ? "high" : "low"}
                 loading={index === 0 ? "eager" : "lazy"}
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 100vw, 1400px"
+                sizes="100vw"
                 className="object-cover object-[center_30%] lg:object-center"
               />
             </Link>
           );
         })}
-
-        {/* Mobile: stronger gradient for text legibility | Desktop: light overlay */}
-        <div className="absolute inset-0 pointer-events-none z-10
-          bg-gradient-to-t from-black/65 via-black/20 to-transparent
-          lg:bg-black/15 lg:mix-blend-multiply"
-        />
       </div>
 
       {/* ── Hero Body — row on desktop, column on mobile (pointer-events-none allows clicks through to background link) ── */}

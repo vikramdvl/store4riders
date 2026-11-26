@@ -101,7 +101,8 @@ const nextConfig = {
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 60 * 60 * 24 * 30,  // Cache optimized images for 30 days
-    deviceSizes: [640, 750, 1080, 1200],   // Fewer breakpoints = fewer variants to generate
+    qualities: [75, 95],
+    deviceSizes: [640, 750, 1080, 1200, 1440, 1920, 2560],   // Preserve crisp full-bleed hero resolutions
     imageSizes: [128, 256, 384],
     remotePatterns: [
       {

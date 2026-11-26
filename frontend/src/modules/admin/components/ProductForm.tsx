@@ -702,12 +702,28 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
   // Gallery handlers
   const handleUploadImages = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+
+    const imageFiles = Array.from(files).filter(
+      (file) =>
+        file.type.startsWith("image/") ||
+        /\.(jpe?g|png|webp|avif|gif|bmp|svg)$/i.test(file.name)
+    );
+
+    if (imageFiles.length === 0) {
+      toast.error("Please select or drop valid image files (JPG, PNG, WebP).");
+      return;
+    }
+
+    if (imageFiles.length < files.length) {
+      toast.warning("Non-image files were skipped.");
+    }
+
     setIsCompressing(true);
     setCompressionBadge("Compressing to WebP (0.85 quality)...");
 
     try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (let i = 0; i < imageFiles.length; i++) {
+        const file = imageFiles[i];
         const { file: webpFile, originalSize, compressedSize } = await compressImageToWebP(file, 1600, 0.85);
         const origKb = Math.round(originalSize / 1024);
         const compKb = Math.round(compressedSize / 1024);

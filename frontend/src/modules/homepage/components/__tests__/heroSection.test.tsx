@@ -202,4 +202,19 @@ describe("HeroSection Component Suite", () => {
     fireEvent.click(prevBtn);
     expect(screen.getByText("FIRST SLIDE")).toBeInTheDocument();
   });
+
+  it("renders hero background image without full-bleed black tint overlay", () => {
+    const props: HeroSectionProps = {
+      subtitle: "TEST",
+      title: "CLEAN HERO",
+      bgImageUrl: "/hero-clean.jpg",
+      featuredProducts: mockFeaturedProducts,
+      showOverlay: false,
+    };
+
+    const { container } = render(<HeroSection {...props} />);
+    expect(container.querySelector(".mix-blend-multiply")).toBeNull();
+    expect(container.querySelector(".lg\\:mix-blend-multiply")).toBeNull();
+    expect(container.querySelector(".from-black\\/65")).toBeNull();
+  });
 });

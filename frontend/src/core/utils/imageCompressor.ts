@@ -20,13 +20,16 @@ export interface CompressionResult {
 export async function compressImageToWebP(
   file: File,
   maxDimension = 1440,
-  quality = 0.82
+  quality = 0.82,
+  options?: { passthroughMaxBytes?: number }
 ): Promise<CompressionResult> {
   return new Promise((resolve, reject) => {
     // If not an image, reject
     if (!file.type.startsWith("image/")) {
       return reject(new Error("Selected file is not an image"));
     }
+
+    const passthroughMaxBytes = options?.passthroughMaxBytes ?? 250 * 1024;
 
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Failed to read image file"));
@@ -37,13 +40,13 @@ export async function compressImageToWebP(
         let width = img.width;
         let height = img.height;
 
-        // If the uploaded file is ALREADY an optimized WebP under 250 KB and within maxDimension,
-        // pass it through directly to save processing time.
+        // If the uploaded file is ALREADY an optimized WebP within passthroughMaxBytes and maxDimension,
+        // pass it through directly to preserve pixel-for-pixel sharpness.
         if (
           file.type === "image/webp" &&
           width <= maxDimension &&
           height <= maxDimension &&
-          file.size <= 250 * 1024
+          file.size <= passthroughMaxBytes
         ) {
           return resolve({
             file,

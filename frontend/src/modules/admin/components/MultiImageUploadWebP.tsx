@@ -25,12 +25,25 @@ export function MultiImageUploadWebP({
 }: MultiImageUploadWebPProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentProgress, setCurrentProgress] = useState<string>("");
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    if (values.length + files.length > maxImages) {
+    const imageFiles = Array.from(files).filter(
+      (file) =>
+        file.type.startsWith("image/") ||
+        /\.(jpe?g|png|webp|avif|gif|bmp|svg)$/i.test(file.name)
+    );
+
+    if (imageFiles.length === 0) {
+      toast.error("Please select or drop valid image files");
+      return;
+    }
+
+    if (values.length + imageFiles.length > maxImages) {
       toast.error(`Maximum ${maxImages} images allowed`);
       return;
     }
@@ -39,14 +52,13 @@ export function MultiImageUploadWebP({
       setIsProcessing(true);
       const newUrls: string[] = [];
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (!file.type.startsWith("image/")) continue;
+      for (let i = 0; i < imageFiles.length; i++) {
+        const file = imageFiles[i];
 
-        setCurrentProgress(`Converting ${i + 1}/${files.length} to WebP in browser...`);
+        setCurrentProgress(`Converting ${i + 1}/${imageFiles.length} to WebP in browser...`);
         const result = await compressImageToWebP(file, 1200, 0.82);
 
-        setCurrentProgress(`Uploading ${i + 1}/${files.length} to cloud...`);
+        setCurrentProgress(`Uploading ${i + 1}/${imageFiles.length} to cloud...`);
         const url = await uploadImageToS3(result.file);
         newUrls.push(url);
       }
@@ -120,14 +132,41 @@ export function MultiImageUploadWebP({
           {values.map((url, idx) => (
             <div
               key={`${url}-${idx}`}
-              className="relative group rounded-xl border border-slate-200 bg-slate-50 overflow-hidden shadow-xs"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", String(idx));
+                setDraggedIdx(idx);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const rawIdx = e.dataTransfer?.getData("text/plain");
+                const sourceIdx = draggedIdx !== null ? draggedIdx : (rawIdx !== "" && !Number.isNaN(Number(rawIdx)) ? Number(rawIdx) : null);
+                if (sourceIdx !== null && sourceIdx !== idx) {
+                  const updated = [...values];
+                  const [movedItem] = updated.splice(sourceIdx, 1);
+                  updated.splice(idx, 0, movedItem);
+                  onChange(updated);
+                }
+                setDraggedIdx(null);
+              }}
+              onDragEnd={() => setDraggedIdx(null)}
+              className={`relative group rounded-xl border border-slate-200 bg-slate-50 overflow-hidden shadow-xs cursor-grab active:cursor-grabbing ${
+                draggedIdx === idx ? "opacity-50" : ""
+              }`}
             >
               <div className={`relative w-full ${aspectRatio} bg-slate-100`}>
                 <Image
                   src={url}
                   alt={`Image ${idx + 1}`}
                   fill
-                  className="object-cover"
+                  draggable={false}
+                  className="object-cover select-none"
                 />
               </div>
 
@@ -177,10 +216,38 @@ export function MultiImageUploadWebP({
       {/* Upload Dropzone */}
       {values.length < maxImages && (
         <div
-          onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed border-slate-300 hover:border-brand rounded-lg p-3.5 flex flex-col items-center justify-center cursor-pointer transition-all bg-white hover:bg-slate-50/80 text-center shadow-xs ${
-            isProcessing ? "opacity-75 pointer-events-none" : ""
-          }`}
+          onClick={() => !isProcessing && fileInputRef.current?.click()}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragOver(true);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+            setIsDragOver(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              setIsDragOver(false);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragOver(false);
+            if (!isProcessing && e.dataTransfer?.files?.length) {
+              handleFiles(e.dataTransfer.files);
+            }
+          }}
+          className={`border-2 border-dashed rounded-lg p-3.5 flex flex-col items-center justify-center cursor-pointer transition-all text-center shadow-xs ${
+            isDragOver
+              ? "border-brand bg-brand/5 ring-2 ring-brand/20"
+              : "border-slate-300 hover:border-brand bg-white hover:bg-slate-50/80"
+          } ${isProcessing ? "opacity-75 pointer-events-none" : ""}`}
         >
           {isProcessing ? (
             <div className="flex flex-col items-center gap-1.5 py-2">

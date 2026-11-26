@@ -248,4 +248,68 @@ describe("Guides Storefront Live Blog Regression Suite", () => {
 
     fetchSpy.mockRestore();
   });
+
+  it("GuidesHubModule renders numbered page buttons and syncs ?page= URL param on click", () => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const pushStateSpy = vi.spyOn(window.history, "pushState");
+
+    usePublicBlogPostsMock.mockReturnValue({
+      data: { items: mockPosts, totalCount: 55, page: 1, limit: 18, totalPages: 4 },
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+
+    render(<GuidesHubModule initialPage={1} />);
+
+    expect(screen.getByRole("button", { name: "1" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("button", { name: "2" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "3" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "4" })).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "3" }));
+    expect(usePublicBlogPostsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 3, limit: 18 }),
+      undefined
+    );
+    expect(pushStateSpy).toHaveBeenLastCalledWith(null, "", expect.stringContaining("page=3"));
+
+    fireEvent.click(screen.getByRole("button", { name: "1" }));
+    expect(usePublicBlogPostsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 1, limit: 18 }),
+      undefined
+    );
+
+    pushStateSpy.mockRestore();
+  });
+
+  it("GuidesCategoryModule renders numbered pagination and honors initialPage", () => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    usePublicBlogPostsMock.mockReturnValue({
+      data: { items: mockPosts, totalCount: 40, page: 2, limit: 18, totalPages: 3 },
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(
+      <GuidesCategoryModule
+        categorySlug="choosing-correct-riding-gear"
+        initialPage={2}
+        initialCategory={mockCategories[0]}
+        initialCategories={mockCategories}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "2" }).getAttribute("aria-current")).toBe("page");
+    fireEvent.click(screen.getByRole("button", { name: "3" }));
+    expect(usePublicBlogPostsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        page: 3,
+        limit: 18,
+        categorySlug: "choosing-correct-riding-gear",
+      }),
+      undefined
+    );
+  });
 });

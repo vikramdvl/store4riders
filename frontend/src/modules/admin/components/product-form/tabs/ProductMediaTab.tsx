@@ -15,10 +15,10 @@ import {
   Globe,
   DownloadCloud,
   Loader2,
+  GripVertical,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { toast } from "sonner";
-import { compressImageToWebP, uploadImageToS3 } from "@/core/utils/imageCompressor";
 import { StorefrontCardPreview } from "@/modules/admin/components/StorefrontCardPreview";
 import { normalizeExternalImageUrl, getVideoEmbedInfo } from "@/core/utils/mediaUrlHelper";
 import { apiClient } from "@/core/api/client";
@@ -28,6 +28,9 @@ import { ImportFromUrlModal, DiscoveredImageItem } from "../modals/ImportFromUrl
 export function ProductMediaTab() {
   const [isAdminVideoPlaying, setIsAdminVideoPlaying] = React.useState(false);
   const [isProcessingUrl, setIsProcessingUrl] = React.useState(false);
+  const [isDropZoneActive, setIsDropZoneActive] = React.useState(false);
+  const [dragOverCardIdx, setDragOverCardIdx] = React.useState<number | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [urlModalOpen, setUrlModalOpen] = React.useState(false);
   const [scrapedData, setScrapedData] = React.useState<{
     pageTitle: string;
@@ -42,6 +45,8 @@ export function ProductMediaTab() {
     specialPrice,
     images,
     setImages,
+    draggedImgIdx,
+    setDraggedImgIdx,
     variants,
     setVariantImageModalIndex,
     videoUrl,
@@ -51,56 +56,56 @@ export function ProductMediaTab() {
     manualImageAlt,
     setManualImageAlt,
     isCompressing,
-    setIsCompressing,
     compressionBadge,
-    setCompressionBadge,
+    handleUploadImages,
     setPrimaryImage,
+    handleDragStart,
+    handleDragOver,
+    handleDrop,
     productType,
     handleTabChange,
   } = useProductFormContext();
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const handleImageInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    await handleUploadImages(e.target.files);
+    if (e.target) e.target.value = "";
+  };
 
-    setIsCompressing(true);
-    setCompressionBadge("Compressing to WebP (0.85 quality)...");
+  const handleUploadZoneDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const types = Array.from(e.dataTransfer?.types || []);
+    if (types.length === 0 || types.includes("Files")) {
+      setIsDropZoneActive(true);
+    }
+  };
 
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const { file: webpFile, originalSize, compressedSize } = await compressImageToWebP(file, 1600, 0.85);
+  const handleUploadZoneDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const types = Array.from(e.dataTransfer?.types || []);
+    if (types.length === 0 || types.includes("Files")) {
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+      setIsDropZoneActive(true);
+    }
+  };
 
-        const origKb = Math.round(originalSize / 1024);
-        const compKb = Math.round(compressedSize / 1024);
-        setCompressionBadge(`Compressed: ${origKb} KB ➔ ${compKb} KB (WebP). Uploading...`);
+  const handleUploadZoneDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDropZoneActive(false);
+    }
+  };
 
-        let finalUrl = "";
-        try {
-          finalUrl = await uploadImageToS3(webpFile);
-        } catch (uploadErr) {
-          console.warn("S3 upload failed, using object URL fallback", uploadErr);
-          finalUrl = URL.createObjectURL(webpFile);
-          toast.warning("S3 credentials inactive. Image saved with temporary URL.");
-        }
-
-        setImages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            url: finalUrl,
-            altText: name || file.name.replace(/\.[^/.]+$/, ""),
-            isBase: prev.length === 0,
-          },
-        ]);
-      }
-      toast.success("Images compressed and attached successfully!");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to process images");
-    } finally {
-      setIsCompressing(false);
-      setCompressionBadge(null);
-      if (e.target) e.target.value = "";
+  const handleUploadZoneDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDropZoneActive(false);
+    if (isCompressing) return;
+    const droppedFiles = e.dataTransfer?.files;
+    if (droppedFiles && droppedFiles.length > 0) {
+      await handleUploadImages(droppedFiles);
     }
   };
 
@@ -270,21 +275,49 @@ export function ProductMediaTab() {
       )}
 
       {/* Upload Area */}
-      <div className="border-2 border-dashed border-slate-200 hover:border-brand/50 rounded-xl p-8 text-center transition-colors bg-slate-50/50">
-        <Upload className="mx-auto text-slate-400 mb-3" size={36} />
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="Upload product images by dragging files here or clicking to browse"
+        onClick={() => !isCompressing && fileInputRef.current?.click()}
+        onKeyDown={(e) => {
+          if ((e.key === "Enter" || e.key === " ") && !isCompressing) {
+            e.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
+        onDragEnter={handleUploadZoneDragEnter}
+        onDragOver={handleUploadZoneDragOver}
+        onDragLeave={handleUploadZoneDragLeave}
+        onDrop={handleUploadZoneDrop}
+        className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer select-none ${
+          isDropZoneActive
+            ? "border-brand bg-brand/5 ring-2 ring-brand/20 scale-[0.995]"
+            : "border-slate-200 hover:border-brand/50 bg-slate-50/50 hover:bg-slate-50"
+        } ${isCompressing ? "opacity-75 pointer-events-none" : ""}`}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*"
+          onChange={handleImageInputChange}
+          className="hidden"
+          disabled={isCompressing}
+        />
+        <Upload
+          className={`mx-auto mb-3 transition-colors ${isDropZoneActive ? "text-brand" : "text-slate-400"}`}
+          size={36}
+        />
         <p className="text-sm font-medium text-slate-700">
-          Drag &amp; Drop product images or{" "}
-          <label className="text-brand hover:underline cursor-pointer">
-            browse
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={handleImageUpload}
-              className="hidden"
-              disabled={isCompressing}
-            />
-          </label>
+          {isDropZoneActive ? (
+            <span className="text-brand font-bold">Drop product images here to upload</span>
+          ) : (
+            <>
+              Drag &amp; Drop product images or{" "}
+              <span className="text-brand font-semibold underline-offset-2 hover:underline">browse</span>
+            </>
+          )}
         </p>
         <p className="text-xs text-slate-400 mt-1">
           Supports JPG, PNG, WebP up to 25MB (Auto-compressed to ~250KB WebP)
@@ -373,7 +406,14 @@ export function ProductMediaTab() {
       {/* Images Grid */}
       <div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-          <h4 className="text-sm font-semibold text-slate-700">Product Gallery ({images.length} images)</h4>
+          <div className="flex items-center gap-2">
+            <h4 className="text-sm font-semibold text-slate-700">Product Gallery ({images.length} images)</h4>
+            {images.length > 1 && (
+              <span className="text-[11px] text-slate-500 hidden sm:inline">
+                • Drag cards to reorder
+              </span>
+            )}
+          </div>
           <p className="text-[11px] text-slate-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md">
             💡 <strong>SEO &amp; Swatch Tip:</strong> Set Alt text with the color name (e.g.{" "}
             <em>&quot;{name || "Product"} - Matte Black&quot;</em>) to auto-link with customer color swatches! Common photos (sole, safety, buckles) show for all colors.
@@ -386,13 +426,60 @@ export function ProductMediaTab() {
             {images.map((img, idx) => {
               const isLinkedToVariant = variants.some((v) => v.imageUrl === img.url);
               const linkedVariant = variants.find((v) => v.imageUrl === img.url);
+              const isDraggingThis = draggedImgIdx === idx;
+              const isDragTarget = dragOverCardIdx === idx && draggedImgIdx !== idx;
 
               return (
                 <div
                   key={img.id}
-                  className={`relative group bg-white border rounded-xl overflow-hidden shadow-2xs transition-all ${
-                    img.isBase ? "ring-2 ring-brand border-transparent" : "border-slate-200"
-                  }`}
+                  draggable
+                  onDragStart={(e) => {
+                    if (
+                      e.target instanceof HTMLInputElement ||
+                      e.target instanceof HTMLTextAreaElement ||
+                      e.target instanceof HTMLButtonElement
+                    ) {
+                      e.preventDefault();
+                      return;
+                    }
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", String(idx));
+                    handleDragStart(idx);
+                  }}
+                  onDragOver={(e) => {
+                    handleDragOver(e);
+                    if (draggedImgIdx !== null && draggedImgIdx !== idx) {
+                      setDragOverCardIdx(idx);
+                    }
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                      setDragOverCardIdx((prev) => (prev === idx ? null : prev));
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDragOverCardIdx(null);
+                    const rawIdx = e.dataTransfer?.getData("text/plain");
+                    const parsedIdx = rawIdx !== "" && !Number.isNaN(Number(rawIdx)) ? Number(rawIdx) : null;
+                    if (draggedImgIdx !== null) {
+                      handleDrop(idx);
+                    } else if (parsedIdx !== null && parsedIdx !== idx) {
+                      moveImage(parsedIdx, idx);
+                    }
+                  }}
+                  onDragEnd={() => {
+                    setDraggedImgIdx(null);
+                    setDragOverCardIdx(null);
+                  }}
+                  className={`relative group bg-white border rounded-xl overflow-hidden shadow-2xs transition-all cursor-grab active:cursor-grabbing ${
+                    isDragTarget
+                      ? "ring-2 ring-brand border-brand border-dashed scale-[1.02] bg-brand/5"
+                      : img.isBase
+                      ? "ring-2 ring-brand border-transparent"
+                      : "border-slate-200"
+                  } ${isDraggingThis ? "opacity-50 scale-[0.98]" : ""}`}
                 >
                   <div className="relative aspect-square w-full bg-slate-100">
                     <Image
@@ -400,10 +487,17 @@ export function ProductMediaTab() {
                       alt={img.altText || "Product preview"}
                       fill
                       unoptimized
+                      draggable={false}
                       referrerPolicy="no-referrer"
                       sizes="200px"
-                      className="object-cover"
+                      className="object-cover select-none"
                     />
+                    <div
+                      title="Drag card to reorder"
+                      className="absolute top-2 right-2 bg-white/90 text-slate-600 p-1 rounded-md shadow-xs opacity-75 group-hover:opacity-100 transition-opacity pointer-events-none"
+                    >
+                      <GripVertical size={13} />
+                    </div>
                     {img.isBase ? (
                       <div className="absolute top-2 left-2 bg-amber-500 text-slate-900 text-[10px] font-black px-2 py-0.5 rounded-full shadow-md flex items-center gap-1">
                         <Star size={10} fill="currentColor" />

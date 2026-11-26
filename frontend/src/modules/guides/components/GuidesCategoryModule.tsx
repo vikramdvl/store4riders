@@ -1,16 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { IBlogCategory, IBlogPost } from "@store4riders/shared-types";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { Pagination } from "@/components/ui/Pagination";
 import {
   PaginatedBlogResponse,
   usePublicBlogCategories,
   usePublicBlogPosts,
 } from "@/core/hooks/useBlog";
 import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
+import { syncPageQueryParam } from "@/core/utils/shallowUrl";
 import { GuideCard } from "./GuideCard";
 import { GuideAuthorCard } from "./GuideAuthorCard";
 import { BookOpen } from "lucide-react";
@@ -19,6 +21,7 @@ const CATEGORY_GUIDES_PER_PAGE = 18;
 
 interface GuidesCategoryModuleProps {
   categorySlug: string;
+  initialPage?: number;
   initialCategory?: IBlogCategory | null;
   initialPostsData?: PaginatedBlogResponse;
   initialCategories?: IBlogCategory[];
@@ -26,11 +29,22 @@ interface GuidesCategoryModuleProps {
 
 export const GuidesCategoryModule: React.FC<GuidesCategoryModuleProps> = ({
   categorySlug,
+  initialPage = 1,
   initialCategory,
   initialPostsData,
   initialCategories,
 }) => {
-  const [page, setPage] = useState<number>(1);
+  const [page, setPage] = useState<number>(initialPage);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const urlPage = parseInt(params.get("page") || "1", 10);
+      setPage(Number.isFinite(urlPage) && urlPage > 0 ? urlPage : 1);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const { data: categories = [] } = usePublicBlogCategories(
     initialCategories
@@ -56,7 +70,7 @@ export const GuidesCategoryModule: React.FC<GuidesCategoryModuleProps> = ({
       limit: CATEGORY_GUIDES_PER_PAGE,
       categorySlug: category.slug,
     },
-    page === 1 && initialPostsData
+    page === initialPage && initialPostsData
       ? { initialData: initialPostsData, initialDataUpdatedAt: 0 }
       : undefined
   );
@@ -67,6 +81,7 @@ export const GuidesCategoryModule: React.FC<GuidesCategoryModuleProps> = ({
 
   const handlePageChange = (nextPage: number) => {
     setPage(nextPage);
+    syncPageQueryParam(nextPage);
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 280, behavior: "smooth" });
     }
@@ -171,32 +186,16 @@ export const GuidesCategoryModule: React.FC<GuidesCategoryModuleProps> = ({
               ))}
             </div>
 
-            {totalPages > 1 && (
-              <div className="mt-10 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-neutral-200 shadow-2xs">
-                <p className="text-xs text-neutral-600 font-medium">
-                  Showing page <span className="font-bold text-neutral-900">{page}</span> of{" "}
-                  <span className="font-bold text-neutral-900">{totalPages}</span> ({totalCount} guides)
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handlePageChange(Math.max(1, page - 1))}
-                    disabled={page <= 1 || isFetching}
-                    className="px-4 py-2 text-xs font-bold rounded-lg border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePageChange(Math.min(totalPages, page + 1))}
-                    disabled={page >= totalPages || isFetching}
-                    className="px-4 py-2 text-xs font-bold rounded-lg bg-brand text-white hover:bg-brand/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalCount={totalCount}
+              pageSize={CATEGORY_GUIDES_PER_PAGE}
+              itemLabel="guides"
+              isLoading={isFetching}
+              ariaLabel="Category guides pagination"
+              onPageChange={handlePageChange}
+            />
           </>
         ) : (
           <div className="bg-white rounded-2xl p-12 text-center border border-neutral-200 max-w-md mx-auto my-12">

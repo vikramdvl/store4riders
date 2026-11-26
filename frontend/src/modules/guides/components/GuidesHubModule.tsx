@@ -3,12 +3,14 @@
 import React, { useState, useEffect } from "react";
 import { IBlogCategory, IBlogPost } from "@store4riders/shared-types";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { Pagination } from "@/components/ui/Pagination";
 import {
   PaginatedBlogResponse,
   usePublicBlogCategories,
   usePublicBlogPosts,
 } from "@/core/hooks/useBlog";
 import { normalizeExternalImageUrl } from "@/core/utils/mediaUrlHelper";
+import { syncPageQueryParam } from "@/core/utils/shallowUrl";
 import { GuideCard } from "./GuideCard";
 import { GuideAuthorCard } from "./GuideAuthorCard";
 import { MagnifyingGlassIcon, BookOpenIcon } from "@heroicons/react/24/outline";
@@ -20,6 +22,7 @@ interface GuidesHubModuleProps {
   heroDescription?: string;
   initialTag?: string;
   initialSearch?: string;
+  initialPage?: number;
   initialPostsData?: PaginatedBlogResponse;
   initialCategories?: IBlogCategory[];
 }
@@ -29,6 +32,7 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
   heroDescription = "Real-world gear tests, sizing walkthroughs, maintenance checklists, and touring preparation guides curated by riders for Indian roads and conditions.",
   initialTag = "",
   initialSearch = "",
+  initialPage = 1,
   initialPostsData,
   initialCategories,
 }) => {
@@ -36,7 +40,7 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
   const [activeTag, setActiveTag] = useState<string>(initialTag);
   const [searchQuery, setSearchQuery] = useState<string>(initialSearch);
   const [debouncedSearch, setDebouncedSearch] = useState<string>(initialSearch.trim());
-  const [page, setPage] = useState<number>(1);
+  const [page, setPage] = useState<number>(initialPage);
   const [allGuidesTotal, setAllGuidesTotal] = useState<number | null>(
     !initialTag && !initialSearch.trim() && initialPostsData
       ? initialPostsData.totalCount
@@ -50,6 +54,7 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
       setDebouncedSearch((prev) => {
         if (prev !== trimmed) {
           setPage(1);
+          syncPageQueryParam(1);
         }
         return trimmed;
       });
@@ -57,8 +62,18 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const urlPage = parseInt(params.get("page") || "1", 10);
+      setPage(Number.isFinite(urlPage) && urlPage > 0 ? urlPage : 1);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   const matchesInitialSsrQuery =
-    page === 1 &&
+    page === initialPage &&
     selectedCategory === "all" &&
     activeTag === initialTag &&
     debouncedSearch === initialSearch.trim();
@@ -106,6 +121,7 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
   const handleCategoryChange = (slug: string) => {
     setSelectedCategory(slug);
     setPage(1);
+    syncPageQueryParam(1);
   };
 
   const handleResetFilters = () => {
@@ -114,12 +130,14 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
     setActiveTag("");
     setSelectedCategory("all");
     setPage(1);
+    syncPageQueryParam(1);
   };
 
   const handlePageChange = (nextPage: number) => {
     setPage(nextPage);
+    syncPageQueryParam(nextPage);
     if (typeof window !== "undefined") {
-      window.scrollTo({ top: 320, behavior: "smooth" });
+      window.scrollTo({ top: 280, behavior: "smooth" });
     }
   };
 
@@ -198,6 +216,7 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
                   onClick={() => {
                     setActiveTag("");
                     setPage(1);
+                    syncPageQueryParam(1);
                   }}
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-brand/10 text-brand border border-brand/20 hover:bg-brand hover:text-white transition-colors"
                 >
@@ -280,32 +299,16 @@ export const GuidesHubModule: React.FC<GuidesHubModuleProps> = ({
             </div>
 
             {/* Backend Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="mt-10 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-neutral-200 shadow-2xs">
-                <p className="text-xs text-neutral-600 font-medium">
-                  Showing page <span className="font-bold text-neutral-900">{page}</span> of{" "}
-                  <span className="font-bold text-neutral-900">{totalPages}</span> ({totalCount} guides)
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handlePageChange(Math.max(1, page - 1))}
-                    disabled={page <= 1 || isFetching}
-                    className="px-4 py-2 text-xs font-bold rounded-lg border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePageChange(Math.min(totalPages, page + 1))}
-                    disabled={page >= totalPages || isFetching}
-                    className="px-4 py-2 text-xs font-bold rounded-lg bg-brand text-white hover:bg-brand/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalCount={totalCount}
+              pageSize={GUIDES_PER_PAGE}
+              itemLabel="guides"
+              isLoading={isFetching}
+              ariaLabel="Guides pagination"
+              onPageChange={handlePageChange}
+            />
           </>
         ) : (
           <div className="bg-white rounded-2xl p-12 text-center border border-neutral-200 max-w-md mx-auto my-12">

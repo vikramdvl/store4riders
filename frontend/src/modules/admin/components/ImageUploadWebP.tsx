@@ -17,6 +17,7 @@ interface ImageUploadWebPProps {
   safeAreaNotice?: string;
   maxDimension?: number;
   quality?: number;
+  passthroughMaxBytes?: number;
   className?: string;
 }
 
@@ -31,6 +32,7 @@ export function ImageUploadWebP({
   safeAreaNotice,
   maxDimension = 1440,
   quality = 0.82,
+  passthroughMaxBytes,
   className = "",
 }: ImageUploadWebPProps) {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -56,8 +58,13 @@ export function ImageUploadWebP({
       setIsProcessing(true);
       setStatusMessage("Optimizing to WebP in browser...");
 
-      // 1. Convert to WebP in client browser (0.82 quality for 80-180KB industry standard)
-      const result = await compressImageToWebP(file, maxDimension, quality);
+      // 1. Convert to WebP in client browser
+      const result = await compressImageToWebP(
+        file,
+        maxDimension,
+        quality,
+        passthroughMaxBytes ? { passthroughMaxBytes } : undefined
+      );
       
       const savedPercent = Math.round(
         ((result.originalSize - result.compressedSize) / result.originalSize) * 100
