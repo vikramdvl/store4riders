@@ -1,15 +1,89 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 import { ProductsPageModule } from "@/modules/catalog/components/ProductsPageModule";
 import ProductsLoading from "./loading";
 import { buildCollectionSchema, buildBreadcrumbSchema } from "@/core/utils/seo-schema";
 
+export const revalidate = 300;
+
+const rawApiBase = (
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:4000/api/v1"
+).replace(/\/+$/, "");
+const API_BASE = rawApiBase.includes("/v1")
+  ? rawApiBase
+  : rawApiBase.endsWith("/api")
+  ? `${rawApiBase}/v1`
+  : `${rawApiBase}/api/v1`;
+
+const getProductsPageInitialData = cache(async (category?: string) => {
+  try {
+    const q = new URLSearchParams();
+    if (category) q.append("category", category);
+    q.append("page", "1");
+    q.append("limit", "12");
+
+    const res = await fetch(`${API_BASE}/products?${q.toString()}`, {
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return undefined;
+    const json = await res.json();
+    const raw = json?.data;
+    if (!raw) return undefined;
+
+    const items = Array.isArray(raw.items) ? raw.items : Array.isArray(raw) ? raw : [];
+    const totalCount = raw.totalCount ?? items.length;
+    return {
+      items,
+      totalCount,
+      page: raw.page ?? 1,
+      limit: raw.limit ?? 12,
+      totalPages: raw.totalPages ?? Math.max(1, Math.ceil(totalCount / 12)),
+    };
+  } catch {
+    return undefined;
+  }
+});
+
 interface ProductsPageProps {
-  searchParams: Promise<{ category?: string; brand?: string; search?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+function getSingleParam(val: string | string[] | undefined): string | undefined {
+  return typeof val === "string" && val.trim() ? val.trim() : undefined;
+}
+
+function hasExtraProductsFilters(params: Record<string, string | string[] | undefined>): boolean {
+  const page = getSingleParam(params.page);
+  return Boolean(
+    getSingleParam(params.brand) ||
+      getSingleParam(params.search) ||
+      getSingleParam(params.q) ||
+      getSingleParam(params.sort) ||
+      getSingleParam(params.minPrice) ||
+      getSingleParam(params.maxPrice) ||
+      getSingleParam(params.colour) ||
+      getSingleParam(params.color) ||
+      getSingleParam(params.size) ||
+      getSingleParam(params.helmet_type) ||
+      getSingleParam(params.material) ||
+      getSingleParam(params.riding_style) ||
+      getSingleParam(params.certification) ||
+      getSingleParam(params.gender) ||
+      getSingleParam(params.motorcycle_model) ||
+      getSingleParam(params.inStock) ||
+      getSingleParam(params.onSale) ||
+      (page && page !== "1")
+  );
 }
 
 export async function generateMetadata({ searchParams }: ProductsPageProps): Promise<Metadata> {
-  const { category, brand, search } = await searchParams;
+  const resolved = await searchParams;
+  const category = getSingleParam(resolved.category);
+  const brand = getSingleParam(resolved.brand);
+  const search = getSingleParam(resolved.search) || getSingleParam(resolved.q);
 
   if (category) {
     try {
@@ -69,7 +143,13 @@ export async function generateMetadata({ searchParams }: ProductsPageProps): Pro
 }
 
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
-  const { category, brand, search } = await searchParams;
+  const resolved = await searchParams;
+  const category = getSingleParam(resolved.category)?.replace(/\.html$/i, "");
+  const brand = getSingleParam(resolved.brand);
+  const search = getSingleParam(resolved.search) || getSingleParam(resolved.q);
+  const initialProductsData = !hasExtraProductsFilters(resolved)
+    ? await getProductsPageInitialData(category)
+    : undefined;
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://store4riders.com";
 
   let title = "Motorcycle Riding Gear & Accessories";
@@ -118,7 +198,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
       />
       <Suspense fallback={<ProductsLoading />}>
-        <ProductsPageModule />
+        <ProductsPageModule initialProductsData={initialProductsData} />
       </Suspense>
     </>
   );

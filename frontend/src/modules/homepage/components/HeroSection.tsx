@@ -107,6 +107,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             <Link
               key={slide.imageUrl + index}
               href={slideHref}
+              prefetch={index === currentImageIndex}
               aria-label={slide.title || `Hero banner ${index + 1}`}
               className={`absolute inset-0 transition-opacity duration-1000 ease-in-out block ${
                 index === currentImageIndex ? "opacity-100 pointer-events-auto cursor-pointer" : "opacity-0 pointer-events-none"
@@ -152,6 +153,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               {/* Desktop Button */}
               <Link
                 href={activeCtaLink}
+                prefetch={true}
                 className="mt-3.5 inline-flex items-center gap-1.5 bg-banner hover:bg-orange-600 text-white text-[11px] font-bold uppercase tracking-wider px-4 py-2 rounded-full shadow-md transition-all duration-200 hover:scale-[1.02] active:scale-95 group self-start"
               >
                 <span>{activeCtaText}</span>
@@ -166,6 +168,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           {isOverlayVisible && (
             <Link
               href={activeCtaLink}
+              prefetch={true}
               className="lg:hidden mt-auto inline-flex items-center gap-1.5 bg-banner hover:bg-orange-600 text-white text-[10px] sm:text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full shadow-lg transition-colors self-start pointer-events-auto"
             >
               {activeCtaText}

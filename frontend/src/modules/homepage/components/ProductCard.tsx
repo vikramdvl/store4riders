@@ -27,6 +27,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   return (
     <Link
       href={product.ctaUrl}
+      prefetch={true}
       className={`bg-white/90 shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-2xl p-3 flex items-center gap-4 w-[260px] md:w-[300px] group transition-transform duration-300 hover:-translate-y-1 will-change-transform border border-white/60 ${className}`}
     >
       {/* Clean Square Image Thumbnail */}

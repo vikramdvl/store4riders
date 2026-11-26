@@ -385,9 +385,8 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
     if (product) {
       return buildProductMetadata(product, candidateSlug);
     }
-  } else {
-    // For non-canonical paths/product slugs, fetch product & category in parallel
-    // while strictly preserving Product > Category > Policy resolution precedence
+  } else if (isKnownCategorySlug(candidateSlug)) {
+    // Legacy/known category slug: check product & category in parallel preserving Product > Category
     const [product, categoryNode] = await Promise.all([
       getProduct(candidateSlug),
       getCategoryNode(candidateSlug),
@@ -395,6 +394,16 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
     if (product) {
       return buildProductMetadata(product, candidateSlug);
     }
+    if (categoryNode) {
+      return buildCategoryMetadata(categoryNode, slugArray);
+    }
+  } else {
+    // Product slug fast-path: resolve product directly without triggering a 404 category fallback fetch
+    const product = await getProduct(candidateSlug);
+    if (product) {
+      return buildProductMetadata(product, candidateSlug);
+    }
+    const categoryNode = await getCategoryNode(candidateSlug);
     if (categoryNode) {
       return buildCategoryMetadata(categoryNode, slugArray);
     }
@@ -454,17 +463,12 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
       }
       notFound();
     }
-  } else {
-    // For product slugs or legacy category URLs, resolve in parallel while strictly
-    // preserving Product -> Category -> Policy precedence
-    const looksLikeCategory = isKnownCategorySlug(candidateSlug);
-    const [product, resolvedCat, prefetchedProducts, prefetchedPolicy] = await Promise.all([
+  } else if (isKnownCategorySlug(candidateSlug)) {
+    // Legacy/known category URLs: fetch in parallel while preserving Product -> Category precedence
+    const [product, resolvedCat, prefetchedProducts] = await Promise.all([
       getProduct(candidateSlug),
       getCategoryNode(candidateSlug),
-      looksLikeCategory && !hasFilterParams
-        ? getCategoryInitialProducts(candidateSlug)
-        : Promise.resolve(undefined),
-      !looksLikeCategory ? getPolicyPage(candidateSlug) : Promise.resolve(null),
+      !hasFilterParams ? getCategoryInitialProducts(candidateSlug) : Promise.resolve(undefined),
     ]);
 
     if (product) {
@@ -473,7 +477,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
 
     categoryNode = resolvedCat;
     if (!categoryNode) {
-      const policyPage = prefetchedPolicy || (await getPolicyPage(candidateSlug));
+      const policyPage = await getPolicyPage(candidateSlug);
       if (policyPage) {
         return renderPolicyPage(policyPage, candidateSlug);
       }
@@ -485,10 +489,33 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
     }
 
     if (!hasFilterParams) {
-      initialProductsData =
-        prefetchedProducts !== undefined
-          ? prefetchedProducts
-          : await getCategoryInitialProducts(candidateSlug);
+      initialProductsData = prefetchedProducts;
+    }
+  } else {
+    // Product slug fast-path: resolve product directly without awaiting category 404 or settings fetches
+    const product = await getProduct(candidateSlug);
+    if (product) {
+      return renderProductPage(product, candidateSlug, slugArray, resolvedSearchParams);
+    }
+
+    const [resolvedCat, policyPage] = await Promise.all([
+      getCategoryNode(candidateSlug),
+      getPolicyPage(candidateSlug),
+    ]);
+
+    categoryNode = resolvedCat;
+    if (categoryNode) {
+      if (!hasFilterParams) {
+        initialProductsData = await getCategoryInitialProducts(candidateSlug);
+      }
+    } else if (policyPage) {
+      return renderPolicyPage(policyPage, candidateSlug);
+    } else {
+      await redirectIfMatchedOrNotFound(`/${slugArray.join("/")}`);
+      if (slugArray.length > 1) {
+        await redirectIfMatchedOrNotFound(`/${candidateSlug}`);
+      }
+      notFound();
     }
   }
 
