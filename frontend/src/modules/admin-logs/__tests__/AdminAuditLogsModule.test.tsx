@@ -168,7 +168,8 @@ describe("AdminAuditLogsModule", () => {
     fireEvent.click(screen.getByRole("button", { name: /Block IP/i }));
     fireEvent.click(screen.getByRole("button", { name: /Confirm Block/i }));
     expect(mockBlockMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ ip: "103.21.10.5", durationHours: 24 })
+      expect.objectContaining({ ip: "103.21.10.5", durationHours: 24 }),
+      expect.objectContaining({ onSuccess: expect.any(Function) })
     );
 
     // Close drawer and switch to Blocked IPs tab

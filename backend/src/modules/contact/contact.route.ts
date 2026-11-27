@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ContactController } from "./contact.controller";
 import { checkRateLimit } from "../../core/middlewares/rateLimiter";
-import { extractUserFromAuth } from "../../core/middlewares/auth";
+import { extractAdminFromAuth } from "../../core/middlewares/auth";
 import { UserService } from "../user/user.service";
 import { ForbiddenError } from "../../core/errors/AppError";
+import { getClientIp } from "../../core/utils/clientIp";
 
 const ALLOWED_STAFF_ROLES = [
   "super_admin",
@@ -76,7 +77,7 @@ export async function contactRouter(
 ): Promise<NextResponse | null> {
   const method = req.method;
   const pathLen = routePath.length;
-  const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
+  const ip = getClientIp(req);
 
   // POST /contact (Public submission)
   if (method === "POST" && pathLen === 0) {
@@ -86,7 +87,7 @@ export async function contactRouter(
 
   // Enforce staff/admin authorization for all /contact/admin routes
   if (pathLen > 0 && routePath[0] === "admin") {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     const role = await UserService.getRole(userId);
     if (!ALLOWED_STAFF_ROLES.includes(role)) {
       throw new ForbiddenError("Staff access required");

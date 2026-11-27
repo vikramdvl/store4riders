@@ -60,8 +60,8 @@ describe("OrderRepository - linkGuestOrders", () => {
       { userId: { $exists: false } },
       { userId: null },
       { userId: "" },
-      { userId: { $ne: "user_abc_789" } },
     ]);
+    expect(JSON.stringify(userIdCondition)).not.toContain("$ne");
 
     // Update assertions
     expect(calledUpdate).toEqual({

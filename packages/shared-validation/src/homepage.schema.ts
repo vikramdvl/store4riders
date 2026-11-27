@@ -72,6 +72,7 @@ export const touringGearSectionSchema = z.object({
   sectionTitle: z.string().min(1, "Section title is required").max(100),
   seeMoreText: z.string().min(1, "Button text is required").max(50),
   seeMoreLink: z.string().min(1, "Button link is required").max(500),
+  items: z.array(browseProductItemSchema).max(8).optional().default([]),
 });
 
 export const socialMediaBannerTopSchema = z.object({

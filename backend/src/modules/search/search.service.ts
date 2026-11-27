@@ -229,6 +229,7 @@ export class SearchService {
                 { name: { $regex: rx } },
                 { brand: { $regex: rx } },
                 { sku: { $regex: rx } },
+                { "variants.sku": { $regex: rx } },
                 { magentoCategories: { $regex: rx } },
               ]),
             };

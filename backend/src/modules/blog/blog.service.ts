@@ -388,6 +388,14 @@ export class BlogService {
     if (!updated) {
       throw new NotFoundError("Failed to update blog category");
     }
+    if (updated.name !== existing.name || updated.slug !== existing.slug) {
+      await BlogRepository.syncPostsOnCategoryUpdate(
+        String(updated._id || id),
+        existing.slug,
+        updated.name,
+        updated.slug
+      );
+    }
     await clearBlogCaches();
     if (existing.slug && updated.slug && existing.slug !== updated.slug) {
       const { UrlRedirectService } = await import("../url-redirect/url-redirect.service");
@@ -407,6 +415,7 @@ export class BlogService {
     if (!deleted) {
       throw new NotFoundError("Blog category not found");
     }
+    await BlogRepository.clearCategoryFromPosts(String(deleted._id || id), deleted.slug);
     await clearBlogCaches();
     return deleted;
   }

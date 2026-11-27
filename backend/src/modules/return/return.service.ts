@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { AppError } from "../../core/errors/AppError";
+import { AppError, ForbiddenError } from "../../core/errors/AppError";
 import { ReturnRepository } from "./return.repository";
 import { IReturn } from "./return.model";
 import { logger } from "../../core/utils/logger";
@@ -11,21 +11,22 @@ export class ReturnService {
    * Called by the Customer from the Frontend to initiate a Return.
    */
   static async createReturnRequest(data: any): Promise<IReturn> {
-    const { OrderRepository } = require("../order/order.repository");
+    const { OrderRepository } = await import("../order/order.repository");
     const order = await OrderRepository.findById(data.orderId);
     
     if (!order) {
       throw new AppError("Order not found", 404);
     }
-    
-    // In a fully robust system, you calculate the refundAmount based on the specific items 
-    // being returned (e.g. Item Price * Quantity - Discounts).
-    // For now, assuming full order amount if all items returned, or client sends expected amount.
-    const expectedRefund = order.pricing.finalTotal; 
+
+    if (!data.userId || !order.userId || String(order.userId) !== String(data.userId)) {
+      throw new ForbiddenError("You do not have permission to request a return for this order");
+    }
+
+    const expectedRefund = Number(order.pricing?.total ?? (order.pricing as any)?.finalTotal ?? 0);
 
     const returnDoc = await ReturnRepository.create({
       orderId: data.orderId,
-      userId: order.userId,
+      userId: String(order.userId),
       status: "requested",
       items: data.items,
       refundMethod: data.refundMethod,

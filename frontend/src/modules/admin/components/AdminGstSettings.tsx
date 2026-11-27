@@ -59,11 +59,12 @@ export function AdminGstSettings() {
     e.preventDefault();
     if (!settings) return;
 
+    const normalizedGstin = settings.gstin ? settings.gstin.trim().toUpperCase() : "";
+
     // Optional validation for GSTIN format if entered
-    if (settings.gstin && settings.gstin.trim() !== "") {
-      const gstinClean = settings.gstin.trim().toUpperCase();
+    if (normalizedGstin !== "") {
       const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-      if (!gstinRegex.test(gstinClean)) {
+      if (!gstinRegex.test(normalizedGstin)) {
         toast.error("Please enter a valid 15-digit GSTIN (e.g., 27AAPCS1234F1Z5)");
         return;
       }
@@ -71,14 +72,18 @@ export function AdminGstSettings() {
 
     setSaving(true);
     try {
-      // Send ONLY GST/tax-related fields — prevents overwriting other tabs' data
+      // Send GST/tax and registered dispatch origin fields together
       const payload = {
-        gstin: settings.gstin,
+        gstin: normalizedGstin,
         legalBusinessName: settings.legalBusinessName,
-        pan: settings.pan,
+        pan: settings.pan ? settings.pan.trim().toUpperCase() : "",
         taxRate: settings.taxRate,
         gstPricingMode: settings.gstPricingMode,
         allowB2bGstin: settings.allowB2bGstin,
+        storeOriginState: settings.storeOriginState,
+        storeOriginCity: settings.storeOriginCity,
+        storeOriginPincode: settings.storeOriginPincode,
+        storeOriginAddress: settings.storeOriginAddress,
       };
       await apiClient.put("/admin/settings", payload);
       await queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
@@ -88,7 +93,7 @@ export function AdminGstSettings() {
       revalidateStorefrontPaths(["/"]);
       toast.success("GST and Tax settings saved successfully");
     } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || "Failed to save GST settings";
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to save GST settings";
       toast.error(typeof msg === "string" ? msg : "Failed to save GST settings");
     } finally {
       setSaving(false);

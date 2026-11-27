@@ -777,6 +777,92 @@ export function ProductBasicTab() {
           />
         </div>
 
+        {/* Package Dimensions (L x B x H) for Shipping & Volumetric Weight */}
+        <div className="md:col-span-2 p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <label className="block text-sm font-semibold text-slate-800">
+                Shipping Box Dimensions (L × B × H)
+              </label>
+              <p className="text-[11px] text-slate-500">
+                Used by Shiprocket, Delhivery &amp; Xpressbees to calculate volumetric weight and auto-suggest master cartons.
+              </p>
+            </div>
+            {Number(length) > 0 && Number(breadth) > 0 && Number(height) > 0 && (
+              <span className="text-[11px] font-mono font-bold text-slate-700 bg-white border border-slate-200 px-2.5 py-1 rounded-md">
+                {(() => {
+                  const factor = dimensionUnit === "in" ? 2.54 : dimensionUnit === "mm" ? 0.1 : 1;
+                  const volKg = ((Number(length) * factor) * (Number(breadth) * factor) * (Number(height) * factor)) / 5000;
+                  return `Volumetric: ${volKg.toFixed(2)} kg`;
+                })()}
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Length (L)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={length}
+                onKeyDown={(e) => {
+                  if (e.key === "-" || e.key === "e" || e.key === "E" || e.key === "+") e.preventDefault();
+                }}
+                onChange={(e) => setLength(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+                placeholder="e.g. 36"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Breadth (B)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={breadth}
+                onKeyDown={(e) => {
+                  if (e.key === "-" || e.key === "e" || e.key === "E" || e.key === "+") e.preventDefault();
+                }}
+                onChange={(e) => setBreadth(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+                placeholder="e.g. 28"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Height (H)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={height}
+                onKeyDown={(e) => {
+                  if (e.key === "-" || e.key === "e" || e.key === "E" || e.key === "+") e.preventDefault();
+                }}
+                onChange={(e) => setHeight(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+                placeholder="e.g. 28"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Unit</label>
+              <select
+                value={dimensionUnit}
+                onChange={(e) => setDimensionUnit(e.target.value as "cm" | "in" | "mm")}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white font-semibold focus:outline-none focus:ring-2 focus:ring-brand"
+              >
+                <option value="cm">cm (Standard)</option>
+                <option value="in">inches</option>
+                <option value="mm">mm</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
           <div className="flex flex-col gap-2 p-3 rounded-lg border border-slate-200 hover:border-slate-300 bg-slate-50/50 transition-colors">
             <label className="flex items-start gap-2.5 cursor-pointer">

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WarehouseController } from "./warehouse.controller";
 import { extractUserFromAuth } from "../../core/middlewares/auth";
-import { checkAdmin } from "../../core/middlewares/admin";
+import { checkPermission } from "../../core/middlewares/permission";
+import { PermissionAction } from "../../core/config/permissions";
 import { UserService } from "../user/user.service";
 import { AppError } from "../../core/errors/AppError";
 import { ApiResponse } from "../../core/response/ApiResponse";
@@ -16,7 +17,7 @@ export async function warehouseRouter(req: NextRequest, routePath: string[]): Pr
   const method = req.method;
 
   const userId = extractUserFromAuth(req);
-  await checkAdmin(userId, UserService.getRole);
+  await checkPermission(userId, PermissionAction.MANAGE_SHIPPING, UserService.getRole);
 
   // Normalize path by stripping optional leading "admin"
   const normalizedPath = routePath[0] === "admin" ? routePath.slice(1) : routePath;

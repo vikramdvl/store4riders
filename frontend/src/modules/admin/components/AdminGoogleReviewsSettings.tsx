@@ -2,9 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
+import { useQueryClient } from "@tanstack/react-query";
 import { StarIcon, ArrowTopRightOnSquareIcon, ArrowPathIcon, CheckCircleIcon, ExclamationTriangleIcon } from "@heroicons/react/24/solid";
 import { toast } from "sonner";
 import Button from "@/components/ui/Button";
+import { apiClient } from "@/core/api/client";
+import { revalidateStorefrontPaths } from "@/core/utils/revalidateStorefront";
 
 
 interface SerpApiQuota {
@@ -29,6 +32,7 @@ interface StoreReview {
 }
 
 export function AdminGoogleReviewsSettings() {
+  const queryClient = useQueryClient();
   const [reviews, setReviews] = useState<StoreReview[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [loading, setLoading] = useState(true);
@@ -38,8 +42,8 @@ export function AdminGoogleReviewsSettings() {
 
   const fetchQuota = async () => {
     try {
-      const res = await fetch("/api/reviews/store?action=account");
-      const json = await res.json();
+      const res = await apiClient.get("/reviews/store/account");
+      const json = res.data;
       if (json.success && json.data) {
         setQuota(json.data);
       }
@@ -58,9 +62,9 @@ export function AdminGoogleReviewsSettings() {
   const fetchReviews = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/reviews/store?limit=100");
-      const json = await res.json();
-      if (json.success && Array.isArray(json.data)) {
+      const res = await apiClient.get("/reviews/store?limit=100");
+      const json = res.data;
+      if (json?.success && Array.isArray(json?.data)) {
         setReviews(json.data);
       }
     } catch {
@@ -77,27 +81,26 @@ export function AdminGoogleReviewsSettings() {
         localStorage.setItem("SERPAPI_KEY", apiKey.trim());
       }
 
-      const res = await fetch("/api/reviews/store", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          apiKey: apiKey.trim() || undefined,
-          pages: pagesToFetch,
-        }),
+      const res = await apiClient.post("/reviews/store/sync", {
+        apiKey: apiKey.trim() || undefined,
+        pages: pagesToFetch,
       });
 
-      const json = await res.json();
+      const json = res.data;
 
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || json.message || "Failed to fetch reviews");
+      if (!json?.success) {
+        throw new Error(json?.error || json?.message || "Failed to fetch reviews");
       }
 
       const updatedReviews = json.data || [];
       setReviews(updatedReviews);
+      await queryClient.invalidateQueries({ queryKey: ["store-reviews"] });
+      await queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
+      revalidateStorefrontPaths(["/"]);
       toast.success(`Successfully fetched & saved ${updatedReviews.length} latest Google reviews!`);
       fetchQuota();
     } catch (err: any) {
-      toast.error(err.message || "Error fetching Google reviews");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || err.message || "Error fetching Google reviews");
     } finally {
       setSyncing(false);
     }

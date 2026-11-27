@@ -112,7 +112,7 @@ export function AdminLogisticsDashboard() {
   const pipeline = (data as any)?.overallPipeline;
   const summary = data?.last24Summary;
 
-  const newOrdersCount = pipeline?.toPack ?? pipeline?.pendingPacking ?? summary?.newOrders ?? 0;
+  const newOrdersCount = pipeline?.toPack ?? pipeline?.pendingPackingTotal ?? pipeline?.pendingPacking ?? summary?.newOrders ?? 0;
   const packedOrdersCount = pipeline?.packed ?? pipeline?.packedReadyTotal ?? summary?.packedOrders ?? 0;
   const inTransitCount = pipeline?.inTransit ?? pipeline?.inTransitTotal ?? ((summary?.inTransit ?? 0) + (summary?.outForDelivery ?? 0));
   const deliveredCount = pipeline?.delivered ?? pipeline?.deliveredTodayTotal ?? summary?.delivered ?? 0;

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Plus, Edit2, Trash2, ArrowLeft, FolderTree, BookOpen, Check, X, Globe } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -92,29 +93,43 @@ export function AdminBlogCategories() {
     setIsModalOpen(true);
   };
 
+  const onInvalid = (formErrors: Record<string, any>) => {
+    const firstError = Object.values(formErrors)[0];
+    toast.error(firstError?.message || "Please check required fields before saving.");
+  };
+
   const onSubmit = async (values: CategoryFormValues) => {
     const finalSlug = values.slug && values.slug.trim() ? slugify(values.slug) : slugify(values.name);
     const payload = {
       ...values,
       slug: finalSlug,
+      order: Number.isFinite(values.order) ? values.order : 0,
     };
 
-    if (editingCategory?._id) {
-      await updateCategory.mutateAsync({
-        id: editingCategory._id,
-        data: payload,
-      });
-    } else {
-      await createCategory.mutateAsync(payload);
+    try {
+      if (editingCategory?._id) {
+        await updateCategory.mutateAsync({
+          id: editingCategory._id,
+          data: payload,
+        });
+      } else {
+        await createCategory.mutateAsync(payload);
+      }
+      setIsModalOpen(false);
+      setEditingCategory(null);
+    } catch {
+      // Error toast is handled by mutation onError; keep modal open for correction
     }
-    setIsModalOpen(false);
-    setEditingCategory(null);
   };
 
   const handleDelete = async () => {
     if (!categoryToDelete?._id) return;
-    await deleteCategory.mutateAsync(categoryToDelete._id);
-    setCategoryToDelete(null);
+    try {
+      await deleteCategory.mutateAsync(categoryToDelete._id);
+      setCategoryToDelete(null);
+    } catch {
+      // Error toast is handled by mutation onError
+    }
   };
 
   return (
@@ -246,7 +261,7 @@ export function AdminBlogCategories() {
         onClose={() => setIsModalOpen(false)}
         title={editingCategory ? "Edit Category" : "New Blog Category"}
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
+        <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-4 pt-2">
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
               Category Name *
@@ -282,6 +297,9 @@ export function AdminBlogCategories() {
               placeholder="Brief description for SEO and category banner..."
               className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:outline-hidden focus:border-brand focus:ring-1 focus:ring-brand"
             />
+            {errors.description && (
+              <p className="mt-1 text-[11px] text-red-500">{errors.description.message}</p>
+            )}
           </div>
 
           {/* SEO Metadata Card */}
@@ -341,8 +359,11 @@ export function AdminBlogCategories() {
               </label>
               <Input
                 type="number"
-                {...register("order", { valueAsNumber: true })}
+                {...register("order", {
+                  setValueAs: (v) => (v === "" || v === null || v === undefined ? 0 : Number(v)),
+                })}
                 placeholder="0"
+                error={errors.order?.message}
               />
             </div>
 

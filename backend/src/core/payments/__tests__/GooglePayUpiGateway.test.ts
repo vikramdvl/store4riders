@@ -15,6 +15,7 @@ vi.mock('../../../modules/settings/setting.repository', () => ({
 vi.mock('../../../modules/payment/payment.repository', () => ({
   PaymentRepository: {
     findByGatewayOrderId: vi.fn(),
+    findByGatewayPaymentId: vi.fn(),
   },
 }));
 
@@ -24,6 +25,8 @@ describe('GooglePayUpiGateway & Factory - Production Direct UPI Architecture', (
   beforeEach(() => {
     gateway = new GooglePayUpiGateway();
     vi.clearAllMocks();
+    vi.mocked(PaymentRepository.findByGatewayOrderId).mockResolvedValue(null);
+    vi.mocked(PaymentRepository.findByGatewayPaymentId).mockResolvedValue(null);
 
     vi.mocked(SettingRepository.getSettings).mockResolvedValue({
       upiMerchantVpa: 'store4riders@icici',
@@ -186,6 +189,29 @@ describe('GooglePayUpiGateway & Factory - Production Direct UPI Architecture', (
       const result = await gateway.verifyPayment(mockPayment, {
         gatewayOrderId: 'OD-S4R-REPLAY',
         utr: '432109876543',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('already been processed');
+    });
+
+    it('should reject duplicate UTR numbers matched via captured gatewayPaymentId on another order', async () => {
+      const mockPayment: any = {
+        _id: 'payment_id_new',
+        amount: 3000,
+        gatewayOrderId: 'OD-S4R-REPLAY-2',
+      };
+
+      vi.mocked(PaymentRepository.findByGatewayOrderId).mockResolvedValue(null);
+      vi.mocked(PaymentRepository.findByGatewayPaymentId).mockResolvedValue({
+        _id: 'payment_id_captured_prev',
+        gatewayOrderId: 'OD-S4R-OLD',
+        gatewayPaymentId: '555566667777',
+      } as any);
+
+      const result = await gateway.verifyPayment(mockPayment, {
+        gatewayOrderId: 'OD-S4R-REPLAY-2',
+        utr: '555566667777',
       });
 
       expect(result.success).toBe(false);

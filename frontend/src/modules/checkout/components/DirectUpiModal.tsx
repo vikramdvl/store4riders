@@ -5,6 +5,7 @@ import Image from "next/image";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { apiClient } from "@/core/api/client";
+import { loadPendingPaymentOrder } from "@/core/utils/paymentSubmit";
 import { useCartStore } from "@/stores/useCartStore";
 import { GooglePayWebButton } from "./GooglePayWebButton";
 
@@ -105,7 +106,11 @@ export const DirectUpiModal: React.FC<DirectUpiModalProps> = ({
   const checkPaymentStatus = useCallback(async () => {
     if (!orderNumber || isCaptured) return;
     try {
-      const res = await apiClient.post("/orders/sync-payment", { orderId: orderNumber });
+      const pendingToken = loadPendingPaymentOrder()?.guestOrderToken;
+      const res = await apiClient.post("/orders/sync-payment", {
+        orderId: orderNumber,
+        ...(pendingToken ? { guestToken: pendingToken } : {}),
+      });
       const data = res.data?.data;
       if (data?.isConfirmed) {
         setIsCaptured(true);
@@ -164,11 +169,13 @@ export const DirectUpiModal: React.FC<DirectUpiModalProps> = ({
 
     try {
       setIsVerifyingUtr(true);
+      const pendingToken = loadPendingPaymentOrder()?.guestOrderToken;
       const res = await apiClient.post("/orders/verify", {
         gatewayOrderId: orderNumber,
         paymentId: cleanUtr,
         signature: cleanUtr,
         utr: cleanUtr,
+        ...(pendingToken ? { guestToken: pendingToken } : {}),
       });
 
       if (res.data?.success) {

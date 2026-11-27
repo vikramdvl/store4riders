@@ -20,12 +20,22 @@ export class UserRepository {
 
   static async findByEmail(email: string): Promise<IUser | null> {
     if (!email) return null;
-    return UserModel.findOne({ email }).lean().exec() as unknown as IUser | null;
+    const clean = email.trim();
+    const lower = clean.toLowerCase();
+    const exact = await UserModel.findOne({ email: lower }).lean().exec() as unknown as IUser | null;
+    if (exact) return exact;
+    const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return UserModel.findOne({ email: new RegExp(`^${escaped}$`, "i") }).lean().exec() as unknown as IUser | null;
   }
 
   static async findByEmailWithPassword(email: string): Promise<any | null> {
     if (!email) return null;
-    return UserModel.findOne({ email }).select("+password").lean().exec();
+    const clean = email.trim();
+    const lower = clean.toLowerCase();
+    const exact = await UserModel.findOne({ email: lower }).select("+password").lean().exec();
+    if (exact) return exact;
+    const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return UserModel.findOne({ email: new RegExp(`^${escaped}$`, "i") }).select("+password").lean().exec();
   }
 
   static async create(data: Partial<IUser> & { password?: string }): Promise<IUser> {
@@ -35,7 +45,36 @@ export class UserRepository {
 
   static async update(id: string, data: Partial<IUser> & { password?: string }): Promise<IUser | null> {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
-    return UserModel.findByIdAndUpdate(id, { $set: data }, { new: true, strict: false }).lean().exec() as unknown as IUser | null;
+    const updated = (await UserModel.findByIdAndUpdate(
+      id,
+      { $set: data },
+      { new: true, strict: false }
+    )
+      .lean()
+      .exec()) as unknown as IUser | null;
+    if (updated) {
+      try {
+        const { deleteCache } = await import("../../core/cache/redis");
+        await deleteCache(`auth_user_state:${id}`);
+      } catch {}
+    }
+    return updated;
+  }
+
+  static async incrementTokenVersion(id: string): Promise<number | null> {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
+    const updated = (await UserModel.findByIdAndUpdate(
+      id,
+      { $inc: { tokenVersion: 1 } },
+      { new: true }
+    )
+      .lean()
+      .exec()) as unknown as IUser | null;
+    try {
+      const { deleteCache } = await import("../../core/cache/redis");
+      await deleteCache(`auth_user_state:${id}`);
+    } catch {}
+    return typeof updated?.tokenVersion === "number" ? updated.tokenVersion : null;
   }
 
   static buildUserQuery(role?: string, search?: string): any {

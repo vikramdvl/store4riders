@@ -36,13 +36,21 @@ import { CheckoutShippingDelivery } from "./CheckoutShippingDelivery";
 import { CheckoutPaymentStep } from "./CheckoutPaymentStep";
 import { DirectUpiModal } from "./DirectUpiModal";
 import { PostCheckoutRegisterForm } from "./PostCheckoutRegisterForm";
-import { useCheckout } from "@/core/hooks/useCheckout";
+import { useCheckout, syncOrderPaymentStatus } from "@/core/hooks/useCheckout";
 import { useValidateCoupon, usePublicCoupons } from "@/core/hooks/useCoupons";
 import { useUserAddresses, useAddAddress, useUpdateAddress, useDeleteAddress } from "@/core/hooks/useAddresses";
 import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
 import { usePincodeLookup } from "@/core/hooks/usePincodeLookup";
 import { PaymentMethodType, IUserAddress } from "@store4riders/shared-types";
 import { getCartItemImage } from "@/core/utils/mediaUrlHelper";
+import {
+  getGatewayRedirectLabel,
+  PAYMENT_VERIFY_RETRY_DELAYS_MS,
+  formatGatewayDisplayName,
+  savePendingPaymentOrder,
+  loadPendingPaymentOrder,
+  clearPendingPaymentOrder,
+} from "@/core/utils/paymentSubmit";
 import { 
   UserIcon, 
   TruckIcon, 
@@ -163,11 +171,27 @@ export const CheckoutPageModule = () => {
   }, [savedAddresses, user?.addresses]);
 
   const isSuccessParam = searchParams?.get("success") === "true";
+  const isVerifyingParam = searchParams?.get("verifying") === "true";
   const isFailedParam = searchParams?.get("failed") === "true";
   const isCancelledParam = searchParams?.get("cancelled") === "true";
   const hasPaymentIssue = isFailedParam || isCancelledParam;
   const orderIdParam = searchParams?.get("orderId");
   const [isOrderCompleted, setIsOrderCompleted] = useState(false);
+
+  // Automatic verification & polling state when returning from PayU/CCAvenue/Snapmint in pending state
+  const [verificationPhase, setVerificationPhase] = useState<
+    "idle" | "verifying" | "pending_timeout" | "confirmed" | "failed" | "cancelled"
+  >(isVerifyingParam && orderIdParam ? "verifying" : "idle");
+  const [verificationAttempt, setVerificationAttempt] = useState(1);
+  const [verifiedGatewayMethod, setVerifiedGatewayMethod] = useState<string | undefined>(undefined);
+  const [isCheckingVerificationNow, setIsCheckingVerificationNow] = useState(false);
+  const [isNetworkWeakOrOffline, setIsNetworkWeakOrOffline] = useState(false);
+  const [resolvedFailureReason, setResolvedFailureReason] = useState<string | undefined>(undefined);
+  const manualVerifyTriggerRef = useRef<(() => void) | null>(null);
+  const [recoveredOrderId, setRecoveredOrderId] = useState<string | null>(null);
+  const [isRecoveringPendingOrder, setIsRecoveringPendingOrder] = useState(false);
+  const [isRecoveryCheckDone, setIsRecoveryCheckDone] = useState(false);
+  const activeVerifyOrderId = orderIdParam || recoveredOrderId;
   
   // 2-Step Checkout: 1: Details & Shipping (Scrollable), 2: Payment, 3: Success
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(isSuccessParam ? 3 : 1);
@@ -341,12 +365,36 @@ export const CheckoutPageModule = () => {
   const [paymentOption, setPaymentOption] = useState<PaymentMethodType>("payu");
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isRedirectingToGateway, setIsRedirectingToGateway] = useState(false);
+  const [confirmedDisplayMethod, setConfirmedDisplayMethod] = useState<string | undefined>(undefined);
+  const submitLockRef = useRef(false);
+  const redirectFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [generatedOrderNumber, setGeneratedOrderNumber] = useState("12345678910");
   const [isCodAvailable, setIsCodAvailable] = useState(true);
 
   useEffect(() => {
     setMounted(true);
     setGeneratedOrderNumber(`ORD-${Math.floor(1000000000 + Math.random() * 9000000000)}`);
+    return () => {
+      if (redirectFallbackTimerRef.current) clearTimeout(redirectFallbackTimerRef.current);
+    };
+  }, []);
+
+  // Reset redirect lock if user navigates back to checkout from payment gateway via browser bfcache
+  useEffect(() => {
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        if (redirectFallbackTimerRef.current) {
+          clearTimeout(redirectFallbackTimerRef.current);
+          redirectFallbackTimerRef.current = null;
+        }
+        submitLockRef.current = false;
+        setIsRedirectingToGateway(false);
+        setIsProcessing(false);
+      }
+    };
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
   }, []);
 
   // Initialize default address and address view mode when addresses are loaded
@@ -387,18 +435,341 @@ export const CheckoutPageModule = () => {
     }
   }, [selectedAddressId, effectiveAddresses, showAddressForm]);
 
-  // Handle successful payment redirect
+  // Handle successful payment redirect & resolve actual payment method badge non-blockingly
   useEffect(() => {
-    if (isSuccessParam) {
+    if (!isSuccessParam) return;
+    setVerificationPhase("confirmed");
+    setCurrentStep(3);
+    clearCart();
+    clearPendingPaymentOrder();
+    try {
+      localStorage.removeItem("s4r_checkout_coupon");
+    } catch {}
+
+    if (orderIdParam && !isOrderCompleted) {
+      let active = true;
+      syncOrderPaymentStatus(orderIdParam)
+        .then((res) => {
+          if (active && res?.paymentMethod) {
+            setConfirmedDisplayMethod(res.paymentMethod);
+            setPaymentOption(res.paymentMethod as PaymentMethodType);
+          }
+        })
+        .catch(() => {});
+      return () => {
+        active = false;
+      };
+    }
+  }, [isSuccessParam, orderIdParam, isOrderCompleted, clearCart]);
+
+  const handleVerifiedSuccess = React.useCallback(
+    (confirmedOrderNumber: string, confirmedMethod?: string) => {
+      setVerificationPhase("confirmed");
+      setIsOrderCompleted(true);
+      setGeneratedOrderNumber(confirmedOrderNumber);
+      if (confirmedMethod) {
+        setConfirmedDisplayMethod(confirmedMethod);
+        setPaymentOption(confirmedMethod as PaymentMethodType);
+      }
       setCurrentStep(3);
       clearCart();
-      localStorage.removeItem("s4r_checkout_coupon");
+      clearPendingPaymentOrder();
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem("s4r_checkout_coupon");
+        } catch {}
+        window.history.replaceState(
+          null,
+          "",
+          `/checkout?success=true&orderId=${encodeURIComponent(confirmedOrderNumber)}`
+        );
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [clearCart]
+  );
+
+  // Crash / battery-off / tab-kill recovery: if user reopens /checkout without gateway callback query params,
+  // check for a recent in-flight payment in persistent storage before rendering checkout again (prevents double charge).
+  useEffect(() => {
+    if (isSuccessParam || isVerifyingParam || hasPaymentIssue || orderIdParam || isOrderCompleted) {
+      setIsRecoveryCheckDone(true);
+      return;
     }
-  }, [isSuccessParam, clearCart]);
+
+    const pending = loadPendingPaymentOrder();
+    if (!pending) {
+      setIsRecoveryCheckDone(true);
+      return;
+    }
+
+    const pendingRef = pending.orderNumber || pending.gatewayOrderId || "";
+    if (!pendingRef) {
+      clearPendingPaymentOrder();
+      setIsRecoveryCheckDone(true);
+      return;
+    }
+
+    setGeneratedOrderNumber(pendingRef);
+    if (pending.paymentMethod) {
+      setVerifiedGatewayMethod(pending.paymentMethod);
+    }
+
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setIsNetworkWeakOrOffline(true);
+      setRecoveredOrderId(pendingRef);
+      setVerificationPhase("verifying");
+      setIsRecoveryCheckDone(true);
+      return;
+    }
+
+    let cancelled = false;
+    setIsRecoveringPendingOrder(true);
+
+    (async () => {
+      try {
+        const result = await syncOrderPaymentStatus(pendingRef);
+        if (cancelled) return;
+
+        if (result?.isConfirmed) {
+          clearPendingPaymentOrder();
+          toast.success(
+            result.message ||
+              `Previous payment (#${result.orderNumber || pendingRef}) was confirmed by your bank!`
+          );
+          handleVerifiedSuccess(
+            result.orderNumber || pendingRef,
+            result.paymentMethod || pending.paymentMethod
+          );
+          return;
+        }
+
+        if (result?.isCancelled) {
+          clearPendingPaymentOrder();
+          setResolvedFailureReason(result.failureReason);
+          setGeneratedOrderNumber(result.orderNumber || pendingRef);
+          setVerificationPhase("cancelled");
+          setCurrentStep(2);
+          return;
+        }
+
+        if (result?.gatewayStatus === "failed" && !result?.isPending) {
+          clearPendingPaymentOrder();
+          setResolvedFailureReason(result.failureReason);
+          setGeneratedOrderNumber(result.orderNumber || pendingRef);
+          setVerificationPhase("failed");
+          setCurrentStep(2);
+          return;
+        }
+
+        if (result?.isPending) {
+          const resolvedNum = result.orderNumber || pendingRef;
+          setGeneratedOrderNumber(resolvedNum);
+          if (result.paymentMethod) {
+            setVerifiedGatewayMethod(result.paymentMethod);
+          }
+          setRecoveredOrderId(resolvedNum);
+          setVerificationPhase("verifying");
+          if (typeof window !== "undefined") {
+            window.history.replaceState(
+              null,
+              "",
+              `/checkout?verifying=true&orderId=${encodeURIComponent(resolvedNum)}`
+            );
+          }
+          toast.info(`Resuming verification for pending order #${resolvedNum}.`);
+          return;
+        }
+
+        clearPendingPaymentOrder();
+      } catch (err: any) {
+        if (cancelled) return;
+        const status = err?.response?.status;
+        if (typeof status === "number" && status >= 400 && status < 500) {
+          clearPendingPaymentOrder();
+        } else {
+          // Network/timeout right after phone reboot -> hold verification screen & wait for reconnect
+          setIsNetworkWeakOrOffline(true);
+          setRecoveredOrderId(pendingRef);
+          setVerificationPhase("verifying");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsRecoveringPendingOrder(false);
+          setIsRecoveryCheckDone(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSuccessParam, isVerifyingParam, hasPaymentIssue, orderIdParam, isOrderCompleted, handleVerifiedSuccess]);
+
+  // Automatic progressive-backoff polling when returning from gateway with ?verifying=true&orderId=... or crash recovery
+  useEffect(() => {
+    if (!isVerifyingParam && !recoveredOrderId) {
+      return;
+    }
+    if (!activeVerifyOrderId) {
+      setVerificationPhase("failed");
+      setCurrentStep(2);
+      return;
+    }
+
+    let cancelled = false;
+    let pollTimeout: ReturnType<typeof setTimeout> | null = null;
+    let inFlight = false;
+    let currentAttempt = 0;
+    let lastCheckedAt = 0;
+    const maxAttempts = PAYMENT_VERIFY_RETRY_DELAYS_MS.length + 1;
+
+    setVerificationPhase("verifying");
+    setVerificationAttempt(1);
+    setIsNetworkWeakOrOffline(typeof navigator !== "undefined" ? navigator.onLine === false : false);
+
+    const scheduleNextCheck = (attemptNumber: number) => {
+      if (cancelled || attemptNumber >= maxAttempts) return;
+      const delayMs =
+        PAYMENT_VERIFY_RETRY_DELAYS_MS[attemptNumber - 1] ??
+        PAYMENT_VERIFY_RETRY_DELAYS_MS[PAYMENT_VERIFY_RETRY_DELAYS_MS.length - 1];
+      if (pollTimeout) clearTimeout(pollTimeout);
+      pollTimeout = setTimeout(() => {
+        void runVerificationAttempt(attemptNumber + 1);
+      }, delayMs);
+    };
+
+    const runVerificationAttempt = async (requestedAttempt?: number) => {
+      if (cancelled || inFlight) return;
+      if (pollTimeout) {
+        clearTimeout(pollTimeout);
+        pollTimeout = null;
+      }
+
+      const nextAttempt = requestedAttempt ?? Math.min(currentAttempt + 1, maxAttempts);
+      currentAttempt = nextAttempt;
+      inFlight = true;
+      lastCheckedAt = Date.now();
+      setIsCheckingVerificationNow(true);
+      setVerificationAttempt(nextAttempt);
+
+      try {
+        const result = await syncOrderPaymentStatus(activeVerifyOrderId);
+        if (cancelled) return;
+        setIsNetworkWeakOrOffline(false);
+
+        if (result?.paymentMethod) {
+          setVerifiedGatewayMethod(result.paymentMethod);
+        }
+
+        if (result?.isConfirmed) {
+          clearPendingPaymentOrder();
+          toast.success(result.message || "Payment verified with bank! Your order is confirmed.");
+          handleVerifiedSuccess(result.orderNumber || activeVerifyOrderId, result.paymentMethod);
+          return;
+        }
+
+        if (result?.isCancelled) {
+          clearPendingPaymentOrder();
+          setVerificationPhase("cancelled");
+          setCurrentStep(2);
+          if (typeof window !== "undefined") {
+            window.history.replaceState(
+              null,
+              "",
+              `/checkout?cancelled=true&orderId=${encodeURIComponent(result.orderNumber || activeVerifyOrderId)}`
+            );
+          }
+          return;
+        }
+
+        if (result?.gatewayStatus === "failed" && !result?.isPending) {
+          clearPendingPaymentOrder();
+          setResolvedFailureReason(result.failureReason);
+          setVerificationPhase("failed");
+          setCurrentStep(2);
+          if (typeof window !== "undefined") {
+            window.history.replaceState(
+              null,
+              "",
+              `/checkout?failed=true&orderId=${encodeURIComponent(result.orderNumber || activeVerifyOrderId)}`
+            );
+          }
+          return;
+        }
+      } catch {
+        // Transient network/slow-internet glitch: notify user and keep polling / waiting for reconnect
+        if (!cancelled) {
+          setIsNetworkWeakOrOffline(true);
+        }
+      } finally {
+        inFlight = false;
+        if (!cancelled) {
+          setIsCheckingVerificationNow(false);
+        }
+      }
+
+      if (cancelled) return;
+
+      if (currentAttempt < maxAttempts) {
+        scheduleNextCheck(currentAttempt);
+      } else {
+        setVerificationPhase("pending_timeout");
+        setCurrentStep(2);
+      }
+    };
+
+    const handleResumeCheck = () => {
+      if (cancelled || inFlight) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        setIsNetworkWeakOrOffline(true);
+        return;
+      }
+      setIsNetworkWeakOrOffline(false);
+      if (Date.now() - lastCheckedAt < 1200) return;
+      void runVerificationAttempt();
+    };
+
+    const handleOffline = () => {
+      if (!cancelled) setIsNetworkWeakOrOffline(true);
+    };
+
+    manualVerifyTriggerRef.current = () => {
+      if (cancelled || inFlight) return;
+      void runVerificationAttempt();
+    };
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleResumeCheck);
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", handleResumeCheck);
+      window.addEventListener("online", handleResumeCheck);
+      window.addEventListener("offline", handleOffline);
+    }
+
+    void runVerificationAttempt(1);
+
+    return () => {
+      cancelled = true;
+      manualVerifyTriggerRef.current = null;
+      if (pollTimeout) clearTimeout(pollTimeout);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleResumeCheck);
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", handleResumeCheck);
+        window.removeEventListener("online", handleResumeCheck);
+        window.removeEventListener("offline", handleOffline);
+      }
+    };
+  }, [isVerifyingParam, recoveredOrderId, activeVerifyOrderId, handleVerifiedSuccess]);
 
   // Handle failed or cancelled payment redirect
   useEffect(() => {
     if (hasPaymentIssue) {
+      clearPendingPaymentOrder();
       if (!orderIdParam) {
         toast.info(isCancelledParam ? "Payment cancelled. Your items are still safely in your cart." : "Payment session ended. Your items are still safely in your cart.");
       }
@@ -413,12 +784,54 @@ export const CheckoutPageModule = () => {
     }
   }, [orderIdParam]);
 
-  // Redirect to cart ONLY if mounted, cart storage has loaded, cart is truly empty, and not on success or completed order
+  // Redirect to cart ONLY if mounted, cart storage has loaded, recovery check has completed (or URL carries callback context),
+  // cart is truly empty, and checkout is not verifying/completed/reconciling.
   useEffect(() => {
-    if (mounted && isLoaded && items.length === 0 && currentStep !== 3 && !isSuccessParam && !isOrderCompleted) {
+    const hasCallbackContext =
+      isSuccessParam ||
+      isVerifyingParam ||
+      hasPaymentIssue ||
+      Boolean(orderIdParam) ||
+      Boolean(recoveredOrderId);
+
+    const isVerifyingActive =
+      isVerifyingParam ||
+      Boolean(recoveredOrderId) ||
+      verificationPhase === "verifying" ||
+      verificationPhase === "pending_timeout" ||
+      verificationPhase === "confirmed";
+    const isReconcilingIssue =
+      (hasPaymentIssue || verificationPhase === "failed" || verificationPhase === "cancelled") &&
+      Boolean(orderIdParam || recoveredOrderId);
+
+    if (
+      mounted &&
+      isLoaded &&
+      (hasCallbackContext || isRecoveryCheckDone) &&
+      items.length === 0 &&
+      currentStep !== 3 &&
+      !isSuccessParam &&
+      !isOrderCompleted &&
+      !isVerifyingActive &&
+      !isReconcilingIssue
+    ) {
       router.push("/cart");
     }
-  }, [mounted, isLoaded, items.length, currentStep, isSuccessParam, isOrderCompleted, router]);
+  }, [
+    mounted,
+    isLoaded,
+    items.length,
+    currentStep,
+    isSuccessParam,
+    isOrderCompleted,
+    isVerifyingParam,
+    verificationPhase,
+    hasPaymentIssue,
+    orderIdParam,
+    recoveredOrderId,
+    isRecoveryCheckDone,
+    router,
+  ]);
 
   if (!mounted) {
     return (
@@ -763,7 +1176,12 @@ export const CheckoutPageModule = () => {
   };
 
   const handleAgreeToPay = async () => {
-    if (isProcessing || isPlacingOrder) return;
+    if (submitLockRef.current || isProcessing || isPlacingOrder || isRedirectingToGateway) return;
+
+    if (items.length === 0) {
+      toast.error("Your cart is empty. Please add items to place a new order.");
+      return;
+    }
 
     if (user && !selectedAddressId) {
       toast.error("Please select a shipping address");
@@ -799,6 +1217,7 @@ export const CheckoutPageModule = () => {
       }
     }
 
+    submitLockRef.current = true;
     setIsProcessing(true);
     
     // Look up the dial code to construct the full phone number
@@ -843,17 +1262,47 @@ export const CheckoutPageModule = () => {
       businessName: formData.isB2b && formData.businessName ? formData.businessName.trim() : undefined,
     }, {
       onError: () => {
+        submitLockRef.current = false;
         setIsProcessing(false);
+        setIsRedirectingToGateway(false);
       },
       onSuccess: (data: any) => {
+        const resData = data?.data || data || {};
+        const method = String(resData.paymentMethod || data?.paymentMethod || paymentOption || "").toLowerCase();
+        const gatewayOrderId = resData.gatewayOrderId;
+        const hasGatewayRedirect =
+          Boolean(resData.gatewayResponse) &&
+          (method === "payu" ||
+            method === "ccavenue" ||
+            method === "snapmint" ||
+            (method === "cod" && Boolean(gatewayOrderId)));
+
+        if (hasGatewayRedirect) {
+          // Keep checkout locked while external payment gateway page opens, with safety auto-unlock if navigation stalls
+          setIsRedirectingToGateway(true);
+          if (redirectFallbackTimerRef.current) clearTimeout(redirectFallbackTimerRef.current);
+          redirectFallbackTimerRef.current = setTimeout(() => {
+            submitLockRef.current = false;
+            setIsRedirectingToGateway(false);
+            setIsProcessing(false);
+            toast.info("Gateway redirect was interrupted or took too long. You can safely retry.");
+          }, 15000);
+          return;
+        }
+
+        submitLockRef.current = false;
         setIsProcessing(false);
-        const method = data?.paymentMethod || paymentOption;
-        const gatewayOrderId = data?.data?.gatewayOrderId;
 
         // Direct UPI / Google Pay
         if ((method === "upi" || method === "gpay") && data?.data?.gatewayResponse) {
           const gw = data.data.gatewayResponse;
           const ordId = gw.orderNumber || data?.data?.orderNumber || data?.data?.orderId || generatedOrderNumber;
+          savePendingPaymentOrder({
+            orderNumber: ordId,
+            gatewayOrderId: data?.data?.gatewayOrderId ? String(data.data.gatewayOrderId) : undefined,
+            guestOrderToken: data?.data?.guestOrderToken ? String(data.data.guestOrderToken) : undefined,
+            paymentMethod: method,
+          });
           setGeneratedOrderNumber(ordId);
           setUpiModalData({
             isOpen: true,
@@ -868,6 +1317,7 @@ export const CheckoutPageModule = () => {
 
         // Pure COD order completed
         if (method === "cod" && !gatewayOrderId) {
+          clearPendingPaymentOrder();
           setIsOrderCompleted(true);
           const ordId = data?.data?.orderNumber || data?.data?.orderId || generatedOrderNumber;
           setGeneratedOrderNumber(ordId);
@@ -883,6 +1333,7 @@ export const CheckoutPageModule = () => {
   };
 
   const handleUpiSuccess = (confirmedOrderNumber: string) => {
+    clearPendingPaymentOrder();
     setUpiModalData((prev) => ({ ...prev, isOpen: false }));
     setIsOrderCompleted(true);
     setGeneratedOrderNumber(confirmedOrderNumber);
@@ -947,6 +1398,12 @@ export const CheckoutPageModule = () => {
 
       const ordId = result?.data?.orderNumber || result?.data?.gatewayOrderId || result?.data?.orderId;
       if (ordId) {
+        savePendingPaymentOrder({
+          orderNumber: result?.data?.orderNumber || ordId,
+          gatewayOrderId: result?.data?.gatewayOrderId ? String(result.data.gatewayOrderId) : undefined,
+          guestOrderToken: result?.data?.guestOrderToken ? String(result.data.guestOrderToken) : undefined,
+          paymentMethod: "upi",
+        });
         setGeneratedOrderNumber(ordId);
         return ordId;
       }
@@ -1185,9 +1642,66 @@ export const CheckoutPageModule = () => {
       <main className="max-w-[1400px] w-full mx-auto px-3 sm:px-6 lg:px-8 pt-2 pb-36 lg:pt-2 lg:pb-8 flex-1">
         
         {/* ========================================================================= */}
-        {/* SCREEN 3: SUCCESS */}
+        {/* ACTIVE GATEWAY VERIFICATION SCREEN (Auto-polling bank confirmation)       */}
         {/* ========================================================================= */}
-        {currentStep === 3 ? (
+        {(isRecoveringPendingOrder || verificationPhase === "verifying") && currentStep !== 3 ? (
+          <div className="max-w-xl mx-auto py-8 sm:py-12 px-4 sm:px-8 text-center flex flex-col items-center bg-white rounded-xl sm:rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.04)] border border-slate-200/90 animate-in fade-in duration-300 my-4 sm:my-6">
+            <div className="w-14 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center mb-5 relative">
+              <div className="w-7 h-7 border-[3px] border-white border-t-transparent rounded-full animate-spin" />
+            </div>
+
+            <h1 className="font-sans text-xl sm:text-2xl font-black text-slate-900 tracking-tight uppercase mb-2">
+              {isRecoveringPendingOrder ? "RESUMING PAYMENT CHECK..." : "CONFIRMING YOUR PAYMENT..."}
+            </h1>
+
+            {(activeVerifyOrderId || generatedOrderNumber) && (
+              <span className="inline-block text-[11px] font-mono font-bold bg-slate-100 text-slate-800 px-3 py-1 rounded-md border border-slate-200 mb-3">
+                Order Ref: #{activeVerifyOrderId || generatedOrderNumber}
+              </span>
+            )}
+
+            <p className="text-slate-600 text-xs sm:text-sm max-w-md mb-4 leading-relaxed font-sans">
+              We are verifying final payment confirmation with {formatGatewayDisplayName(verifiedGatewayMethod)} &amp; your bank.{" "}
+              <strong className="text-slate-900">Please do not close, refresh, or press back.</strong>
+            </p>
+
+            <div className="w-full max-w-md bg-blue-50/80 border border-blue-200/80 rounded-xl p-3.5 text-left flex items-start gap-2.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-600 animate-ping mt-1 shrink-0" />
+              <div className="flex flex-col gap-0.5 text-xs text-blue-950 flex-1">
+                <span className="font-bold">
+                  {isRecoveringPendingOrder
+                    ? "Checking status of your unfinished payment before continuing..."
+                    : `Checking bank settlement status (Check ${verificationAttempt} of ${PAYMENT_VERIFY_RETRY_DELAYS_MS.length + 1})...`}
+                </span>
+                <span className="text-[11px] text-blue-800 leading-relaxed">
+                  Bank and UPI settlements typically take 2–15 seconds to confirm after redirect. If money was debited, your order will be confirmed automatically.
+                </span>
+              </div>
+            </div>
+
+            {isNetworkWeakOrOffline && (
+              <div className="w-full max-w-md mt-3 bg-amber-50 border border-amber-300 rounded-xl px-3.5 py-2.5 text-left text-xs text-amber-950 font-medium">
+                <strong>Weak or disconnected internet detected.</strong> We will automatically verify your order as soon as your network stabilizes — please do not pay twice.
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => manualVerifyTriggerRef.current?.()}
+              disabled={isCheckingVerificationNow || isRecoveringPendingOrder}
+              className="mt-4 px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-2"
+            >
+              {isCheckingVerificationNow || isRecoveringPendingOrder ? (
+                <>
+                  <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Checking Bank Status...</span>
+                </>
+              ) : (
+                <span>Check Status Now</span>
+              )}
+            </button>
+          </div>
+        ) : currentStep === 3 ? (
           <div className="max-w-xl mx-auto py-7 sm:py-10 px-4 sm:px-8 text-center flex flex-col items-center bg-white rounded-xl sm:rounded-2xl shadow-[0_1px_3px_rgba(15,23,42,0.04)] border border-slate-200/90 animate-in fade-in zoom-in-95 duration-300 my-4 sm:my-6">
             {/* Green Checkmark Badge */}
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-emerald-600 text-white flex items-center justify-center mb-4">
@@ -1196,7 +1710,9 @@ export const CheckoutPageModule = () => {
 
             {/* Modern Heading: ORDER CONFIRMED! / PAYMENT SUCCESS! */}
             <h1 className="font-sans text-2xl sm:text-3xl font-black text-slate-900 tracking-tight uppercase mb-2">
-              {paymentOption === "cod" ? "ORDER CONFIRMED!" : "PAYMENT SUCCESS!"}
+              {(confirmedDisplayMethod || (isOrderCompleted ? paymentOption : "")) === "cod"
+                ? "ORDER CONFIRMED!"
+                : "PAYMENT SUCCESS!"}
             </h1>
 
             <p className="text-slate-500 text-xs sm:text-sm max-w-md mb-4 leading-relaxed font-sans">
@@ -1207,7 +1723,7 @@ export const CheckoutPageModule = () => {
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 my-3 text-xs text-slate-700 flex items-center justify-between w-full max-w-md font-sans">
               <span className="font-semibold text-slate-500">Payment Method:</span>
               <span className="font-black text-slate-900 uppercase">
-                {paymentOption.toUpperCase()}
+                {(confirmedDisplayMethod || (isOrderCompleted ? paymentOption : "ONLINE PAYMENT")).toUpperCase()}
               </span>
             </div>
             
@@ -1337,14 +1853,20 @@ export const CheckoutPageModule = () => {
                 {currentStep === 2 && (
                   <CheckoutPaymentStep
                     generatedOrderNumber={generatedOrderNumber}
+                    orderReference={orderIdParam || recoveredOrderId || undefined}
                     paymentOption={paymentOption}
                     setPaymentOption={setPaymentOption}
                     setCurrentStep={setCurrentStep as (step: 1 | 2) => void}
                     handleAgreeToPay={handleAgreeToPay}
                     onPreOrderCreate={handleCreateOrderForGooglePay}
-                    isProcessing={isProcessing}
-                    isFailedParam={isFailedParam}
-                    isCancelledParam={isCancelledParam}
+                    onVerifiedSuccess={handleVerifiedSuccess}
+                    isProcessing={isProcessing || isPlacingOrder}
+                    isRedirecting={isRedirectingToGateway}
+                    isFailedParam={isFailedParam || verificationPhase === "failed"}
+                    isCancelledParam={isCancelledParam || verificationPhase === "cancelled"}
+                    isPendingParam={verificationPhase === "pending_timeout"}
+                    skipAutoVerify={verificationPhase === "failed"}
+                    failureReason={resolvedFailureReason}
                     shippingAddressSummary={
                       effectiveAddresses.find((a) => (a.id || String((a as any)._id)) === selectedAddressId)
                         ? (() => {
@@ -1400,13 +1922,17 @@ export const CheckoutPageModule = () => {
                       <button
                         type="button"
                         onClick={handleAgreeToPay}
-                        disabled={isProcessing || isPlacingOrder || !paymentOption}
-                        className="w-full bg-banner hover:bg-[#e8451c] text-white font-bold tracking-wider text-xs uppercase py-3.5 px-5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+                        disabled={isProcessing || isPlacingOrder || isRedirectingToGateway || !paymentOption}
+                        className="w-full bg-banner hover:bg-[#e8451c] text-white font-bold tracking-wider text-xs uppercase py-3.5 px-5 rounded-lg transition-colors disabled:opacity-75 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
                       >
-                        {isProcessing || isPlacingOrder ? (
+                        {isProcessing || isPlacingOrder || isRedirectingToGateway ? (
                           <>
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            <span>PROCESSING...</span>
+                            <span>
+                              {isRedirectingToGateway
+                                ? getGatewayRedirectLabel(paymentOption)
+                                : "PROCESSING ORDER..."}
+                            </span>
                           </>
                         ) : isCodWithAdvance && advanceAmount > 0 ? (
                           `PAY ₹${advanceAmount.toLocaleString("en-IN")} ADVANCE`
@@ -1414,6 +1940,12 @@ export const CheckoutPageModule = () => {
                           "PLACE ORDER"
                         )}
                       </button>
+
+                      {isRedirectingToGateway && (
+                        <p className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-2.5 py-1.5 text-center font-medium">
+                          Connecting securely to payment gateway. Please wait and do not refresh or press back.
+                        </p>
+                      )}
 
                       <p className="text-[9.5px] text-slate-400 text-center font-medium">
                         By placing your order, you agree to Store4Riders{" "}

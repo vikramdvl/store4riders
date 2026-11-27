@@ -196,11 +196,118 @@ describe("BrandService - Metadata and URL Resolution", () => {
       name: "Delete Me",
       slug: "delete-me",
     } as any;
+    vi.spyOn(BrandRepository, "findById").mockResolvedValue(null);
+    vi.spyOn(BrandRepository, "findBySlug").mockResolvedValue(null);
     vi.spyOn(BrandRepository, "delete").mockResolvedValue(mockDeleted);
 
     const res = await BrandService.deleteBrand("brand-del");
     expect(res).toBeDefined();
     expect(res.slug).toBe("delete-me");
+  });
+
+  it("should tombstone deleted static/catalog brands (e.g. parani) so getAllBrands does not resurrect them and getBrandById throws NotFoundError", async () => {
+    const tombstone = {
+      _id: "db-parani",
+      name: "Parani",
+      slug: "parani",
+      isDeleted: true,
+      isActive: false,
+      showInMenu: false,
+      menuGroup: "",
+      menuGroups: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as any;
+
+    vi.spyOn(BrandRepository, "findById").mockResolvedValue({
+      _id: "db-parani",
+      name: "Parani",
+      slug: "parani",
+      isActive: true,
+      showInMenu: true,
+    } as any);
+    vi.spyOn(BrandRepository, "update").mockResolvedValue(tombstone);
+
+    const deleted = await BrandService.deleteBrand("db-parani");
+    expect(deleted.isDeleted).toBe(true);
+    expect(deleted.isActive).toBe(false);
+    expect(deleted.showInMenu).toBe(false);
+
+    vi.spyOn(BrandRepository, "findAll").mockResolvedValue([tombstone]);
+    const all = await BrandService.getAllBrands(true);
+    expect(all.some((b) => b.slug === "parani")).toBe(false);
+
+    vi.spyOn(BrandRepository, "findBySlug").mockResolvedValue(tombstone);
+    await expect(BrandService.getBrandById("parani")).rejects.toThrow("Brand not found");
+  });
+
+  it("should preserve admin menu edits (hide from submenu or reassigned menuGroups) for default navbar brands", async () => {
+    vi.spyOn(BrandRepository, "findAll").mockResolvedValue([
+      {
+        _id: "db-axor",
+        name: "Axor Helmets",
+        slug: "axor-helmets",
+        isActive: true,
+        showInMenu: false,
+        menuGroup: "",
+        menuGroups: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any,
+      {
+        _id: "db-smk",
+        name: "SMK Helmets",
+        slug: "smk-helmets",
+        isActive: true,
+        showInMenu: true,
+        menuGroup: "Riding Gear",
+        menuGroups: ["Riding Gear"],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any,
+    ]);
+
+    const all = await BrandService.getAllBrands(true);
+    const axor = all.find((b) => b.slug === "axor-helmets");
+    expect(axor?.showInMenu).toBe(false);
+    expect(axor?.menuGroups).toEqual([]);
+    expect(axor?.menuGroup).toBe("");
+
+    const smk = all.find((b) => b.slug === "smk-helmets");
+    expect(smk?.showInMenu).toBe(true);
+    expect(smk?.menuGroups).toEqual(["Riding Gear"]);
+    expect(smk?.menuGroup).toBe("Riding Gear");
+  });
+
+  it("should restore a previously deleted brand tombstone when re-created via createBrand", async () => {
+    vi.spyOn(BrandRepository, "findBySlug").mockResolvedValue({
+      _id: "db-parani",
+      name: "Parani",
+      slug: "parani",
+      isDeleted: true,
+      isActive: false,
+      showInMenu: false,
+    } as any);
+    const updateSpy = vi.spyOn(BrandRepository, "update").mockResolvedValue({
+      _id: "db-parani",
+      name: "Parani",
+      slug: "parani",
+      isDeleted: false,
+      isActive: true,
+      showInMenu: true,
+    } as any);
+
+    const restored = await BrandService.createBrand({
+      name: "Parani",
+      slug: "parani",
+      isActive: true,
+      showInMenu: true,
+    });
+    expect(updateSpy).toHaveBeenCalledWith(
+      "db-parani",
+      expect.objectContaining({ slug: "parani", isDeleted: false })
+    );
+    expect(restored?.isDeleted).toBe(false);
   });
 
   it("should paginate brands correctly via getPaginatedBrands", async () => {

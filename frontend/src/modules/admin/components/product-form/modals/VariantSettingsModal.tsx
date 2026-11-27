@@ -64,6 +64,9 @@ export function VariantSettingsModal() {
   const [colorInput, setColorInput] = useState<string>("");
   const [sizeInput, setSizeInput] = useState<string>("");
   const [weightInput, setWeightInput] = useState<number | "">("");
+  const [lengthInput, setLengthInput] = useState<number | "">("");
+  const [breadthInput, setBreadthInput] = useState<number | "">("");
+  const [heightInput, setHeightInput] = useState<number | "">("");
   const [statusInput, setStatusInput] = useState<"enabled" | "disabled">("enabled");
   const [visibilityInput, setVisibilityInput] = useState<string>("Catalog, Search");
   const [syncToParentGallery, setSyncToParentGallery] = useState<boolean>(true);
@@ -109,6 +112,9 @@ export function VariantSettingsModal() {
       setColorInput(currentVariant.color || "");
       setSizeInput(currentVariant.size || "");
       setWeightInput(currentVariant.weight ?? "");
+      setLengthInput(currentVariant.length ?? "");
+      setBreadthInput(currentVariant.breadth ?? "");
+      setHeightInput(currentVariant.height ?? "");
       setStatusInput(currentVariant.status || "enabled");
       setVisibilityInput(currentVariant.visibility || "Catalog, Search");
       setApplyToSameColor(applyToAllSameColor);
@@ -211,6 +217,14 @@ export function VariantSettingsModal() {
             color: finalColor,
             size: finalSize,
             weight: isCurrent ? (weightInput !== "" ? Number(weightInput) : "") : v.weight,
+            weightUnit: isCurrent && weightInput !== "" ? (v.weightUnit || weightUnit) : v.weightUnit,
+            length: isCurrent ? (lengthInput !== "" ? Number(lengthInput) : "") : v.length,
+            breadth: isCurrent ? (breadthInput !== "" ? Number(breadthInput) : "") : v.breadth,
+            height: isCurrent ? (heightInput !== "" ? Number(heightInput) : "") : v.height,
+            dimensionUnit:
+              isCurrent && (lengthInput !== "" || breadthInput !== "" || heightInput !== "")
+                ? "cm"
+                : v.dimensionUnit,
             status: isCurrent ? statusInput : v.status,
             visibility: isCurrent ? visibilityInput : v.visibility,
             imageUrl: imageUrl || undefined,
@@ -857,7 +871,7 @@ export function VariantSettingsModal() {
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                Child Weight ({weightUnit})
+                Child Weight ({currentVariant.weightUnit || weightUnit})
               </label>
               <input
                 type="number"
@@ -872,6 +886,51 @@ export function VariantSettingsModal() {
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-brand"
               />
               <p className="text-[10px] text-slate-400 mt-1">Override parent weight for shipping calculations.</p>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Child Box Dimensions — L × B × H (cm)
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={lengthInput}
+                  onKeyDown={(e) => {
+                    if (e.key === "-" || e.key === "e" || e.key === "E" || e.key === "+") e.preventDefault();
+                  }}
+                  onChange={(e) => setLengthInput(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+                  placeholder="L (cm)"
+                  className="w-full px-2.5 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-brand"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={breadthInput}
+                  onKeyDown={(e) => {
+                    if (e.key === "-" || e.key === "e" || e.key === "E" || e.key === "+") e.preventDefault();
+                  }}
+                  onChange={(e) => setBreadthInput(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+                  placeholder="B (cm)"
+                  className="w-full px-2.5 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-brand"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={heightInput}
+                  onKeyDown={(e) => {
+                    if (e.key === "-" || e.key === "e" || e.key === "E" || e.key === "+") e.preventDefault();
+                  }}
+                  onChange={(e) => setHeightInput(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+                  placeholder="H (cm)"
+                  className="w-full px-2.5 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-brand"
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">Optional override when this variant ships in a different box size than the parent.</p>
             </div>
 
             <div>

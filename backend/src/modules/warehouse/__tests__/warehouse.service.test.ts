@@ -129,6 +129,8 @@ describe("WarehouseService - Multi-Warehouse Management", () => {
 
       expect(result.syncedCount).toBe(1);
       expect(result.warehouses[0].name).toBe("Main_Godown");
+      expect(result.warehouses[0].addressLine1).toBe("123 Street");
+      expect(result.warehouses[0].addressLine2).toBe("Suite 4");
       expect(result.warehouses[0].shiprocketLocationId).toBe("Main_Godown");
       expect(WarehouseRepository.unsetAllDefault).toHaveBeenCalled();
     });

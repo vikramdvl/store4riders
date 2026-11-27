@@ -6,6 +6,8 @@ import { ApiResponse } from "../../core/response/ApiResponse";
 import { ENV } from "../../core/config/env";
 import { ValidationError, ForbiddenError } from "../../core/errors/AppError";
 import { UserService } from "../user/user.service";
+import { getClientIp } from "../../core/utils/clientIp";
+import { logger } from "../../core/utils/logger";
 
 /**
  * @class OrderController
@@ -20,26 +22,37 @@ export class OrderController {
   static async create(req: NextRequest) {
     const { userId, data } = await OrderValidator.validateCreate(req);
     const idempotencyKey = req.headers.get("Idempotency-Key") || (data as any).idempotencyKey || "";
-    const result = await OrderService.createOrder(userId, { ...data, idempotencyKey });
+    const clientIp = getClientIp(req);
+    const result = await OrderService.createOrder(userId, { ...data, idempotencyKey, clientIp });
     return ApiResponse.success(result, "Order created", 201);
   }
 
 
   static async syncPaymentStatus(req: NextRequest) {
-    let userId: string | undefined = undefined;
-    try {
-      userId = OrderValidator.extractUserId(req);
-    } catch {}
-    const body = await req.json().catch(() => ({}));
-    const orderId = body.orderId || req.nextUrl.searchParams.get("orderId");
-    if (!orderId) {
-      return ApiResponse.error("Order ID or Order Number is required", 400);
+    const { userId, orderId, guestToken } = await OrderValidator.validateSyncPayment(req);
+    let scopedUserId = userId;
+    let isStaff = false;
+    if (userId) {
+      try {
+        const role = await UserService.getRole(userId);
+        const staffRoles = ["super_admin", "admin", "logistic", "customer_care", "order_manager", "customer_support"];
+        if (staffRoles.includes(role)) {
+          scopedUserId = undefined;
+          isStaff = true;
+        }
+      } catch {
+        // Non-staff fallback keeps user-scoped ownership enforcement
+      }
     }
-    const result = await OrderService.syncPaymentStatus(orderId, userId);
+    const result = isStaff
+      ? await OrderService.syncPaymentStatus(orderId, undefined)
+      : scopedUserId && !guestToken
+      ? await OrderService.syncPaymentStatus(orderId, scopedUserId)
+      : await OrderService.syncPaymentStatus(orderId, scopedUserId, { requireCallerProof: true, guestToken });
     return ApiResponse.success(result, "Payment status checked");
   }
   static async verify(req: NextRequest) {
-    const { userId, data } = await OrderValidator.validateVerify(req);
+    const { userId, data, guestToken } = await OrderValidator.validateVerify(req);
     await OrderService.verifyPayment(
       userId,
       data.gatewayOrderId,
@@ -49,6 +62,8 @@ export class OrderController {
         paymentData: data.paymentData,
         tezResponse: data.tezResponse,
         utr: data.utr,
+        ...(guestToken ? { guestToken } : {}),
+        ...(!userId ? { requireCallerProof: true } : {}),
       }
     );
     return ApiResponse.success(null, "Payment verified successfully");
@@ -58,12 +73,12 @@ export class OrderController {
     const userId = OrderValidator.extractUserId(req);
     try {
       const { UserModel } = await import("../user/user.model");
-      const userDoc: any = await UserModel.findById(userId).select("email phone addresses").lean().exec();
-      if (userDoc?.email) {
+      const userDoc: any = await UserModel.findById(userId).select("email phone addresses isEmailVerified").lean().exec();
+      if (userDoc?.email && userDoc.isEmailVerified !== false) {
         await OrderRepository.linkGuestOrders(userDoc.email, userId);
+        const { AuthService } = await import("../auth/auth.service");
+        await AuthService.syncUserFromLinkedOrders(userId, userDoc);
       }
-      const { AuthService } = await import("../auth/auth.service");
-      await AuthService.syncUserFromLinkedOrders(userId, userDoc);
     } catch {
       // Non-blocking sync fallback
     }
@@ -74,7 +89,7 @@ export class OrderController {
   static async getById(req: NextRequest, id: string) {
     const userId = OrderValidator.extractUserId(req);
     const order = await OrderRepository.findById(id);
-    if (!order || order.userId !== userId) {
+    if (!order || !order.userId || String(order.userId) !== String(userId)) {
       return ApiResponse.error("Order not found", 404);
     }
     return ApiResponse.success(order, "Order fetched successfully");
@@ -89,8 +104,33 @@ export class OrderController {
     req.headers.forEach((val, key) => { headers[key.toLowerCase()] = val; });
 
     const gatewayType = (routePath && routePath[1]) || "unknown";
-    const isRedirect = routePath && ["payu", "snapmint", "ccavenue"].includes(routePath[1]);
-    const frontendUrl = ENV.FRONTEND_URL;
+    const isDedicatedS2S = Boolean(routePath && routePath[2] === "s2s");
+
+    if (isDedicatedS2S) {
+      const envAny = ENV as Record<string, any>;
+      const allowlistRaw =
+        gatewayType === "payu"
+          ? envAny?.PAYU_WEBHOOK_ALLOWED_IPS || process.env.PAYU_WEBHOOK_ALLOWED_IPS || ""
+          : gatewayType === "ccavenue"
+          ? envAny?.CCAVENUE_WEBHOOK_ALLOWED_IPS || process.env.CCAVENUE_WEBHOOK_ALLOWED_IPS || ""
+          : gatewayType === "snapmint"
+          ? envAny?.SNAPMINT_WEBHOOK_ALLOWED_IPS || process.env.SNAPMINT_WEBHOOK_ALLOWED_IPS || ""
+          : "";
+      const allowedIps = String(allowlistRaw)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (allowedIps.length > 0) {
+        const callerIp = getClientIp(req);
+        if (!allowedIps.includes(callerIp)) {
+          logger.warn(`Blocked unauthorized ${gatewayType.toUpperCase()} S2S webhook IP: ${callerIp}`);
+          return ApiResponse.error("Unauthorized webhook source IP", 403);
+        }
+      }
+    }
+
+    const isRedirect = !isDedicatedS2S && routePath && ["payu", "snapmint", "ccavenue"].includes(routePath[1]);
+    const frontendUrl = (ENV.FRONTEND_URL || "").split(",")[0].trim().replace(/\/+$/, "");
 
     const getOrderId = () => {
       try {
@@ -123,6 +163,112 @@ export class OrderController {
       }
     };
 
+    const detectExplicitCancellation = (): boolean => {
+      if (routePath && (routePath[2] === "cancel" || routePath[2] === "cancelled")) {
+        return true;
+      }
+      try {
+        const bodyLower = rawBody.toLowerCase();
+        return (
+          bodyLower.includes("usercancelled") ||
+          bodyLower.includes("user cancelled") ||
+          bodyLower.includes("cancelled by user") ||
+          bodyLower.includes("status=cancel") ||
+          bodyLower.includes("status=aborted") ||
+          bodyLower.includes("unmappedstatus=usercancelled")
+        );
+      } catch {
+        return false;
+      }
+    };
+
+    const resolveUnconfirmedRedirect = async (
+      orderRef: string,
+      opts: {
+        isPendingHint: boolean;
+        isSuccessRoute: boolean;
+        isFailureRoute: boolean;
+        isCancelledHint: boolean;
+        hadWebhookError: boolean;
+        isExchangeFeeHint?: boolean;
+        guestOrderToken?: string;
+      }
+    ) => {
+      const orderParam = orderRef ? `&orderId=${encodeURIComponent(orderRef)}` : "";
+
+      if (opts.isCancelledHint) {
+        if (opts.isExchangeFeeHint && orderRef) {
+          return NextResponse.redirect(
+            `${frontendUrl}/account/orders/${encodeURIComponent(orderRef)}?exchangeFeePaid=false`,
+            303
+          );
+        }
+        const cancelGuestParam = opts.guestOrderToken
+          ? `&guestToken=${encodeURIComponent(opts.guestOrderToken)}`
+          : "";
+        return NextResponse.redirect(`${frontendUrl}/checkout?cancelled=true${orderParam}${cancelGuestParam}`, 303);
+      }
+
+      // Perform immediate S2S reconciliation before deciding redirect destination so delayed bank captures confirm seamlessly
+      let syncResult: any = null;
+      let syncFailed = false;
+      if (orderRef) {
+        try {
+          syncResult = await OrderService.syncPaymentStatus(orderRef, undefined, { includeGuestToken: true });
+        } catch {
+          syncFailed = true;
+        }
+      }
+
+      const resolvedOrderId = syncResult?.orderNumber || orderRef;
+      const resolvedOrderParam = resolvedOrderId ? `&orderId=${encodeURIComponent(resolvedOrderId)}` : "";
+      const effectiveGuestToken = syncResult?.guestOrderToken || opts.guestOrderToken;
+      const guestParam = effectiveGuestToken ? `&guestToken=${encodeURIComponent(effectiveGuestToken)}` : "";
+      const isExchangeFee = Boolean(opts.isExchangeFeeHint || syncResult?.isExchangeFee);
+
+      if (syncResult?.isConfirmed) {
+        if (isExchangeFee && resolvedOrderId) {
+          return NextResponse.redirect(
+            `${frontendUrl}/account/orders/${encodeURIComponent(String(resolvedOrderId))}?exchangeFeePaid=true`,
+            303
+          );
+        }
+        return NextResponse.redirect(`${frontendUrl}/checkout?success=true${resolvedOrderParam}${guestParam}`, 303);
+      }
+
+      if (syncResult?.isCancelled) {
+        if (isExchangeFee && resolvedOrderId) {
+          return NextResponse.redirect(
+            `${frontendUrl}/account/orders/${encodeURIComponent(String(resolvedOrderId))}?exchangeFeePaid=false`,
+            303
+          );
+        }
+        return NextResponse.redirect(`${frontendUrl}/checkout?cancelled=true${resolvedOrderParam}${guestParam}`, 303);
+      }
+
+      const shouldAutoVerify =
+        opts.isPendingHint ||
+        Boolean(syncResult?.isPending) ||
+        opts.isSuccessRoute ||
+        opts.hadWebhookError ||
+        syncFailed ||
+        !opts.isFailureRoute;
+
+      if (isExchangeFee && resolvedOrderId) {
+        const feeStatus = shouldAutoVerify ? "pending" : "false";
+        return NextResponse.redirect(
+          `${frontendUrl}/account/orders/${encodeURIComponent(String(resolvedOrderId))}?exchangeFeePaid=${feeStatus}`,
+          303
+        );
+      }
+
+      if (shouldAutoVerify) {
+        return NextResponse.redirect(`${frontendUrl}/checkout?verifying=true${resolvedOrderParam}${guestParam}`, 303);
+      }
+
+      return NextResponse.redirect(`${frontendUrl}/checkout?failed=true${resolvedOrderParam}${guestParam}`, 303);
+    };
+
     try {
       let webhookResult: any = null;
       if (gatewayType && gatewayType !== "unknown") {
@@ -137,7 +283,7 @@ export class OrderController {
           status: isWebhookSuccess ? "success" : "failure",
           resource: { type: "Payment", id: orderRef || undefined, label: orderRef || gatewayType.toUpperCase() },
           req,
-          message: `Processed ${gatewayType.toUpperCase()} payment webhook${orderRef ? ` for ${orderRef}` : ""}: ${isWebhookSuccess ? "success" : "failed/cancelled"}`,
+          message: `Processed ${gatewayType.toUpperCase()} payment webhook${orderRef ? ` for ${orderRef}` : ""}: ${isWebhookSuccess ? "success" : webhookResult?.isPending ? "pending" : "failed/cancelled"}`,
           metadata: { gateway: gatewayType, isExchangeFee: Boolean(webhookResult?.isExchangeFee) },
         });
       }
@@ -148,42 +294,33 @@ export class OrderController {
         const orderParam = orderId ? `&orderId=${encodeURIComponent(orderId)}` : "";
 
         // True success requires both verification success and non-failure route
-        const isFailureRoute = routePath && routePath[2] === "failure";
+        const isFailureRoute = routePath && (routePath[2] === "failure" || routePath[2] === "cancel" || routePath[2] === "cancelled");
+        const isSuccessRoute = Boolean(routePath && routePath[2] === "success");
         const isSuccess = Boolean(webhookResult?.success) && !isFailureRoute;
 
-        if (webhookResult?.isExchangeFee && webhookResult?.orderId) {
-          const feeStatus = isSuccess ? "true" : "false";
-          return NextResponse.redirect(
-            `${frontendUrl}/account/orders/${encodeURIComponent(String(webhookResult.orderId))}?exchangeFeePaid=${feeStatus}`,
-            303
-          );
-        }
-
         if (isSuccess) {
-          return NextResponse.redirect(`${frontendUrl}/checkout?success=true${orderParam}`, 303);
-        } else {
-          const isCancelled = (() => {
-            try {
-              const bodyLower = rawBody.toLowerCase();
-              return (
-                bodyLower.includes("usercancelled") ||
-                bodyLower.includes("user cancelled") ||
-                bodyLower.includes("cancelled by user") ||
-                bodyLower.includes("status=cancel") ||
-                bodyLower.includes("status=aborted") ||
-                bodyLower.includes("unmappedstatus=usercancelled")
-              );
-            } catch {
-              return false;
-            }
-          })();
-
-          if (isCancelled) {
-            return NextResponse.redirect(`${frontendUrl}/checkout?cancelled=true${orderParam}`, 303);
-          } else {
-            return NextResponse.redirect(`${frontendUrl}/checkout?failed=true${orderParam}`, 303);
+          if (webhookResult?.isExchangeFee && webhookResult?.orderId) {
+            return NextResponse.redirect(
+              `${frontendUrl}/account/orders/${encodeURIComponent(String(webhookResult.orderId))}?exchangeFeePaid=true`,
+              303
+            );
           }
+          const guestParam = webhookResult?.guestOrderToken
+            ? `&guestToken=${encodeURIComponent(webhookResult.guestOrderToken)}`
+            : "";
+          return NextResponse.redirect(`${frontendUrl}/checkout?success=true${orderParam}${guestParam}`, 303);
         }
+
+        const isCancelled = detectExplicitCancellation() || Boolean(webhookResult?.isCancelled);
+        return await resolveUnconfirmedRedirect(orderId, {
+          isPendingHint: Boolean(webhookResult?.isPending),
+          isSuccessRoute,
+          isFailureRoute: Boolean(isFailureRoute),
+          isCancelledHint: isCancelled,
+          hadWebhookError: false,
+          isExchangeFeeHint: Boolean(webhookResult?.isExchangeFee),
+          guestOrderToken: webhookResult?.guestOrderToken,
+        });
       }
 
       return ApiResponse.success(webhookResult, "Webhook processed");
@@ -203,9 +340,15 @@ export class OrderController {
         });
       } catch {}
       if (isRedirect) {
-        const orderId = orderRef;
-        const orderParam = orderId ? `&orderId=${encodeURIComponent(orderId)}` : "";
-        return NextResponse.redirect(`${frontendUrl}/checkout?failed=true${orderParam}`, 303);
+        const isFailureRoute = Boolean(routePath && (routePath[2] === "failure" || routePath[2] === "cancel" || routePath[2] === "cancelled"));
+        const isSuccessRoute = Boolean(routePath && routePath[2] === "success");
+        return await resolveUnconfirmedRedirect(orderRef, {
+          isPendingHint: false,
+          isSuccessRoute,
+          isFailureRoute,
+          isCancelledHint: detectExplicitCancellation(),
+          hadWebhookError: true,
+        });
       }
       return ApiResponse.error(err.message, err.statusCode || 500);
     }
@@ -260,9 +403,13 @@ export class OrderController {
   static async adminUpdateStatus(req: NextRequest, id: string) {
     const userId = OrderValidator.extractUserId(req);
     const role = await UserService.getRole(userId);
+    const allowedStaff = ["super_admin", "admin", "logistic", "customer_care", "order_manager", "customer_support"];
+    if (!allowedStaff.includes(role)) {
+      throw new ForbiddenError("Staff order management access required");
+    }
     const { status } = await OrderValidator.validateAdminUpdateStatus(req);
 
-    if (role === "customer_care" && status !== "cancelled") {
+    if ((role === "customer_care" || role === "customer_support") && status !== "cancelled") {
       throw new ForbiddenError("Customer Care can only cancel orders");
     }
 
@@ -316,6 +463,11 @@ export class OrderController {
 
   static async adminAddNote(req: NextRequest, id: string) {
     const userId = OrderValidator.extractUserId(req);
+    const role = await UserService.getRole(userId);
+    const allowedStaff = ["super_admin", "admin", "logistic", "customer_care", "order_manager", "customer_support"];
+    if (!allowedStaff.includes(role)) {
+      throw new ForbiddenError("Staff access required to add order notes");
+    }
     const { text } = await OrderValidator.validateAdminAddNote(req);
     const updated = await OrderService.addNote(id, userId, text);
     return ApiResponse.success(updated, "Note added to order");
@@ -429,21 +581,29 @@ export class OrderController {
   }
 
   static async generateInvoice(req: NextRequest, id: string) {
-    let userId = "";
-    try {
-      userId = OrderValidator.extractUserId(req);
-    } catch {
-      // Check if admin token is present if user token fails
+    const userId = OrderValidator.extractUserId(req);
+    const isAdminRequested = req.nextUrl.searchParams.get("admin") === "true";
+    let effectiveUserId = userId;
+    if (isAdminRequested) {
+      const role = await UserService.getRole(userId);
+      const allowedStaff = ["super_admin", "admin", "logistic", "customer_care", "order_manager", "customer_support"];
+      if (!allowedStaff.includes(role)) {
+        throw new ForbiddenError("Staff access required");
+      }
+      effectiveUserId = "admin";
     }
-    
-    const isAdmin = req.nextUrl.searchParams.get("admin") === "true";
-    const effectiveUserId = isAdmin ? "admin" : userId;
 
     const invoiceUrl = await OrderService.getInvoiceUrl(id, effectiveUserId);
     return ApiResponse.success({ invoiceUrl }, "Invoice generated successfully");
   }
 
   static async adminResendInvoiceEmail(req: NextRequest, id: string) {
+    const userId = OrderValidator.extractUserId(req);
+    const role = await UserService.getRole(userId);
+    const allowedStaff = ["super_admin", "admin", "logistic", "customer_care", "order_manager", "customer_support"];
+    if (!allowedStaff.includes(role)) {
+      throw new ForbiddenError("Staff access required to resend invoice emails");
+    }
     const result = await OrderService.resendInvoiceEmail(id);
     return ApiResponse.success(result, `Invoice email sent to ${result.recipientEmail}`);
   }
@@ -451,8 +611,9 @@ export class OrderController {
   static async adminAssignWarehouse(req: NextRequest, id: string) {
     const userId = OrderValidator.extractUserId(req);
     const role = await UserService.getRole(userId);
-    if (role === "customer_care") {
-      throw new ForbiddenError("Customer Care cannot assign warehouses");
+    const allowedWarehouseStaff = ["super_admin", "admin", "logistic", "order_manager"];
+    if (!allowedWarehouseStaff.includes(role)) {
+      throw new ForbiddenError("Logistics or Admin access required to assign warehouses");
     }
     const body = await req.json();
     if (!body.warehouseId) {

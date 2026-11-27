@@ -2,9 +2,15 @@ import { NextRequest } from "next/server";
 import { ApiResponse } from "../../core/response/ApiResponse";
 import { MigrationService } from "./migration.service";
 import { AppError } from "../../core/errors/AppError";
+import { z } from "zod";
 import fs from "fs";
 import path from "path";
 import os from "os";
+
+const previewS3Schema = z.object({
+  s3Key: z.string().trim().min(1, "s3Key is required").max(500),
+  fileName: z.string().trim().max(260).optional(),
+});
 
 export class MigrationController {
   /**
@@ -33,7 +39,8 @@ export class MigrationController {
       throw new AppError("s3Key is required", 400);
     }
 
-    const adminId = req.headers.get("x-user-id") || "admin";
+    const { extractAdminFromAuth } = await import("../../core/middlewares/auth");
+    const adminId = extractAdminFromAuth(req);
     const result = await MigrationService.startCsvMigration({
       s3Key,
       fileName,
@@ -66,12 +73,44 @@ export class MigrationController {
     fs.writeFileSync(filePath, buffer);
 
     // Extract user ID (Assuming extractUserFromAuth middleware sets headers or it's passed)
-    const adminId = req.headers.get("x-user-id") || "admin";
+    const { extractAdminFromAuth } = await import("../../core/middlewares/auth");
+    const adminId = extractAdminFromAuth(req);
 
     // Call service to add to queue
     const result = await MigrationService.startCsvMigration(filePath, adminId);
 
     return ApiResponse.success(result, "Migration started", 202);
+  }
+
+  static async previewCsv(req: NextRequest) {
+    const contentType = req.headers.get("content-type") || "";
+
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
+
+      if (!file) {
+        throw new AppError("No CSV file uploaded", 400);
+      }
+      if (!file.name.toLowerCase().endsWith(".csv")) {
+        throw new AppError("Only CSV files are allowed", 400);
+      }
+
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const report = await MigrationService.previewCsvMigration({ buffer });
+      return ApiResponse.success(report, "CSV preview generated successfully");
+    }
+
+    const rawBody = await req.json().catch(() => ({}));
+    const { s3Key, fileName } = previewS3Schema.parse(rawBody);
+
+    if (fileName && !fileName.toLowerCase().endsWith(".csv")) {
+      throw new AppError("Only CSV files are allowed", 400);
+    }
+
+    const report = await MigrationService.previewCsvMigration({ s3Key });
+    return ApiResponse.success(report, "CSV preview generated successfully");
   }
 
   static async getStatus(req: NextRequest, jobId: string) {

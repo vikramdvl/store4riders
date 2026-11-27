@@ -84,17 +84,22 @@ export async function withTransactionSafe<T>(
   }
 
   try {
-    let result: T;
-    await session.withTransaction(async () => {
-      result = await operation(session!);
-    });
-    return result!;
+    let result: T | undefined;
+    await session.withTransaction(
+      async () => {
+        result = undefined;
+        result = await operation(session!);
+      },
+      { maxCommitTimeMS: 10000 }
+    );
+    return result as T;
   } catch (err: any) {
     const msg = String(err?.message || "");
     if (
       msg.includes("replica set member or mongos") ||
       msg.includes("Transaction numbers are only allowed") ||
-      msg.includes("does not support retryable writes")
+      msg.includes("does not support retryable writes") ||
+      msg.includes("enableMajorityReadConcern")
     ) {
       cachedTransactionSupport = false;
       logger.warn(`MongoDB reported transactions unsupported: "${msg}". Executing operation directly without transaction session.`);

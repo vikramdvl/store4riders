@@ -278,19 +278,23 @@ export function AdminHeroSeoModule() {
       showOverlay: isGlobalOverlayOn ? (s.showOverlay !== false) : false,
     }));
 
-    await updateMutation.mutateAsync({
-      hero: {
-        ...heroState,
-        showOverlay: isGlobalOverlayOn,
-        slides: finalSlides,
-        bgImages: finalSlides.map((s) => s.imageUrl),
-      },
-      seo: {
-        ...seoState,
-        metaTitle,
-        metaDescription: metaDesc,
-      },
-    });
+    try {
+      await updateMutation.mutateAsync({
+        hero: {
+          ...heroState,
+          showOverlay: isGlobalOverlayOn,
+          slides: finalSlides,
+          bgImages: finalSlides.map((s) => s.imageUrl),
+        },
+        seo: {
+          ...seoState,
+          metaTitle,
+          metaDescription: metaDesc,
+        },
+      });
+    } catch {
+      // Error toast is handled by useUpdateHeroAndSeo onError
+    }
   };
 
   const handleToggleGlobalOverlay = async (isChecked: boolean) => {
@@ -320,14 +324,8 @@ export function AdminHeroSeoModule() {
           metaDescription: metaDesc,
         },
       });
-
-      toast.success(
-        isChecked
-          ? "Hero text overlay ENABLED! Live storefront updated."
-          : "Hero text overlay DISABLED! Live storefront updated."
-      );
-    } catch (err: any) {
-      toast.error("Failed to update overlay: " + (err?.response?.data?.message || err.message));
+    } catch {
+      // Error toast is handled by useUpdateHeroAndSeo onError
     }
   };
 
@@ -358,14 +356,8 @@ export function AdminHeroSeoModule() {
           metaDescription: metaDesc,
         },
       });
-
-      toast.success(
-        isChecked
-          ? `Slide #${idx + 1} overlay ENABLED!`
-          : `Slide #${idx + 1} overlay DISABLED (pure image mode)!`
-      );
-    } catch (err: any) {
-      toast.error("Failed to update slide overlay: " + (err?.response?.data?.message || err.message));
+    } catch {
+      // Error toast is handled by useUpdateHeroAndSeo onError
     }
   };
 
@@ -831,7 +823,7 @@ export function AdminHeroSeoModule() {
                 values={currentSlides.map((s) => s.imageUrl)}
                 onChange={(newUrls) => {
                   const updated: IHeroSlide[] = newUrls.map((url, i) => {
-                    const existing = currentSlides[i];
+                    const existing = currentSlides.find((s) => s.imageUrl === url);
                     return (
                       existing || {
                         id: `slide-${Date.now()}-${i}`,

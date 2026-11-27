@@ -101,6 +101,12 @@ export interface IOrderItem {
   hsnCode?: string;
   image?: string;
   slug?: string;
+  weight?: number;
+  weightUnit?: string;
+  length?: number;
+  breadth?: number;
+  height?: number;
+  dimensionUnit?: string;
 }
 
 export interface IOrderPricing {

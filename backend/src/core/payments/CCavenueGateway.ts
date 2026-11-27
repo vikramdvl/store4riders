@@ -61,11 +61,10 @@ export class CCavenueGateway implements PaymentGateway {
 
     let cancelUrl = ((order as any)?.cancelUrl || ENV.CCAVENUE_CANCEL_URL || process.env.CCAVENUE_CANCEL_URL || "").trim();
     if (!cancelUrl) {
-      const orderParam = `?cancelled=true${order.orderNumber ? `&orderId=${encodeURIComponent(order.orderNumber)}` : ""}`;
       if (isLive && cleanApiBase.includes("localhost")) {
-        cancelUrl = `https://store4riders.com/checkout${orderParam}`;
+        cancelUrl = "https://store4riders.com/api/v1/orders/webhook/ccavenue/cancel";
       } else {
-        cancelUrl = `${cleanApiBase}/checkout${orderParam}`;
+        cancelUrl = `${cleanApiBase}/api/v1/orders/webhook/ccavenue/cancel`;
       }
     }
     
@@ -169,7 +168,8 @@ export class CCavenueGateway implements PaymentGateway {
         return { success: false, message: "Amount mismatch detected" };
       }
 
-      if (orderStatus === "Success") {
+      const normalizedStatus = String(orderStatus).trim().toLowerCase();
+      if (normalizedStatus === "success" || normalizedStatus === "successful") {
         return { success: true, gatewayPaymentId: trackingId };
       }
       return { success: false, message: `CCAvenue payment failed: ${orderStatus}` };
@@ -195,35 +195,98 @@ export class CCavenueGateway implements PaymentGateway {
       const decryptedData = this.decrypt(encResp, workingKey);
       const decParams = new URLSearchParams(decryptedData);
       
-      const orderStatus = decParams.get("order_status");
+      const orderStatus = decParams.get("order_status") || "";
+      const riskStatus = (decParams.get("risk_status") || "").trim().toLowerCase();
       const orderId = decParams.get("order_id") || decParams.get("order_no");
       const trackingId = decParams.get("tracking_id") || "";
       const amount = decParams.get("amount") || "0";
       const statusMessage = decParams.get("status_message") || "";
       const bankRefNo = decParams.get("bank_ref_no") || "";
       const paymentMode = decParams.get("payment_mode") || "";
-      
+
       if (!orderId) {
         throw new AppError("Missing order_id in CCAvenue webhook", 400);
       }
-      
-      const isSuccess = orderStatus === "Success";
-      const eventName = isSuccess ? "payment.captured" : "payment.failed";
-      
+
+      const normalizedStatus = orderStatus.trim().toLowerCase();
+      const isRefund =
+        normalizedStatus === "refunded" ||
+        normalizedStatus === "refund" ||
+        normalizedStatus.includes("refund");
+      const isDisputed =
+        !isRefund &&
+        (normalizedStatus.includes("chargeback") ||
+          normalizedStatus.includes("dispute") ||
+          riskStatus === "high");
+      const isSuccess =
+        !isRefund &&
+        !isDisputed &&
+        (normalizedStatus === "success" ||
+          normalizedStatus === "successful" ||
+          normalizedStatus === "shipped");
+      const isPending =
+        !isRefund &&
+        !isDisputed &&
+        !isSuccess &&
+        (!normalizedStatus ||
+          normalizedStatus === "awaited" ||
+          normalizedStatus === "initiated" ||
+          normalizedStatus === "pending" ||
+          normalizedStatus === "timeout");
+      const isCancelled =
+        !isRefund &&
+        !isDisputed &&
+        !isSuccess &&
+        !isPending &&
+        (normalizedStatus === "aborted" ||
+          normalizedStatus === "cancelled" ||
+          normalizedStatus === "cancel" ||
+          statusMessage.toLowerCase().includes("cancel"));
+
+      const eventName = isRefund
+        ? "refund.processed"
+        : isDisputed
+        ? "payment.disputed"
+        : isSuccess
+        ? "payment.captured"
+        : isPending
+        ? "payment.pending"
+        : "payment.failed";
+
+      const rawHeaderEventId = headers["x-ccavenue-event-id"];
+      const deterministicFallback = `ccav_${crypto
+        .createHash("sha256")
+        .update(`ccav:${orderId}:${eventName}:${normalizedStatus}:${amount}:${bankRefNo}`)
+        .digest("hex")
+        .slice(0, 24)}`;
+      const baseEventId = rawHeaderEventId || trackingId || deterministicFallback;
+      const eventId = rawHeaderEventId
+        ? rawHeaderEventId
+        : eventName === "payment.captured"
+        ? baseEventId
+        : isRefund
+        ? `refund:${baseEventId}:${amount}`
+        : `${baseEventId}:${eventName}`;
+
       return {
         event: eventName,
         gatewayOrderId: orderId,
-        id: headers["x-ccavenue-event-id"] || trackingId || `evt_${Date.now()}`,
+        id: eventId,
         payload: {
           id: trackingId,
+          refundId: isRefund ? trackingId || bankRefNo || deterministicFallback : undefined,
+          disputeId: isDisputed ? trackingId || bankRefNo || orderId : undefined,
+          disputeStatus: isDisputed ? orderStatus || `Risk: ${riskStatus}` : undefined,
           amount: parseFloat(amount),
           status: orderStatus,
           statusMessage,
           bankRefNo,
           paymentMode,
-        }
+          isCancelled,
+        },
       };
     } catch (err: any) {
+      if (err instanceof AppError) throw err;
       logger.error("Failed to decrypt CCAvenue webhook payload", { error: err.message });
       throw new AppError(err.message || "Failed to decrypt CCAvenue webhook payload", 400);
     }
@@ -231,12 +294,13 @@ export class CCavenueGateway implements PaymentGateway {
 
   async initiateRefund(payment: IPayment, amount?: number): Promise<RefundResult> {
     try {
-      if (!ENV.CCAVENUE_MERCHANT_ID || !ENV.CCAVENUE_ACCESS_CODE || !ENV.CCAVENUE_WORKING_KEY) {
+      const accessCode = (ENV.CCAVENUE_ACCESS_CODE || process.env.CCAVENUE_ACCESS_CODE || "").trim();
+      const workingKey = (ENV.CCAVENUE_WORKING_KEY || process.env.CCAVENUE_WORKING_KEY || "").trim();
+      const merchantId = (ENV.CCAVENUE_MERCHANT_ID || process.env.CCAVENUE_MERCHANT_ID || "").trim();
+      const mode = (ENV.CCAVENUE_MODE || process.env.CCAVENUE_MODE || "test").trim().toLowerCase();
+      if (!merchantId || !accessCode || !workingKey) {
         throw new AppError("CCAvenue credentials are not configured", 500);
       }
-      const merchantId = ENV.CCAVENUE_MERCHANT_ID;
-      const accessCode = ENV.CCAVENUE_ACCESS_CODE;
-      const workingKey = ENV.CCAVENUE_WORKING_KEY;
       
       const refundAmount = amount || payment.amount;
       const refNo = payment.gatewayPaymentId;
@@ -247,7 +311,7 @@ export class CCavenueGateway implements PaymentGateway {
 
       const refundData = {
         reference_no: refNo,
-        refund_amount: refundAmount,
+        refund_amount: Number(refundAmount).toFixed(2),
         refund_ref_no: `ref_${Date.now()}`
       };
 
@@ -261,7 +325,7 @@ export class CCavenueGateway implements PaymentGateway {
       params.append("version", "1.1");
       params.append("request_data", encryptedData);
 
-      const ccavUrl = ENV.CCAVENUE_MODE === "live"
+      const ccavUrl = mode === "live"
         ? "https://api.ccavenue.com/apis/servlet/DoWebTrans"
         : "https://apitest.ccavenue.com/apis/servlet/DoWebTrans";
 
@@ -308,12 +372,14 @@ export class CCavenueGateway implements PaymentGateway {
 
   async getPaymentStatus(gatewayOrderId: string): Promise<any> {
     try {
-      if (!ENV.CCAVENUE_MERCHANT_ID || !ENV.CCAVENUE_ACCESS_CODE || !ENV.CCAVENUE_WORKING_KEY) {
+      const merchantId = (ENV.CCAVENUE_MERCHANT_ID || process.env.CCAVENUE_MERCHANT_ID || "").trim();
+      const accessCode = (ENV.CCAVENUE_ACCESS_CODE || process.env.CCAVENUE_ACCESS_CODE || "").trim();
+      const workingKey = (ENV.CCAVENUE_WORKING_KEY || process.env.CCAVENUE_WORKING_KEY || "").trim();
+      const mode = (ENV.CCAVENUE_MODE || process.env.CCAVENUE_MODE || "test").trim().toLowerCase();
+
+      if (!merchantId || !accessCode || !workingKey) {
         throw new AppError("CCAvenue credentials are not configured", 500);
       }
-      const merchantId = ENV.CCAVENUE_MERCHANT_ID;
-      const accessCode = ENV.CCAVENUE_ACCESS_CODE;
-      const workingKey = ENV.CCAVENUE_WORKING_KEY;
 
       const statusData = { order_no: gatewayOrderId };
       const encryptedData = this.encrypt(JSON.stringify(statusData), workingKey);
@@ -326,7 +392,7 @@ export class CCavenueGateway implements PaymentGateway {
       params.append("version", "1.1");
       params.append("request_data", encryptedData);
 
-      const ccavUrl = ENV.CCAVENUE_MODE === "live"
+      const ccavUrl = mode === "live"
         ? "https://api.ccavenue.com/apis/servlet/DoWebTrans"
         : "https://apitest.ccavenue.com/apis/servlet/DoWebTrans";
 
@@ -339,11 +405,24 @@ export class CCavenueGateway implements PaymentGateway {
 
       const responseText = await response.text();
       const paramsRes = new URLSearchParams(responseText);
+      const apiStatus = paramsRes.get("status");
       const encResponse = paramsRes.get("enc_response");
-      
+
+      // CCAvenue returns status=1 with plaintext enc_response when order lookup failed or transaction is not settled yet
+      if (apiStatus === "1") {
+        logger.warn("CCAvenue status API returned non-zero status", {
+          gatewayOrderId,
+          message: encResponse || responseText,
+        });
+        return {
+          order_status: "unknown",
+          status_message: encResponse || "CCAvenue status temporarily unavailable",
+        };
+      }
+
       if (encResponse) {
-         const decResp = this.decrypt(encResponse, workingKey);
-         return JSON.parse(decResp);
+        const decResp = this.decrypt(encResponse, workingKey);
+        return JSON.parse(decResp);
       }
       throw new AppError("Invalid response from CCAvenue status API", 500);
     } catch (error: any) {

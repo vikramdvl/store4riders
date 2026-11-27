@@ -1,50 +1,98 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { AuthService } from "./auth.service";
 import { ApiResponse } from "../../core/response/ApiResponse";
 import { AuthValidator } from "./auth.validator";
-import { CUSTOMER_REFRESH_TTL_SECONDS } from "../../core/utils/jwt";
+import {
+  CUSTOMER_REFRESH_TTL_SECONDS,
+  resolveAuthScope,
+  type AuthScope,
+} from "../../core/utils/jwt";
+import {
+  ADMIN_ACCESS_COOKIE,
+  ADMIN_REFRESH_COOKIE,
+  CUSTOMER_ACCESS_COOKIE,
+  CUSTOMER_REFRESH_COOKIE,
+  extractVerifiedAuth,
+} from "../../core/middlewares/auth";
 
-const isProd = process.env.NODE_ENV === "production";
+const MULTI_TENANT_PUBLIC_SUFFIXES = [".vercel.app", ".netlify.app", ".onrender.com", ".herokuapp.com"];
+
+const getRegistrableSite = (hostname: string): string => {
+  const normalized = hostname.toLowerCase();
+  if (MULTI_TENANT_PUBLIC_SUFFIXES.some((suffix) => normalized.endsWith(suffix))) {
+    return normalized;
+  }
+  const parts = normalized.split(".");
+  return parts.length <= 2 ? normalized : parts.slice(-2).join(".");
+};
+
+const getCookieOptions = (req: NextRequest, maxAge?: number) => {
+  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  const isHttps = forwardedProto === "https" || req.nextUrl.protocol === "https:";
+  const origin = req.headers.get("origin") || "";
+  const reqHostHeader = req.headers.get("x-forwarded-host") || req.headers.get("host") || req.nextUrl.host || "";
+  const reqHostname = reqHostHeader.split(":")[0]?.toLowerCase() || "";
+
+  let isCrossSite = false;
+  if (origin && reqHostname) {
+    try {
+      const originHostname = new URL(origin).hostname.toLowerCase();
+      isCrossSite = getRegistrableSite(originHostname) !== getRegistrableSite(reqHostname);
+    } catch {}
+  }
+
+  // Same-site subdomains/localhost use Lax; genuine cross-site HTTPS (e.g. *.vercel.app) requires None + Secure
+  const sameSite: "none" | "lax" = isHttps && isCrossSite ? "none" : "lax";
+
+  return {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite,
+    path: "/",
+    ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN.trim() } : {}),
+    ...(typeof maxAge === "number" ? { maxAge } : {}),
+  };
+};
+
+const getCookieNamesForScope = (scope: AuthScope) =>
+  scope === "admin"
+    ? { access: ADMIN_ACCESS_COOKIE, refresh: ADMIN_REFRESH_COOKIE }
+    : { access: CUSTOMER_ACCESS_COOKIE, refresh: CUSTOMER_REFRESH_COOKIE };
 
 const setCookies = (
+  req: NextRequest,
   res: NextResponse,
   accessToken: string,
   refreshToken: string,
-  maxAgeSeconds: number = CUSTOMER_REFRESH_TTL_SECONDS
+  maxAgeSeconds: number = CUSTOMER_REFRESH_TTL_SECONDS,
+  scope: AuthScope = "customer"
 ) => {
-  res.cookies.set("accessToken", accessToken, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "strict" : "lax",
-    path: "/",
-    maxAge: maxAgeSeconds,
-  });
-  res.cookies.set("refreshToken", refreshToken, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "strict" : "lax",
-    path: "/",
-    maxAge: maxAgeSeconds,
-  });
+  const { access, refresh } = getCookieNamesForScope(scope);
+  const cookieOpts = getCookieOptions(req, maxAgeSeconds);
+  res.cookies.set(access, accessToken, cookieOpts);
+  res.cookies.set(refresh, refreshToken, cookieOpts);
 };
 
-const clearCookies = (res: NextResponse) => {
-  res.cookies.set("accessToken", "", {
-    maxAge: 0,
+const clearCookies = (req: NextRequest, res: NextResponse, scope?: AuthScope) => {
+  const scopesToClear: AuthScope[] = scope ? [scope] : ["customer", "admin"];
+  const expiredOpts = {
+    ...getCookieOptions(req, 0),
     expires: new Date(0),
-    path: "/",
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "strict" : "lax",
-  });
-  res.cookies.set("refreshToken", "", {
-    maxAge: 0,
-    expires: new Date(0),
-    path: "/",
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? "strict" : "lax",
-  });
+  };
+
+  for (const s of scopesToClear) {
+    const { access, refresh } = getCookieNamesForScope(s);
+    res.cookies.set(access, "", expiredOpts);
+    res.cookies.set(refresh, "", expiredOpts);
+  }
+};
+
+const resolveRequestedScope = (req: NextRequest, explicit?: string): AuthScope | undefined => {
+  const candidate = explicit || req.headers.get("x-auth-scope") || req.nextUrl.searchParams.get("scope");
+  if (candidate === "admin") return "admin";
+  if (candidate === "customer") return "customer";
+  return undefined;
 };
 
 /**
@@ -57,24 +105,86 @@ const clearCookies = (res: NextResponse) => {
  */
 export class AuthController {
   
+  static async sendRegisterOtp(req: NextRequest) {
+    const validatedData = await AuthValidator.validateSendRegisterOtp(req);
+    try {
+      const result = await AuthService.sendRegisterOtp(validatedData);
+      return ApiResponse.success(result, "Verification code sent to your email", 200);
+    } catch (err: any) {
+      if (err?.statusCode === 429) {
+        try {
+          const { AuditLogService } = await import("../audit-log/audit-log.service");
+          await AuditLogService.record({
+            category: "AUTH",
+            action: "REGISTER_OTP_RATE_LIMITED",
+            severity: "warning",
+            status: "failure",
+            actor: { email: validatedData.email },
+            resource: { type: "User", label: validatedData.email },
+            req,
+            message: `OTP rate limit/cooldown triggered for ${validatedData.email}: ${err?.message}`,
+          });
+        } catch {}
+      }
+      throw err;
+    }
+  }
+
   static async register(req: NextRequest) {
     const validatedData = await AuthValidator.validateRegister(req);
-    const result = await AuthService.register(validatedData);
-    
-    // Return tokens and user in data payload for mobile apps / frontend, while also setting cookies for web
-    const res = ApiResponse.success({ 
-      accessToken: result.tokens.accessToken, 
-      refreshToken: result.tokens.refreshToken,
-      user: result.user 
-    }, "Registered successfully", 201);
-    setCookies(res, result.tokens.accessToken, result.tokens.refreshToken, result.sessionMaxAgeSeconds);
-    return res;
+    try {
+      const result = await AuthService.register(validatedData);
+
+      try {
+        const { AuditLogService } = await import("../audit-log/audit-log.service");
+        await AuditLogService.record({
+          category: "AUTH",
+          action: "USER_REGISTER",
+          severity: "info",
+          status: "success",
+          actor: {
+            userId: result.user.id,
+            email: result.user.email,
+            name: result.user.name,
+            role: result.user.role,
+          },
+          resource: { type: "User", id: result.user.id, label: result.user.email },
+          req,
+          message: `Registered verified account for ${result.user.email}`,
+        });
+      } catch {}
+
+      // Return tokens and user in data payload for mobile apps / frontend, while also setting cookies for web
+      const res = ApiResponse.success({
+        accessToken: result.tokens.accessToken,
+        refreshToken: result.tokens.refreshToken,
+        user: result.user,
+      }, "Registered successfully", 201);
+      setCookies(req, res, result.tokens.accessToken, result.tokens.refreshToken, result.sessionMaxAgeSeconds, "customer");
+      return res;
+    } catch (err: any) {
+      try {
+        const { AuditLogService } = await import("../audit-log/audit-log.service");
+        await AuditLogService.record({
+          category: "AUTH",
+          action: "REGISTER_FAILED",
+          severity: "warning",
+          status: "failure",
+          actor: { email: validatedData.email },
+          resource: { type: "User", label: validatedData.email },
+          req,
+          message: `Registration failed for ${validatedData.email}: ${err?.message || "Verification failed"}`,
+        });
+      } catch {}
+      throw err;
+    }
   }
 
   static async login(req: NextRequest) {
     const validatedData = await AuthValidator.validateLogin(req);
+    const requestScope = resolveRequestedScope(req, validatedData.scope) || "customer";
     try {
-      const result = await AuthService.login(validatedData);
+      const result = await AuthService.login(validatedData, requestScope);
 
       if (result.user.role && result.user.role !== "customer") {
         const { AuditLogService } = await import("../audit-log/audit-log.service");
@@ -98,9 +208,10 @@ export class AuthController {
       const res = ApiResponse.success({ 
         accessToken: result.tokens.accessToken, 
         refreshToken: result.tokens.refreshToken,
-        user: result.user 
+        user: result.user,
+        scope: result.scope,
       }, "Logged in successfully");
-      setCookies(res, result.tokens.accessToken, result.tokens.refreshToken, result.sessionMaxAgeSeconds);
+      setCookies(req, res, result.tokens.accessToken, result.tokens.refreshToken, result.sessionMaxAgeSeconds, result.scope);
       return res;
     } catch (err: any) {
       const { AuditLogService } = await import("../audit-log/audit-log.service");
@@ -112,14 +223,21 @@ export class AuthController {
         actor: { email: validatedData.email },
         resource: { type: "Session", label: validatedData.email },
         req,
-        message: `Failed login attempt for ${validatedData.email}: ${err?.message || "Invalid credentials"}`,
+        message: `Failed login attempt (${requestScope}) for ${validatedData.email}: ${err?.message || "Invalid credentials"}`,
       });
       throw err;
     }
   }
 
   static async refresh(req: NextRequest) {
-    let oldRefreshToken = req.cookies.get("refreshToken")?.value;
+    const requestedScope = resolveRequestedScope(req);
+    let oldRefreshToken =
+      requestedScope === "admin"
+        ? req.cookies.get(ADMIN_REFRESH_COOKIE)?.value
+        : requestedScope === "customer"
+        ? req.cookies.get(CUSTOMER_REFRESH_COOKIE)?.value
+        : req.cookies.get(CUSTOMER_REFRESH_COOKIE)?.value || req.cookies.get(ADMIN_REFRESH_COOKIE)?.value;
+
     if (!oldRefreshToken) {
       try {
         const body = await req.json();
@@ -129,32 +247,40 @@ export class AuthController {
 
     if (!oldRefreshToken) {
       const res = ApiResponse.error("No refresh token", 401);
-      clearCookies(res);
+      clearCookies(req, res, requestedScope);
       return res;
     }
 
     try {
-      const tokens = await AuthService.refreshToken(oldRefreshToken);
+      const tokens = await AuthService.refreshToken(oldRefreshToken, requestedScope);
 
       const res = ApiResponse.success({
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
+        scope: tokens.scope,
       }, "Token refreshed");
-      setCookies(res, tokens.accessToken, tokens.refreshToken, tokens.sessionMaxAgeSeconds);
+      setCookies(req, res, tokens.accessToken, tokens.refreshToken, tokens.sessionMaxAgeSeconds, tokens.scope);
       return res;
     } catch (error: any) {
       const status = typeof error?.statusCode === "number" ? error.statusCode : 401;
       const message = error?.message || "Invalid refresh token";
       const res = ApiResponse.error(message, status);
       if (status === 401 || status === 403) {
-        clearCookies(res);
+        clearCookies(req, res, requestedScope);
       }
       return res;
     }
   }
 
   static async logout(req: NextRequest) {
-    let refreshToken = req.cookies.get("refreshToken")?.value;
+    const requestedScope = resolveRequestedScope(req);
+    let refreshToken =
+      requestedScope === "admin"
+        ? req.cookies.get(ADMIN_REFRESH_COOKIE)?.value
+        : requestedScope === "customer"
+        ? req.cookies.get(CUSTOMER_REFRESH_COOKIE)?.value
+        : req.cookies.get(CUSTOMER_REFRESH_COOKIE)?.value || req.cookies.get(ADMIN_REFRESH_COOKIE)?.value;
+
     if (!refreshToken) {
       try {
         const body = await req.json();
@@ -163,12 +289,16 @@ export class AuthController {
     }
 
     let loggedOutUserId: string | undefined;
+    let resolvedClearScope: AuthScope | undefined = requestedScope;
     try {
-      const { extractUserFromAuth } = await import("../../core/middlewares/auth");
-      const userId = extractUserFromAuth(req);
-      if (userId) {
-        loggedOutUserId = userId;
-        await AuthService.logout(userId);
+      const { extractAuthContext } = await import("../../core/middlewares/auth");
+      const decoded = extractAuthContext(req, { requiredScope: requestedScope });
+      if (decoded?.userId) {
+        loggedOutUserId = decoded.userId;
+        if (!resolvedClearScope && decoded.scope) {
+          resolvedClearScope = decoded.scope;
+        }
+        await AuthService.logout(decoded.userId);
       }
     } catch {
       // Access token may already be expired; fall back to refresh token subject if present
@@ -178,6 +308,9 @@ export class AuthController {
           const decoded = verifyToken(refreshToken, true);
           if (decoded?.userId) {
             loggedOutUserId = decoded.userId;
+            if (!resolvedClearScope && decoded.scope) {
+              resolvedClearScope = decoded.scope;
+            }
             await AuthService.logout(decoded.userId);
           }
         } catch {}
@@ -201,13 +334,45 @@ export class AuthController {
     if (refreshToken) {
       try {
         const { setCache } = await import("../../core/cache/redis");
-        await setCache(`bl_token_${refreshToken}`, "1", CUSTOMER_REFRESH_TTL_SECONDS);
+        const tokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+        await Promise.all([
+          setCache(`bl_token_${refreshToken}`, "1", CUSTOMER_REFRESH_TTL_SECONDS),
+          setCache(`bl_rt_used_${tokenHash}`, String(Date.now()), CUSTOMER_REFRESH_TTL_SECONDS),
+        ]);
       } catch {}
     }
 
     const res = ApiResponse.success(null, "Logged out successfully");
-    clearCookies(res);
+    clearCookies(req, res, resolvedClearScope);
     return res;
+  }
+
+  static async me(req: NextRequest) {
+    const requestedScope = resolveRequestedScope(req);
+    const { userId } = await extractVerifiedAuth(req, { requiredScope: requestedScope });
+    const { UserRepository } = await import("../user/user.repository");
+    const user = await UserRepository.findById(userId);
+    if (!user || user.isActive === false) {
+      return ApiResponse.error("Account is disabled or not found", 401);
+    }
+
+    return ApiResponse.success(
+      {
+        user: {
+          id: (user as any)._id?.toString() || user.id || userId,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName || "",
+          name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email,
+          role: user.role || "customer",
+          phone: user.phone || "",
+          isEmailVerified: user.isEmailVerified !== false,
+          addresses: user.addresses || [],
+        },
+        scope: resolveAuthScope(user.role),
+      },
+      "Session verified"
+    );
   }
 
   static async forgotPassword(req: NextRequest) {
@@ -223,19 +388,12 @@ export class AuthController {
   }
 
   static async checkEmail(req: NextRequest) {
-    try {
-      const body = await req.json();
-      const email = body?.email?.toLowerCase()?.trim();
-      if (!email) {
-        return ApiResponse.error("Email is required", 400);
-      }
-      
-      const { UserModel } = await import("../user/user.model");
-      const user = await UserModel.findOne({ email }).select("_id").lean().exec();
-      
-      return ApiResponse.success({ exists: !!user }, "Email checked successfully");
-    } catch (e: any) {
-      return ApiResponse.error("Failed to check email", 500);
-    }
+    const validatedData = await AuthValidator.validateCheckEmail(req);
+    const email = validatedData.email.toLowerCase().trim();
+
+    const { UserRepository } = await import("../user/user.repository");
+    const user = await UserRepository.findByEmail(email);
+
+    return ApiResponse.success({ exists: !!user }, "Email checked successfully");
   }
 }

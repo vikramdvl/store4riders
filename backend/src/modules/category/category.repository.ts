@@ -146,13 +146,19 @@ export class CategoryRepository {
     const existing = await this.findById(id);
 
     if (existing) {
-      const updateData = { ...data };
-      if (updateData.parentId === "" || updateData.parentId === "null") {
-        updateData.parentId = undefined;
+      const updateData: Record<string, any> = { ...data };
+      const unsetData: Record<string, 1> = {};
+      if (updateData.parentId === "" || updateData.parentId === "null" || updateData.parentId === null) {
+        delete updateData.parentId;
+        unsetData.parentId = 1;
+      }
+      const updateOps: Record<string, any> = { $set: updateData };
+      if (Object.keys(unsetData).length > 0) {
+        updateOps.$unset = unsetData;
       }
       const updated = await CategoryModel.findByIdAndUpdate(
         existing._id,
-        { $set: updateData },
+        updateOps,
         { new: true }
       ).lean().exec();
       return updated as unknown as ICategory;

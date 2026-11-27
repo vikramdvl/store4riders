@@ -49,8 +49,9 @@ export class CategoryService {
   }
 
   static async updateCategory(id: string, data: Partial<ICategory>): Promise<ICategory> {
-    if (data.parentId === "" || data.parentId === "null") {
-      data.parentId = undefined;
+    const isClearingParent = data.parentId === "" || data.parentId === "null" || data.parentId === null;
+    if (isClearingParent) {
+      data.parentId = "";
     }
     if (data.parentId && String(data.parentId) === String(id)) {
       throw new ValidationError("A category cannot be its own parent");

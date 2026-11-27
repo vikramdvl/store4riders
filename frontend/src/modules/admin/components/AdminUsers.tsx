@@ -175,8 +175,12 @@ export function AdminUsers() {
       toast.error("Please fill in First Name, Email, and Password");
       return;
     }
-    if (staffForm.password.length < 6) {
-      toast.error("Password must be at least 6 characters long");
+    if (staffForm.firstName.trim().length < 2) {
+      toast.error("First Name must be at least 2 characters long");
+      return;
+    }
+    if (staffForm.password.length < 8) {
+      toast.error("Password must be at least 8 characters long");
       return;
     }
 
@@ -454,11 +458,11 @@ export function AdminUsers() {
                               </button>
                             ) : (
                               <div className="flex items-center gap-2.5 opacity-70" title="Super Admin status is protected">
-                                <div className="w-11 h-6 bg-emerald-400 rounded-full p-0.5 relative shadow-inner">
-                                  <div className="w-5 h-5 bg-white rounded-full shadow-md transform translate-x-5" />
+                                <div className={`w-11 h-6 ${isUserActive ? "bg-emerald-400" : "bg-slate-300"} rounded-full p-0.5 relative shadow-inner`}>
+                                  <div className={`w-5 h-5 bg-white rounded-full shadow-md transform ${isUserActive ? "translate-x-5" : "translate-x-0"}`} />
                                 </div>
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  Active (Locked)
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${isUserActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-300"}`}>
+                                  {isUserActive ? "Active (Locked)" : "Disabled (Locked)"}
                                 </span>
                               </div>
                             )}
@@ -773,7 +777,7 @@ export function AdminUsers() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">
-                  Password * (Min 6 Characters)
+                  Password * (Min 8 Characters)
                 </label>
                 <input
                   type="password"

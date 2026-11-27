@@ -140,7 +140,30 @@ export function OrderDetails({ orderId }: { orderId: string }) {
     upiUri: "",
   });
 
-  // Handle gateway redirect callback toast (?exchangeFeePaid=true|false)
+  const loadedExchangeGatewayOrderId = data?.data?.exchangeDetails?.shippingFeeGatewayOrderId;
+  const loadedOrderStatus = data?.data?.status ? String(data.data.status).toLowerCase() : "";
+  const loadedOrderRef = data?.data?.orderNumber || data?.data?._id || data?.data?.id || "";
+  const autoSyncedPendingOrderRef = React.useRef<string | null>(null);
+
+  // One-time silent reconciliation when customer opens a pending_payment order (e.g. after mobile app/tab kill)
+  useEffect(() => {
+    if (!loadedOrderRef || loadedOrderStatus !== "pending_payment") return;
+    if (autoSyncedPendingOrderRef.current === loadedOrderRef) return;
+    autoSyncedPendingOrderRef.current = loadedOrderRef;
+
+    apiClient
+      .post("/orders/sync-payment", { orderId: loadedOrderRef }, { timeout: 12000 })
+      .then((res) => {
+        if (res.data?.data?.isConfirmed) {
+          toast.success(res.data.data.message || "Payment verified with bank! Your order is confirmed.");
+          queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+          queryClient.invalidateQueries({ queryKey: ["orders"] });
+        }
+      })
+      .catch(() => {});
+  }, [loadedOrderRef, loadedOrderStatus, orderId, queryClient]);
+
+  // Handle gateway redirect callback toast (?exchangeFeePaid=true|false|pending)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -150,11 +173,35 @@ export function OrderDetails({ orderId }: { orderId: string }) {
       queryClient.invalidateQueries({ queryKey: ["order", orderId] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       window.history.replaceState(null, "", window.location.pathname);
+    } else if (feeParam === "pending") {
+      if (!loadedExchangeGatewayOrderId) {
+        if (!isLoading) {
+          toast.info("Exchange shipping fee payment is pending bank confirmation.");
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+        return;
+      }
+      toast.info("Verifying exchange shipping fee payment with your bank...");
+      apiClient
+        .post("/orders/sync-payment", { orderId: loadedExchangeGatewayOrderId })
+        .then((res) => {
+          if (res.data?.data?.isConfirmed) {
+            toast.success("Exchange shipping fee verified! Your replacement is queued for dispatch.");
+            queryClient.invalidateQueries({ queryKey: ["order", orderId] });
+            queryClient.invalidateQueries({ queryKey: ["orders"] });
+          } else {
+            toast.info(res.data?.data?.message || "Exchange shipping fee is awaiting bank confirmation.");
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          window.history.replaceState(null, "", window.location.pathname);
+        });
     } else if (feeParam === "false") {
       toast.error("Exchange shipping fee payment was cancelled or failed. Please try again.");
       window.history.replaceState(null, "", window.location.pathname);
     }
-  }, [orderId, queryClient]);
+  }, [orderId, queryClient, loadedExchangeGatewayOrderId, isLoading]);
 
   const availableFeeGateways = React.useMemo(() => {
     const enabled = Array.isArray(publicSettings?.enabledGateways) ? publicSettings.enabledGateways : [];
@@ -345,9 +392,13 @@ export function OrderDetails({ orderId }: { orderId: string }) {
   const handleSyncPayment = async () => {
     try {
       setIsCheckingStatus(true);
-      const res = await apiClient.post("/orders/sync-payment", {
-        orderId: order.orderNumber || order._id || order.id,
-      });
+      const res = await apiClient.post(
+        "/orders/sync-payment",
+        {
+          orderId: order.orderNumber || order._id || order.id,
+        },
+        { timeout: 12000 }
+      );
       const result = res.data?.data;
       if (result?.isConfirmed) {
         toast.success(result.message || "Payment verified with bank! Order confirmed.");

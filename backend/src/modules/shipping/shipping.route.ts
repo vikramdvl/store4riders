@@ -11,6 +11,75 @@ import { UserService } from "../user/user.service";
  * tags:
  *   name: Shipping
  *   description: Core Shipping Orchestration (Shiprocket, Delhivery, Xpressbees, Manual)
+ * /api/v1/shipments/admin/push-shiprocket:
+ *   post:
+ *     summary: Push an order to Shiprocket with optional parcel weight and LxBxH overrides (Admin)
+ *     tags: [Shipping]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orderId]
+ *             properties:
+ *               orderId: { type: string }
+ *               warehouseId: { type: string }
+ *               weightKg: { type: number }
+ *               length: { type: number }
+ *               breadth: { type: number }
+ *               height: { type: number }
+ *               autoAssignAwb: { type: boolean }
+ *               recipientPhone: { type: string }
+ *     responses:
+ *       200:
+ *         description: Shipment pushed to Shiprocket
+ * /api/v1/shipments/admin/direct:
+ *   post:
+ *     summary: Create direct Delhivery or Xpressbees shipment using catalog specs or custom LxBxH (Admin)
+ *     tags: [Shipping]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orderId, provider, warehouseId]
+ *             properties:
+ *               orderId: { type: string }
+ *               provider: { type: string, enum: [delhivery, xpressbees] }
+ *               warehouseId: { type: string }
+ *               weightKg: { type: number }
+ *               length: { type: number }
+ *               breadth: { type: number }
+ *               height: { type: number }
+ *               recipientPhone: { type: string }
+ *     responses:
+ *       201:
+ *         description: Direct shipment created
+ * /api/v1/shipments/admin:
+ *   get:
+ *     summary: List paginated shipments with optional filters (Admin)
+ *     tags: [Shipping]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *       - in: query
+ *         name: provider
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Paginated shipments list
  */
 export async function shippingRouter(req: NextRequest, routePath: string[]) {
   const method = req.method;
@@ -43,7 +112,7 @@ export async function shippingRouter(req: NextRequest, routePath: string[]) {
   // Customer Tracking: GET /api/v1/shipping/order/:orderId or /shipments/order/:orderId
   if (method === "GET" && routePath.length === 2 && routePath[0] === "order") {
     const orderId = routePath[1];
-    return await ShippingController.getShipmentsByOrderId(req, orderId);
+    return await ShippingController.getShipmentsByOrderId(req, orderId, userId);
   }
 
   // ---------------------------------------------------------------------------

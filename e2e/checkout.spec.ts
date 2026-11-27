@@ -70,4 +70,38 @@ test.describe('Step 12: Checkout UI Edge Cases (Scenarios 5 & 6)', () => {
     // Normally Zustand cart state is reset, we can verify empty cart icon or similar.
   });
 
+  test('Scenario 7: Verifying state auto-polls bank settlement across backoff retries and confirms order', async ({ page }) => {
+    let syncCalls = 0;
+    await page.route('**/api/v1/orders/sync-payment', async (route) => {
+      syncCalls++;
+      const confirmed = syncCalls >= 2;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            status: confirmed ? 'confirmed' : 'pending_payment',
+            orderNumber: 'OD-E2E-VERIFY-1',
+            paymentMethod: 'payu',
+            isConfirmed: confirmed,
+            isPending: !confirmed,
+            gatewayStatus: confirmed ? 'confirmed' : 'pending',
+            message: confirmed ? 'Payment verified with bank!' : 'Waiting on bank',
+          },
+        }),
+      });
+    });
+
+    await page.goto('/checkout?verifying=true&orderId=OD-E2E-VERIFY-1');
+    await expect(page.locator('text=CONFIRMING YOUR PAYMENT...')).toBeVisible();
+    await expect(page.locator('text=PAYMENT SUCCESS!')).toBeVisible({ timeout: 8000 });
+    expect(syncCalls).toBeGreaterThanOrEqual(2);
+  });
+
+  test('Scenario 8: Pending callback hands off directly to verification flow without premature failure', async ({ page }) => {
+    await page.goto('/checkout/callback?status=pending&orderId=OD-E2E-CB-1');
+    await expect(page).toHaveURL(/\/checkout\?verifying=true&orderId=OD-E2E-CB-1/);
+  });
+
 });

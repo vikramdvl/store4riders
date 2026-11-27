@@ -5,9 +5,44 @@ const isProd = process.env.NODE_ENV === "production";
 const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, x-request-id, idempotency-key, Idempotency-Key, Accept, Cache-Control, X-Requested-With, Pragma",
+    "Content-Type, Authorization, x-auth-scope, X-Auth-Scope, x-request-id, idempotency-key, Idempotency-Key, Accept, Cache-Control, X-Requested-With, Pragma",
   "Access-Control-Allow-Credentials": "true",
   "Access-Control-Max-Age": "86400",
+};
+
+const verifyDocsSessionToken = async (tokenValue?: string): Promise<boolean> => {
+  if (!tokenValue || !tokenValue.includes(".")) return false;
+  const secret = process.env.JWT_ACCESS_SECRET || process.env.DOCS_PASS || "";
+  if (!secret) return false;
+
+  const [expStr, providedHex] = tokenValue.split(".");
+  const exp = Number(expStr);
+  if (!Number.isFinite(exp) || Math.floor(Date.now() / 1000) > exp) return false;
+  if (!/^[a-f0-9]{64}$/i.test(providedHex || "")) return false;
+
+  try {
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const sigBuf = await crypto.subtle.sign("HMAC", key, encoder.encode(`docs:${exp}`));
+    const expectedHex = Array.from(new Uint8Array(sigBuf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const normalizedProvided = providedHex.toLowerCase();
+    if (expectedHex.length !== normalizedProvided.length) return false;
+    let diff = 0;
+    for (let i = 0; i < expectedHex.length; i += 1) {
+      diff |= expectedHex.charCodeAt(i) ^ normalizedProvided.charCodeAt(i);
+    }
+    return diff === 0;
+  } catch {
+    return false;
+  }
 };
 
 function resolveOrigin(origin: string): string {
@@ -35,14 +70,15 @@ function resolveOrigin(origin: string): string {
   return envOrigins[0] || "https://www.store4riders.com";
 }
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // 1. Docs Protection Logic (from proxy.ts)
   if (pathname.startsWith("/docs") || pathname.startsWith("/api/docs")) {
     if (pathname !== "/docs/login") {
       const authCookie = req.cookies.get("docs_auth_session");
-      if (!authCookie || authCookie.value !== "authenticated") {
+      const isValidDocsCookie = await verifyDocsSessionToken(authCookie?.value);
+      if (!isValidDocsCookie) {
         const loginUrl = new URL("/docs/login", req.url);
         return NextResponse.redirect(loginUrl);
       }

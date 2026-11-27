@@ -102,7 +102,10 @@ export function AdminPaymentSettings() {
         enabledGateways: settings.enabledGateways,
         codPartialPaymentEnabled: settings.codPartialPaymentEnabled,
         codPartialPaymentType: settings.codPartialPaymentType,
-        codPartialPaymentValue: settings.codPartialPaymentValue,
+        codPartialPaymentValue:
+          settings.codPartialPaymentValue === "" || settings.codPartialPaymentValue === null || settings.codPartialPaymentValue === undefined
+            ? 0
+            : Math.max(0, Number(settings.codPartialPaymentValue) || 0),
         codHandlingFeeEnabled: Boolean(settings.codHandlingFeeEnabled),
         codHandlingFeeThreshold: Number(settings.codHandlingFeeThreshold) >= 0 ? Number(settings.codHandlingFeeThreshold) : 5000,
         codHandlingFeeTier1Amount: Number(settings.codHandlingFeeTier1Amount) >= 0 ? Number(settings.codHandlingFeeTier1Amount) : 100,
@@ -120,7 +123,7 @@ export function AdminPaymentSettings() {
       revalidateStorefrontPaths(["/"]);
       toast.success("Payment settings saved successfully");
     } catch (err: any) {
-      const msg = err.response?.data?.message || err.response?.data?.error || "Failed to save settings";
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to save settings";
       toast.error(typeof msg === "string" ? msg : "Failed to save settings");
     } finally {
       setSaving(false);

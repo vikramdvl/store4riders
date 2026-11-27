@@ -169,11 +169,40 @@ describe("AuthService - Session & Blacklist Lifecycle", () => {
       isActive: true,
     } as any);
 
-    const loginRes = await AuthService.login({ email: "admin@store4riders.com", password: "Admin@123" });
-    expect(loginRes.sessionMaxAgeSeconds).toBe(24 * 60 * 60);
+    await expect(
+      AuthService.login({ email: "admin@store4riders.com", password: "Admin@123" })
+    ).rejects.toThrow("Staff and admin accounts must sign in through the Admin Portal");
 
-    const refreshed = await AuthService.refreshToken(`admin_1|${Math.floor(Date.now() / 1000)}`);
+    await expect(
+      AuthService.login({ email: "admin@store4riders.com", password: "Admin@123", scope: "customer" })
+    ).rejects.toThrow("Staff and admin accounts must sign in through the Admin Portal");
+
+    const loginRes = await AuthService.login({
+      email: "admin@store4riders.com",
+      password: "Admin@123",
+      scope: "admin",
+    });
+    expect(loginRes.sessionMaxAgeSeconds).toBe(24 * 60 * 60);
+    expect(loginRes.scope).toBe("admin");
+
+    const refreshed = await AuthService.refreshToken(`admin_1|${Math.floor(Date.now() / 1000)}`, "admin");
     expect(refreshed.sessionMaxAgeSeconds).toBe(24 * 60 * 60);
     expect(refreshed.refreshToken).toBe("refresh_admin_1_admin");
+  });
+
+  it("blocks customer accounts from signing into the admin portal scope", async () => {
+    const bcrypt = await import("bcryptjs");
+    const hashedPassword = await bcrypt.default.hash("Rider@123", 10);
+    vi.mocked(UserRepository.findByEmailWithPassword).mockResolvedValue({
+      _id: "cust_1",
+      email: "rider@store4riders.com",
+      password: hashedPassword,
+      role: "customer",
+      isActive: true,
+    });
+
+    await expect(
+      AuthService.login({ email: "rider@store4riders.com", password: "Rider@123", scope: "admin" })
+    ).rejects.toThrow("Customer accounts cannot access the Admin Portal");
   });
 });

@@ -8,6 +8,8 @@ export type AdminEventType =
   | "ORDER_STATUS_CHANGED"
   | "SHIPMENT_CREATED"
   | "SHIPMENT_UPDATED"
+  | "PAYMENT_DISPUTE"
+  | "DAILY_RECONCILIATION_ALERT"
   | "DASHBOARD_REFRESH";
 
 export interface AdminEvent<T = any> {

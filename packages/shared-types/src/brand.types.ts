@@ -12,6 +12,7 @@ export interface IBrand {
   description?: string;
   faqs?: IBrandFaq[];
   isActive: boolean;
+  isDeleted?: boolean;
   showInMenu?: boolean;
   menuGroup?: string;
   menuGroups?: string[];

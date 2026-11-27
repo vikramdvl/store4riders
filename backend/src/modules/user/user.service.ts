@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { UserRepository } from "./user.repository";
 import { IUser, IUserAddress, UserRole } from "@store4riders/shared-types";
-import { NotFoundError, ForbiddenError, ConflictError, ValidationError } from "../../core/errors/AppError";
+import { NotFoundError, ForbiddenError, ConflictError, ValidationError, UnauthorizedError } from "../../core/errors/AppError";
 
 /**
  * @class UserService
@@ -13,9 +13,14 @@ import { NotFoundError, ForbiddenError, ConflictError, ValidationError } from ".
 export class UserService {
   
   static async getRole(userId: string): Promise<UserRole> {
-    if (userId === "admin-bypass-id") return "super_admin";
+    if (!userId) {
+      throw new UnauthorizedError("Authentication required");
+    }
     const user = await UserRepository.findById(userId);
-    return user?.role || "customer";
+    if (!user || user.isActive === false) {
+      throw new ForbiddenError("Account is disabled or no longer exists");
+    }
+    return user.role || "customer";
   }
 
   static async getProfile(userId: string): Promise<IUser> {
@@ -26,7 +31,7 @@ export class UserService {
       || !user.addresses || user.addresses.length === 0
       || user.lastName === "User" || user.firstName === "Guest";
 
-    if (user.email && needsSync) {
+    if (user.email && user.isEmailVerified !== false && needsSync) {
       try {
         const { OrderRepository } = await import("../order/order.repository");
         await OrderRepository.linkGuestOrders(user.email, userId);
@@ -148,6 +153,8 @@ export class UserService {
       phone: data.phone?.trim(),
       role: data.role,
       isActive: true,
+      isEmailVerified: true,
+      emailVerifiedAt: new Date(),
       addresses: [],
     });
   }

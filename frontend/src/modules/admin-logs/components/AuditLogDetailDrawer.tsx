@@ -58,7 +58,10 @@ interface AuditLogDetailDrawerProps {
   isIpBlocked: boolean;
   isBlockingIp: boolean;
   isUnblockingIp: boolean;
-  onBlockIp: (payload: { ip: string; reason: string; durationHours: 1 | 24 | 168 | null }) => void;
+  onBlockIp: (
+    payload: { ip: string; reason: string; durationHours: 1 | 24 | 168 | null },
+    options?: { onSuccess?: () => void }
+  ) => void;
   onUnblockIp: (ip: string) => void;
   onClose: () => void;
 }
@@ -90,8 +93,14 @@ export function AuditLogDetailDrawer({
   const handleConfirmBlock = (e: React.FormEvent) => {
     e.preventDefault();
     if (!ip || !blockReason.trim()) return;
-    onBlockIp({ ip, reason: blockReason.trim(), durationHours });
-    setShowBlockForm(false);
+    onBlockIp(
+      { ip, reason: blockReason.trim(), durationHours },
+      {
+        onSuccess: () => {
+          setShowBlockForm(false);
+        },
+      }
+    );
   };
 
   return (

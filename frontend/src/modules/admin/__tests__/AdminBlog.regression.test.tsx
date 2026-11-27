@@ -204,14 +204,18 @@ describe("Admin Blog Create / Upload / Edit / Delete Regression Suite", () => {
     fireEvent.click(screen.getByRole("button", { name: /Update/i }));
 
     await waitFor(() => {
-      expect(updateMutateAsyncMock).toHaveBeenCalledWith({
-        id: "post-edit-1",
-        data: expect.objectContaining({
-          categoryId: "",
-          categoryName: "",
-          categorySlug: "",
-        }),
-      });
+      expect(updateMutateAsyncMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "post-edit-1",
+          data: expect.objectContaining({
+            categoryId: "",
+            categoryName: "",
+            categorySlug: "",
+          }),
+          previousSlug: "existing-helmet-guide",
+          previousCategorySlug: "riding-gear-care",
+        })
+      );
     });
   });
 

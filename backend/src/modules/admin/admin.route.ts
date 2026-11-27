@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AdminController } from "./admin.controller";
-import { extractUserFromAuth } from "../../core/middlewares/auth";
+import { extractAdminFromAuth } from "../../core/middlewares/auth";
 import { checkPermission } from "../../core/middlewares/permission";
 import { PermissionAction } from "../../core/config/permissions";
 import { UserService } from "../user/user.service";
@@ -33,7 +33,7 @@ export async function adminRouter(req: NextRequest, routePath: string[]): Promis
   }
 
   if (pathLen === 1 && routePath[0] === "users") {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkPermission(userId, PermissionAction.MANAGE_USERS, UserService.getRole);
 
     if (method === "GET") {
@@ -45,7 +45,7 @@ export async function adminRouter(req: NextRequest, routePath: string[]): Promis
   }
 
   if (pathLen === 2 && routePath[0] === "users" && method === "DELETE") {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkPermission(userId, PermissionAction.MANAGE_USERS, UserService.getRole);
     const targetUserId = routePath[1];
     return await AdminController.deleteUser(req, targetUserId, userId);
@@ -53,7 +53,7 @@ export async function adminRouter(req: NextRequest, routePath: string[]): Promis
 
   if (pathLen === 3 && routePath[0] === "users") {
     const targetUserId = routePath[1];
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
 
     if (method === "PUT" && routePath[2] === "role") {
       await checkPermission(userId, PermissionAction.MANAGE_ROLES, UserService.getRole);
@@ -70,38 +70,59 @@ export async function adminRouter(req: NextRequest, routePath: string[]): Promis
     const action = routePath[1];
 
     if (method === "GET" && action === "stats") {
-      const userId = extractUserFromAuth(req);
+      const userId = extractAdminFromAuth(req);
       await checkPermission(userId, PermissionAction.VIEW_DASHBOARD, UserService.getRole);
       return await AdminController.getDashboardStats(req, userId);
     }
 
     if (method === "GET" && action === "logistics-stats") {
-      const userId = extractUserFromAuth(req);
+      const userId = extractAdminFromAuth(req);
       await checkPermission(userId, PermissionAction.VIEW_DASHBOARD, UserService.getRole);
       return await AdminController.getLogisticsDashboardStats(req);
     }
 
     if (method === "GET" && action === "recent-orders") {
-      const userId = extractUserFromAuth(req);
+      const userId = extractAdminFromAuth(req);
       await checkPermission(userId, PermissionAction.VIEW_DASHBOARD, UserService.getRole);
       return await AdminController.getRecentOrders(req);
     }
 
     if (method === "GET" && action === "revenue-chart") {
-      const userId = extractUserFromAuth(req);
+      const userId = extractAdminFromAuth(req);
       await checkPermission(userId, PermissionAction.VIEW_DASHBOARD, UserService.getRole);
       return await AdminController.getRevenueChart(req, userId);
     }
   }
 
+/**
+ * @swagger
+ * /api/v1/admin/products/bulk-update:
+ *   post:
+ *     summary: Perform partial or full CSV bulk product updates by SKU (Admin)
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Bulk update report with successCount and errorRows
+ */
   if (method === "POST" && pathLen === 2 && routePath[0] === "products" && routePath[1] === "bulk-update") {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkPermission(userId, PermissionAction.MANAGE_PRODUCTS, UserService.getRole);
     return await AdminController.bulkUpdateProducts(req);
   }
 
   if (pathLen === 2 && routePath[0] === "products" && routePath[1] === "test-product") {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkPermission(userId, PermissionAction.MANAGE_PRODUCTS, UserService.getRole);
 
     if (method === "GET") {
@@ -116,7 +137,7 @@ export async function adminRouter(req: NextRequest, routePath: string[]): Promis
   }
 
   if (pathLen === 1 && routePath[0] === "settings") {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkPermission(userId, PermissionAction.MANAGE_SETTINGS, UserService.getRole); 
     
     const { SettingController } = await import("../settings/setting.controller");
@@ -131,14 +152,14 @@ export async function adminRouter(req: NextRequest, routePath: string[]): Promis
   }
 
   if (method === "GET" && pathLen === 1 && routePath[0] === "payment-logs") {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkPermission(userId, PermissionAction.MANAGE_ORDERS, UserService.getRole); 
     const { AdminController: AdminCtrl } = await import("./admin.controller");
     return await AdminCtrl.getPaymentLogs(req);
   }
 
   if (routePath[0] === "shipments") {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkPermission(userId, PermissionAction.MANAGE_ORDERS, UserService.getRole);
     const { ShippingController } = await import("../shipping/shipping.controller");
 
@@ -184,7 +205,7 @@ export async function adminRouter(req: NextRequest, routePath: string[]): Promis
  *         description: Admin access required
  */
   if (method === "GET" && pathLen === 1 && routePath[0] === "system-health") {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     const { checkAdmin } = await import("../../core/middlewares/admin");
     await checkAdmin(userId, UserService.getRole);
     return await AdminController.getSystemHealth();

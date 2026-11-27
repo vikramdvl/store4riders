@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ReviewController } from "./review.controller";
 import { checkReviewRateLimit } from "../../core/middlewares/rateLimiter";
-import { extractUserFromAuth } from "../../core/middlewares/auth";
+import { extractAdminFromAuth } from "../../core/middlewares/auth";
 import { checkAdmin } from "../../core/middlewares/admin";
 import { UserService } from "../user/user.service";
+import { getClientIp } from "../../core/utils/clientIp";
 
 /**
  * @swagger
@@ -38,7 +39,7 @@ export async function reviewRouter(req: NextRequest, routePath: string[]): Promi
   const pathLen = routePath.length;
 
   if (method === "POST" && pathLen === 0) {
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "127.0.0.1";
+    const ip = getClientIp(req);
     await checkReviewRateLimit(ip);
     return await ReviewController.create(req);
   }
@@ -48,7 +49,7 @@ export async function reviewRouter(req: NextRequest, routePath: string[]): Promi
   }
 
   if (method === "GET" && pathLen === 2 && routePath[0] === "store" && routePath[1] === "account") {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkAdmin(userId, UserService.getRole);
     return await ReviewController.getAccountStatus(req);
   }
@@ -62,7 +63,7 @@ export async function reviewRouter(req: NextRequest, routePath: string[]): Promi
   }
 
   if (method === "POST" && pathLen === 2 && routePath[0] === "store" && routePath[1] === "sync") {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkAdmin(userId, UserService.getRole);
     return await ReviewController.syncGoogleReviews(req);
   }

@@ -28,4 +28,27 @@ describe("ProductService.getProducts pagination caching", () => {
     expect(findAllSpy).toHaveBeenCalledTimes(2);
     expect(countSpy).toHaveBeenCalledTimes(1);
   });
+
+  it("bypasses server cache cleanly for live admin searches after CSV imports or mutations", async () => {
+    const findAllSpy = vi
+      .spyOn(ProductRepository, "findAll")
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ _id: "prod-new", sku: "S4R-NEW-1", name: "New CSV Helmet" }] as any);
+    const countSpy = vi
+      .spyOn(ProductRepository, "count")
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(1);
+
+    const adminFilter = { sku: /S4R-NEW-1/i };
+    const sort = { isFeatured: -1 as const, createdAt: -1 as const, _id: -1 as const };
+
+    const firstLookup = await ProductService.getProducts(adminFilter, 1, 20, sort, { bypassCache: true });
+    expect(firstLookup.totalCount).toBe(0);
+
+    const secondLookup = await ProductService.getProducts(adminFilter, 1, 20, sort, { bypassCache: true });
+    expect(secondLookup.totalCount).toBe(1);
+    expect(secondLookup.items[0].sku).toBe("S4R-NEW-1");
+    expect(findAllSpy).toHaveBeenCalledTimes(2);
+    expect(countSpy).toHaveBeenCalledTimes(2);
+  });
 });

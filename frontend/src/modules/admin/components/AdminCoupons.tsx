@@ -108,6 +108,13 @@ export function AdminCoupons() {
     totalUsageLimit: "",
   });
 
+  const toLocalDateTimeInput = (dateInput: string | Date): string => {
+    const d = new Date(dateInput);
+    if (Number.isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
   const openCreateModal = () => {
     setEditingCoupon(null);
     setFormData({
@@ -117,8 +124,8 @@ export function AdminCoupons() {
       discountValue: 10,
       maxDiscountCap: "1000",
       minPurchase: 999,
-      startDate: new Date().toISOString().slice(0, 16),
-      expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+      startDate: toLocalDateTimeInput(new Date()),
+      expiryDate: toLocalDateTimeInput(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
       isActive: true,
       scope: "all",
       applicableBrands: [],
@@ -140,8 +147,8 @@ export function AdminCoupons() {
       discountValue: coupon.discountValue,
       maxDiscountCap: coupon.maxDiscountCap ? String(coupon.maxDiscountCap) : "",
       minPurchase: coupon.minPurchase || 0,
-      startDate: coupon.startDate ? new Date(coupon.startDate).toISOString().slice(0, 16) : "",
-      expiryDate: coupon.expiryDate ? new Date(coupon.expiryDate).toISOString().slice(0, 16) : "",
+      startDate: coupon.startDate ? toLocalDateTimeInput(coupon.startDate) : "",
+      expiryDate: coupon.expiryDate ? toLocalDateTimeInput(coupon.expiryDate) : "",
       isActive: coupon.isActive,
       scope: coupon.scope || "all",
       applicableBrands: coupon.applicableBrands || [],
@@ -170,23 +177,24 @@ export function AdminCoupons() {
       return;
     }
 
-    const payload: Partial<ICoupon> = {
+    const isEdit = Boolean(editingCoupon);
+    const payload: Record<string, any> = {
       code: formData.code.toUpperCase().trim(),
-      description: formData.description.trim() || undefined,
+      description: formData.description.trim() || (isEdit ? "" : undefined),
       discountType: formData.discountType,
       discountValue: Number(formData.discountValue),
-      maxDiscountCap: formData.maxDiscountCap ? Number(formData.maxDiscountCap) : undefined,
+      maxDiscountCap: formData.maxDiscountCap ? Number(formData.maxDiscountCap) : isEdit ? null : undefined,
       minPurchase: Number(formData.minPurchase) || 0,
-      startDate: formData.startDate ? new Date(formData.startDate).toISOString() : undefined,
+      startDate: formData.startDate ? new Date(formData.startDate).toISOString() : isEdit ? null : undefined,
       expiryDate: new Date(formData.expiryDate).toISOString(),
       isActive: formData.isActive,
       scope: formData.scope,
-      applicableBrands: formData.scope === "brand" ? formData.applicableBrands : undefined,
-      applicableCategories: formData.scope === "category" ? formData.applicableCategories : undefined,
+      applicableBrands: formData.scope === "brand" ? formData.applicableBrands : isEdit ? [] : undefined,
+      applicableCategories: formData.scope === "category" ? formData.applicableCategories : isEdit ? [] : undefined,
       excludeSaleItems: formData.excludeSaleItems,
       firstOrderOnly: formData.firstOrderOnly,
       usageLimitPerUser: Number(formData.usageLimitPerUser) || 1,
-      totalUsageLimit: formData.totalUsageLimit ? Number(formData.totalUsageLimit) : undefined,
+      totalUsageLimit: formData.totalUsageLimit ? Number(formData.totalUsageLimit) : isEdit ? null : undefined,
     };
 
     if (editingCoupon) {

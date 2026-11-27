@@ -15,6 +15,7 @@ const brandSchema = new Schema<IBrand>(
       },
     ],
     isActive: { type: Boolean, default: true },
+    isDeleted: { type: Boolean, default: false },
     showInMenu: { type: Boolean, default: false },
     menuGroup: { type: String, default: "" },
     menuGroups: [{ type: String }],

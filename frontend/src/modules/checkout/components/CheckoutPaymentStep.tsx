@@ -2,35 +2,51 @@ import React from "react";
 import Image from "next/image";
 import { PaymentMethodType } from "@store4riders/shared-types";
 import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
+import { syncOrderPaymentStatus } from "@/core/hooks/useCheckout";
 import { toast } from "sonner";
-import { apiClient } from "@/core/api/client";
+import {
+  getGatewayRedirectLabel,
+  FAILED_SILENT_RETRY_DELAYS_MS,
+} from "@/core/utils/paymentSubmit";
 
 interface CheckoutPaymentStepProps {
   generatedOrderNumber: string;
+  orderReference?: string;
   paymentOption: PaymentMethodType;
   setPaymentOption: (option: PaymentMethodType) => void;
   setCurrentStep: (step: 1 | 2) => void;
   handleAgreeToPay: () => void;
   onPreOrderCreate?: () => Promise<string | null>;
+  onVerifiedSuccess?: (orderNumber: string, paymentMethod?: string) => void;
   isProcessing: boolean;
+  isRedirecting?: boolean;
   shippingAddressSummary?: string;
   isFailedParam?: boolean;
   isCancelledParam?: boolean;
+  isPendingParam?: boolean;
+  skipAutoVerify?: boolean;
+  failureReason?: string;
   isCodAvailable?: boolean;
   total?: number;
 }
 
 export const CheckoutPaymentStep = ({
   generatedOrderNumber,
+  orderReference,
   paymentOption,
   setPaymentOption,
   setCurrentStep,
   handleAgreeToPay,
   onPreOrderCreate,
+  onVerifiedSuccess,
   isProcessing,
+  isRedirecting = false,
   shippingAddressSummary,
   isFailedParam,
   isCancelledParam,
+  isPendingParam,
+  skipAutoVerify = false,
+  failureReason,
   isCodAvailable = true,
   total
 }: CheckoutPaymentStepProps) => {
@@ -62,29 +78,127 @@ export const CheckoutPaymentStep = ({
   }, [availableGateways, paymentOption, setPaymentOption, isSnapmintIneligible]);
 
   const [isCheckingStatus, setIsCheckingStatus] = React.useState(false);
+  const [isAutoVerifyingFailed, setIsAutoVerifyingFailed] = React.useState(
+    Boolean(isFailedParam && orderReference && !skipAutoVerify)
+  );
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
-  const [showDebitedHelp, setShowDebitedHelp] = React.useState(false);
   const [isVerifiedSuccess, setIsVerifiedSuccess] = React.useState(false);
 
+  const effectiveOrderRef = orderReference || generatedOrderNumber;
+
+  const applyConfirmedRedirect = React.useCallback(
+    (confirmedOrder: string, confirmedMethod?: string) => {
+      setIsVerifiedSuccess(true);
+      if (onVerifiedSuccess) {
+        onVerifiedSuccess(confirmedOrder, confirmedMethod);
+      } else {
+        setTimeout(() => {
+          if (typeof window !== "undefined") {
+            window.location.href = `/checkout?success=true&orderId=${encodeURIComponent(confirmedOrder)}`;
+          }
+        }, 500);
+      }
+    },
+    [onVerifiedSuccess]
+  );
+
+  // Silent progressive-backoff reconciliation on ?failed=true&orderId=... in case bank settled right after redirect
+  React.useEffect(() => {
+    if (!isFailedParam || !orderReference || isPendingParam || skipAutoVerify) {
+      setIsAutoVerifyingFailed(false);
+      return;
+    }
+
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const maxSilentAttempts = FAILED_SILENT_RETRY_DELAYS_MS.length + 1;
+
+    setIsAutoVerifyingFailed(true);
+
+    const checkOnce = async (attempt: number) => {
+      if (cancelled) return;
+      try {
+        const result = await syncOrderPaymentStatus(orderReference);
+        if (cancelled) return;
+
+        if (result?.isConfirmed) {
+          toast.success(result.message || "Payment verified with bank! Your order is confirmed.");
+          applyConfirmedRedirect(result.orderNumber || orderReference, result.paymentMethod);
+          return;
+        }
+
+        if (result?.isPending && attempt < maxSilentAttempts) {
+          const delayMs = FAILED_SILENT_RETRY_DELAYS_MS[attempt - 1] ?? 3000;
+          retryTimer = setTimeout(() => {
+            void checkOnce(attempt + 1);
+          }, delayMs);
+          return;
+        }
+
+        if (result?.message) {
+          setStatusMessage(result.message);
+        }
+      } catch {
+        // Silent fallback so user can manually re-check or retry
+      }
+      if (!cancelled) {
+        setIsAutoVerifyingFailed(false);
+      }
+    };
+
+    void checkOnce(1);
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [isFailedParam, orderReference, isPendingParam, skipAutoVerify, applyConfirmedRedirect]);
+
+  // Automatically re-check once when internet reconnects or app returns to foreground while awaiting pending confirmation
+  React.useEffect(() => {
+    if (!isPendingParam || !orderReference) return;
+
+    let lastReconnectSyncAt = 0;
+    const handleReconnectSync = async () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+      if (Date.now() - lastReconnectSyncAt < 3000) return;
+      lastReconnectSyncAt = Date.now();
+      try {
+        const result = await syncOrderPaymentStatus(orderReference);
+        if (result?.isConfirmed) {
+          toast.success(result.message || "Payment verified with bank! Your order is confirmed.");
+          applyConfirmedRedirect(result.orderNumber || orderReference, result.paymentMethod);
+        }
+      } catch {
+        // Keep manual re-check button active without noisy errors
+      }
+    };
+
+    window.addEventListener("online", handleReconnectSync);
+    document.addEventListener("visibilitychange", handleReconnectSync);
+    return () => {
+      window.removeEventListener("online", handleReconnectSync);
+      document.removeEventListener("visibilitychange", handleReconnectSync);
+    };
+  }, [isPendingParam, orderReference, applyConfirmedRedirect]);
+
   const handleCheckStatus = async () => {
-    if (!generatedOrderNumber) {
+    if (!effectiveOrderRef) {
       toast.error("No active order reference found to check status.");
       return;
     }
     try {
       setIsCheckingStatus(true);
-      const res = await apiClient.post("/orders/sync-payment", { orderId: generatedOrderNumber });
-      const result = res.data?.data;
+      const result = await syncOrderPaymentStatus(effectiveOrderRef);
       if (result?.isConfirmed) {
-        setIsVerifiedSuccess(true);
         toast.success(result.message || "Payment verified with bank! Your order is confirmed.");
-        setTimeout(() => {
-          if (typeof window !== "undefined") {
-            window.location.href = `/checkout?success=true&orderId=${encodeURIComponent(result.orderNumber || generatedOrderNumber)}`;
-          }
-        }, 800);
+        applyConfirmedRedirect(result.orderNumber || effectiveOrderRef, result.paymentMethod);
       } else {
-        setStatusMessage(result?.message || "Bank has not confirmed any payment for this order yet. If debited, funds will auto-reverse within 24-48 hours.");
+        setStatusMessage(
+          result?.message ||
+            "Bank has not confirmed any payment for this order yet. If debited, funds will auto-reverse within 24-48 hours."
+        );
         toast.info(result?.message || "No captured payment received from bank yet.");
       }
     } catch (err: any) {
@@ -120,7 +234,13 @@ export const CheckoutPaymentStep = ({
     return Math.max(0, total - advanceAmount);
   }, [total, advanceAmount]);
 
+  const isBusy = isProcessing || isRedirecting;
+  const busyButtonLabel = isRedirecting
+    ? getGatewayRedirectLabel(paymentOption)
+    : "PROCESSING ORDER...";
+
   const handleSelectGateway = (method: PaymentMethodType) => {
+    if (isBusy) return;
     if (method === "snapmint" && isSnapmintIneligible) return;
     setPaymentOption(method);
   };
@@ -128,8 +248,8 @@ export const CheckoutPaymentStep = ({
   return (
     <div className="flex flex-col gap-4 sm:gap-6 animate-in fade-in duration-300">
       
-      {/* Failure & Cancellation Diagnostic Banners */}
-      {(isFailedParam || isCancelledParam) && (
+      {/* Failure, Pending & Cancellation Diagnostic Banners */}
+      {(isFailedParam || isCancelledParam || isPendingParam) && (
         <>
           {isCancelledParam && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 leading-relaxed shadow-xs">
@@ -137,39 +257,99 @@ export const CheckoutPaymentStep = ({
             </div>
           )}
 
-          {isFailedParam && (
+          {isPendingParam && !isVerifiedSuccess && (
+            <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl text-xs text-amber-950 space-y-3 shadow-xs">
+              <div className="flex items-start gap-2.5">
+                <div className="w-5 h-5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0 mt-0.5" />
+                <div className="space-y-1 flex-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="font-bold text-sm block text-amber-950">
+                      Bank Confirmation Still Processing
+                    </span>
+                    {orderReference && (
+                      <span className="text-[11px] font-mono font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded border border-amber-300">
+                        Ref: #{orderReference}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-amber-900 leading-normal">
+                    Your bank or UPI app has not sent final settlement confirmation yet. If money was debited from your account, do not pay again immediately — click below to re-check live status. Uncaptured debits auto-reverse per RBI TAT (typically within 1–5 business days).
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-amber-200 flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleCheckStatus}
+                  disabled={isCheckingStatus}
+                  className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                >
+                  {isCheckingStatus ? (
+                    <>
+                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Checking with bank...</span>
+                    </>
+                  ) : (
+                    <span>Re-check Payment Status with Bank</span>
+                  )}
+                </button>
+              </div>
+
+              {statusMessage && (
+                <div className="p-2.5 bg-white border border-amber-200 rounded-lg text-[11px] text-neutral-800 font-mono">
+                  {statusMessage}
+                </div>
+              )}
+            </div>
+          )}
+
+          {isFailedParam && !isPendingParam && isAutoVerifyingFailed && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl text-xs text-blue-950 flex items-center gap-3 shadow-xs">
+              <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+              <div className="space-y-0.5">
+                <span className="font-bold text-sm block">Verifying Payment Status with Bank...</span>
+                <p className="text-blue-800 leading-normal">
+                  Checking whether your transaction was settled by your payment gateway or bank. Please wait a moment.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {isFailedParam && !isPendingParam && !isAutoVerifyingFailed && !isVerifiedSuccess && (
             <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-900 space-y-3 shadow-xs">
               <div className="flex items-start gap-2.5">
                 <svg className="w-5 h-5 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
-                <div className="space-y-1">
-                  <span className="font-bold text-sm block text-red-950">Payment Unsuccessful or Bank Declined</span>
+                <div className="space-y-1 flex-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="font-bold text-sm block text-red-950">Payment Unsuccessful or Bank Declined</span>
+                    {orderReference && (
+                      <span className="text-[11px] font-mono font-bold bg-red-100 text-red-900 px-2 py-0.5 rounded border border-red-200">
+                        Ref: #{orderReference}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-neutral-700 leading-normal">
-                    The bank did not authorize this transaction. Your cart has been safely preserved. Please choose another payment method or re-try below.
+                    {failureReason
+                      ? `${failureReason}. Your cart has been safely preserved. Please choose another payment method or re-try below.`
+                      : "The bank did not authorize this transaction. Your cart has been safely preserved. Please choose another payment method or re-try below."}
                   </p>
                 </div>
               </div>
 
-              {/* Bank Reconciliation Helper Accordion */}
-              <div className="pt-2 border-t border-red-200/80">
-                <button
-                  type="button"
-                  onClick={() => setShowDebitedHelp(!showDebitedHelp)}
-                  className="text-xs font-bold text-banner hover:text-orange-700 flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <span>{showDebitedHelp ? "▼ Hide bank reconciliation" : "▶ Was money debited from your bank/UPI?"}</span>
-                </button>
-
-                {showDebitedHelp && (
-                  <div className="mt-2.5 p-3.5 bg-white border border-red-200 rounded-xl space-y-2 text-neutral-800 animate-in fade-in duration-150">
+              {/* Directly visible Bank Reconciliation Helper */}
+              {orderReference && (
+                <div className="pt-2.5 border-t border-red-200/80">
+                  <div className="p-3 bg-white border border-red-200 rounded-xl space-y-2 text-neutral-800">
                     <p className="text-[11px] leading-relaxed">
-                      <strong>If money was debited from your bank / UPI:</strong>
+                      <strong>Was money debited from your bank / UPI?</strong>{" "}
+                      <span className="text-neutral-600">
+                        UPI apps (GPay, PhonePe, Paytm) or banks sometimes take a few moments to settle. Click below to verify live status with your bank (uncaptured debits auto-reverse per RBI TAT within 1–5 business days).
+                      </span>
                     </p>
-                    <p className="text-[11px] text-neutral-600 leading-relaxed">
-                      UPI apps (GPay, PhonePe, Paytm) or bank networks sometimes take 1-2 minutes to settle. Click below to verify live status with your bank.
-                    </p>
-                    <div className="pt-1 flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={handleCheckStatus}
@@ -193,8 +373,8 @@ export const CheckoutPaymentStep = ({
                       </div>
                     )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </>
@@ -213,7 +393,8 @@ export const CheckoutPaymentStep = ({
             <button
               type="button"
               onClick={() => setCurrentStep(1)}
-              className="lg:hidden text-[11px] font-bold text-slate-700 hover:text-slate-950 uppercase tracking-wider px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 hover:border-slate-400 transition-colors shrink-0 cursor-pointer"
+              disabled={isBusy}
+              className="lg:hidden text-[11px] font-bold text-slate-700 hover:text-slate-950 uppercase tracking-wider px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 hover:border-slate-400 transition-colors shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               ← Back
             </button>
@@ -239,7 +420,8 @@ export const CheckoutPaymentStep = ({
             <button
               type="button"
               onClick={() => setCurrentStep(1)}
-              className="bg-white hover:bg-slate-100 border border-slate-300 hover:border-slate-900 text-slate-900 font-bold text-[11px] uppercase px-3 py-1.5 rounded-lg transition-colors shrink-0 cursor-pointer"
+              disabled={isBusy}
+              className="bg-white hover:bg-slate-100 border border-slate-300 hover:border-slate-900 text-slate-900 font-bold text-[11px] uppercase px-3 py-1.5 rounded-lg transition-colors shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Change
             </button>
@@ -513,7 +695,8 @@ export const CheckoutPaymentStep = ({
           <button
             type="button"
             onClick={() => setCurrentStep(1)}
-            className="border border-slate-300 hover:border-slate-900 bg-white text-slate-700 hover:text-slate-950 text-xs uppercase font-bold px-5 py-3 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+            disabled={isBusy}
+            className="border border-slate-300 hover:border-slate-900 bg-white text-slate-700 hover:text-slate-950 text-xs uppercase font-bold px-5 py-3 rounded-lg transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             ← Back to Shipping Details
           </button>
@@ -521,17 +704,29 @@ export const CheckoutPaymentStep = ({
           <button
             type="button"
             onClick={handleAgreeToPay}
-            disabled={isProcessing || !paymentOption}
-            className="bg-banner hover:bg-[#e8451c] text-white font-bold tracking-wider text-xs uppercase py-3.5 px-8 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+            disabled={isBusy || !paymentOption}
+            className="bg-banner hover:bg-[#e8451c] text-white font-bold tracking-wider text-xs uppercase py-3.5 px-8 rounded-lg transition-colors disabled:opacity-75 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
           >
-            {isProcessing ? "PROCESSING..." : "PLACE ORDER"}
+            {isBusy ? (
+              <>
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>{busyButtonLabel}</span>
+              </>
+            ) : (
+              "PLACE ORDER"
+            )}
           </button>
         </div>
       </div>
 
       {/* Mobile Fixed Sticky Bottom Bar */}
       <div className="fixed bottom-0 left-0 right-0 px-4 py-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white/95 backdrop-blur-md border-t border-slate-200 z-[60] flex flex-col gap-2 shadow-[0_-4px_16px_rgba(15,23,42,0.06)] lg:hidden">
-        {paymentOption === "cod" && isCodWithAdvance && advanceAmount > 0 && (
+        {isRedirecting && (
+          <div className="w-full text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg text-center font-medium">
+            Connecting securely to payment gateway. Please wait and do not press back...
+          </div>
+        )}
+        {!isRedirecting && paymentOption === "cod" && isCodWithAdvance && advanceAmount > 0 && (
           <div className="w-full text-[11px] text-slate-700 bg-slate-100/90 border border-slate-200 px-3 py-1.5 rounded-lg flex items-center justify-between gap-2">
             <span className="truncate">
               Pay <strong className="text-slate-900">₹{advanceAmount.toLocaleString("en-IN")}</strong> now via <strong>PayU</strong> • ₹{balanceDue.toLocaleString("en-IN")} on delivery
@@ -552,14 +747,19 @@ export const CheckoutPaymentStep = ({
           <button
             type="button"
             onClick={handleAgreeToPay}
-            disabled={isProcessing || !paymentOption}
-            className="shrink-0 h-10 bg-banner hover:bg-[#e8451c] text-white font-bold tracking-wider text-[11px] sm:text-xs uppercase px-5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+            disabled={isBusy || !paymentOption}
+            className="shrink-0 h-10 bg-banner hover:bg-[#e8451c] text-white font-bold tracking-wider text-[11px] sm:text-xs uppercase px-5 rounded-lg transition-colors disabled:opacity-75 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
           >
-            {isProcessing
-              ? "PROCESSING..."
-              : paymentOption === "cod" && isCodWithAdvance && advanceAmount > 0
-              ? `PAY ₹${advanceAmount.toLocaleString("en-IN")} ADVANCE`
-              : "PLACE ORDER"}
+            {isBusy ? (
+              <>
+                <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>{busyButtonLabel}</span>
+              </>
+            ) : paymentOption === "cod" && isCodWithAdvance && advanceAmount > 0 ? (
+              `PAY ₹${advanceAmount.toLocaleString("en-IN")} ADVANCE`
+            ) : (
+              "PLACE ORDER"
+            )}
           </button>
         </div>
       </div>

@@ -12,6 +12,14 @@ import { CreateShipmentInput } from "../../core/shipping/ShippingProvider";
 import { logger } from "../../core/utils/logger";
 import { getCache, setCache } from "../../core/cache/redis";
 import { ENV } from "../../core/config/env";
+import { SettingRepository } from "../settings/setting.repository";
+import {
+  estimateOrderPackageDimensions,
+  calculateVolumetricWeight,
+  calculateChargeableWeight,
+  type IPackageSpecInputItem,
+  type IPackageBoxPreset,
+} from "@store4riders/shared-utils";
 
 export class ShipmentService {
   /**
@@ -71,63 +79,28 @@ export class ShipmentService {
       };
     }
 
-    // Determine package weight & dimensions: user-provided > product DB weights/dimensions > sensible defaults
-    let totalWeight = 0;
-    let computedMaxL = 0;
-    let computedMaxB = 0;
-    let computedTotalH = 0;
-
-    try {
-      const productIds = order.items.map((i: any) => i.productId);
-      const products = await ProductModel.find({ _id: { $in: productIds } })
-        .select("weight weightUnit length breadth height variants")
-        .lean()
-        .exec();
-
-      const productMap = new Map(products.map((p: any) => [String(p._id), p]));
-
-      for (const item of order.items) {
-        const p: any = productMap.get(String(item.productId));
-        const rawW = Number((item as any).weight || p?.weight || 0.5);
-        const u = String((item as any).weightUnit || p?.weightUnit || "kg").toLowerCase();
-        let inKg = rawW;
-        if (u === "g" || u === "ml") {
-          inKg = rawW / 1000;
-        } else if (u === "l") {
-          inKg = rawW; // 1 Litre approx 1 Kg
-        }
-        totalWeight += Math.max(0.05, inKg) * (item.quantity || 1);
-
-        // Auto-detect dimensions from child variant or parent product
-        const variant = (p?.variants || []).find(
-          (v: any) => v.id === item.variantId || v.sku === item.sku
-        );
-        const l = Number(variant?.length || p?.length || (item as any).length || 0);
-        const b = Number(variant?.breadth || p?.breadth || (item as any).breadth || (item as any).width || 0);
-        const h = Number(variant?.height || p?.height || (item as any).height || 0);
-
-        if (l > 0) computedMaxL = Math.max(computedMaxL, l);
-        if (b > 0) computedMaxB = Math.max(computedMaxB, b);
-        if (h > 0) computedTotalH += h * (item.quantity || 1);
-      }
-    } catch {
-      totalWeight = order.items.length * 0.5;
-    }
-
-    if (weightKg !== undefined && weightKg !== null && Number(weightKg) > 0) {
-      totalWeight = Number(weightKg);
-    }
-    if (totalWeight <= 0) totalWeight = 0.5;
-
-    const finalLength = (customL !== undefined && customL !== null && Number(customL) > 0)
-      ? Number(customL)
-      : (computedMaxL > 0 ? Math.round(computedMaxL) : 15);
-    const finalBreadth = (customB !== undefined && customB !== null && Number(customB) > 0)
-      ? Number(customB)
-      : (computedMaxB > 0 ? Math.round(computedMaxB) : 15);
-    const finalHeight = (customH !== undefined && customH !== null && Number(customH) > 0)
-      ? Number(customH)
-      : (computedTotalH > 0 ? Math.round(computedTotalH) : 10);
+    // Determine package weight & dimensions: user-provided > product/variant DB specs + warehouse presets > defaults
+    const resolvedDims = await this.resolveOrderPackageDimensions(order, {
+      weightKg,
+      length: customL,
+      breadth: customB,
+      height: customH,
+    });
+    const totalWeight = resolvedDims.weight;
+    const finalLength = resolvedDims.length;
+    const finalBreadth = resolvedDims.breadth;
+    const finalHeight = resolvedDims.height;
+    const volumetricWeight = Number(calculateVolumetricWeight(finalLength, finalBreadth, finalHeight).toFixed(2));
+    const chargeableWeight = Number(calculateChargeableWeight(totalWeight, volumetricWeight).toFixed(2));
+    const packageEntry = {
+      length: finalLength,
+      breadth: finalBreadth,
+      height: finalHeight,
+      weight: totalWeight,
+      volumetricWeight,
+      chargeableWeight,
+      skuList: (order.items || []).map((i: any) => i.sku).filter(Boolean),
+    };
 
     // Resolve warehouse: explicitly passed > order.warehouseId > default warehouse
     let targetWarehouse: any = null;
@@ -190,6 +163,7 @@ export class ShipmentService {
         courierName: result.courierName,
         labelUrl: result.labelUrl,
         providerStatus: result.awb ? "AWB Generated" : "Order Created in Shiprocket Dashboard (Pending Courier Selection)",
+        packages: [packageEntry],
         totalWeight: totalWeight,
         customerShippingCharge: order.pricing?.shipping || 0,
         codFee: order.paymentMethod === "cod" ? (order.pricing?.codAmountToCollect || 0) : 0,
@@ -208,6 +182,8 @@ export class ShipmentService {
       shipment.courierName = result.courierName;
       shipment.labelUrl = result.labelUrl;
       shipment.providerStatus = result.awb ? "AWB Generated" : "Order Created in Shiprocket Dashboard (Pending Courier Selection)";
+      shipment.packages = [packageEntry];
+      shipment.totalWeight = totalWeight;
     }
     await shipment.save();
 
@@ -251,7 +227,7 @@ export class ShipmentService {
     orderId: string;
     provider: "delhivery" | "xpressbees";
     warehouseId: string;
-    weightKg: number;
+    weightKg?: number;
     length?: number;
     breadth?: number;
     height?: number;
@@ -275,42 +251,27 @@ export class ShipmentService {
       }
     }
 
-    let finalLength = params.length;
-    let finalBreadth = params.breadth;
-    let finalHeight = params.height;
-
-    if (!finalLength || !finalBreadth || !finalHeight) {
-      try {
-        const productIds = order.items.map((i: any) => i.productId);
-        const products = await ProductModel.find({ _id: { $in: productIds } })
-          .select("length breadth height variants")
-          .lean()
-          .exec();
-        const productMap = new Map(products.map((p: any) => [String(p._id), p]));
-        let maxL = 0;
-        let maxB = 0;
-        let sumH = 0;
-
-        for (const item of order.items) {
-          const p: any = productMap.get(String(item.productId));
-          const variant = (p?.variants || []).find((v: any) => v.id === item.variantId || v.sku === item.sku);
-          const l = Number(variant?.length || p?.length || 0);
-          const b = Number(variant?.breadth || p?.breadth || 0);
-          const h = Number(variant?.height || p?.height || 0);
-          if (l > 0) maxL = Math.max(maxL, l);
-          if (b > 0) maxB = Math.max(maxB, b);
-          if (h > 0) sumH += h * (item.quantity || 1);
-        }
-
-        if (!finalLength) finalLength = maxL > 0 ? Math.round(maxL) : 15;
-        if (!finalBreadth) finalBreadth = maxB > 0 ? Math.round(maxB) : 15;
-        if (!finalHeight) finalHeight = sumH > 0 ? Math.round(sumH) : 10;
-      } catch {
-        if (!finalLength) finalLength = 15;
-        if (!finalBreadth) finalBreadth = 15;
-        if (!finalHeight) finalHeight = 10;
-      }
-    }
+    const resolvedDims = await this.resolveOrderPackageDimensions(order, {
+      weightKg,
+      length: params.length,
+      breadth: params.breadth,
+      height: params.height,
+    });
+    const finalWeight = resolvedDims.weight;
+    const finalLength = resolvedDims.length;
+    const finalBreadth = resolvedDims.breadth;
+    const finalHeight = resolvedDims.height;
+    const volumetricWeight = Number(calculateVolumetricWeight(finalLength, finalBreadth, finalHeight).toFixed(2));
+    const chargeableWeight = Number(calculateChargeableWeight(finalWeight, volumetricWeight).toFixed(2));
+    const packageEntry = {
+      length: finalLength,
+      breadth: finalBreadth,
+      height: finalHeight,
+      weight: finalWeight,
+      volumetricWeight,
+      chargeableWeight,
+      skuList: (order.items || []).map((i: any) => i.sku).filter(Boolean),
+    };
 
     const warehouse = await WarehouseRepository.findById(warehouseId);
     if (!warehouse) {
@@ -343,7 +304,7 @@ export class ShipmentService {
       length: finalLength,
       breadth: finalBreadth,
       height: finalHeight,
-      weight: weightKg,
+      weight: finalWeight,
     };
 
     const providerInstance = ShippingProviderFactory.create(provider);
@@ -362,7 +323,8 @@ export class ShipmentService {
         courierName: result.courierName || provider,
         labelUrl: result.labelUrl,
         providerStatus: `Dispatched via ${provider} from ${warehouse.name}`,
-        totalWeight: weightKg,
+        packages: [packageEntry],
+        totalWeight: finalWeight,
         customerShippingCharge: order.pricing?.shipping || 0,
         codFee: order.paymentMethod === "cod" ? (order.pricing?.codAmountToCollect || 0) : 0,
         idempotencyKey: `direct_${provider}_${order._id}_${Date.now()}`,
@@ -376,7 +338,8 @@ export class ShipmentService {
       shipment.courierName = result.courierName || provider;
       shipment.labelUrl = result.labelUrl;
       shipment.providerStatus = `Dispatched via ${provider} from ${warehouse.name}`;
-      shipment.totalWeight = weightKg;
+      shipment.packages = [packageEntry];
+      shipment.totalWeight = finalWeight;
     }
     await shipment.save();
 
@@ -460,67 +423,130 @@ export class ShipmentService {
     order: any,
     overrides?: { weightKg?: number; length?: number; breadth?: number; height?: number }
   ) {
-    let totalWeight = 0;
-    let computedMaxL = 0;
-    let computedMaxB = 0;
-    let computedTotalH = 0;
+    let specItems: IPackageSpecInputItem[] = [];
+    const orderItems = Array.isArray(order?.items) ? order.items : [];
 
     try {
-      const productIds = (order.items || []).map((i: any) => i.productId).filter(Boolean);
-      const products = await ProductModel.find({ _id: { $in: productIds } })
-        .select("weight weightUnit length breadth height variants")
-        .lean()
-        .exec();
+      const productIds = orderItems.map((i: any) => i.productId).filter(Boolean);
+      const products =
+        productIds.length > 0
+          ? await ProductModel.find({ _id: { $in: productIds } })
+              .select("sku weight weightUnit length breadth height dimensionUnit variants")
+              .lean()
+              .exec()
+          : [];
 
       const productMap = new Map(products.map((p: any) => [String(p._id), p]));
 
-      for (const item of order.items || []) {
+      specItems = orderItems.map((item: any) => {
         const p: any = productMap.get(String(item.productId));
-        const rawW = Number((item as any).weight || p?.weight || 0.5);
-        const u = String((item as any).weightUnit || p?.weightUnit || "kg").toLowerCase();
-        const inKg = u === "g" || u === "ml" ? rawW / 1000 : rawW;
-        totalWeight += Math.max(0.05, inKg) * (item.quantity || 1);
-
         const variant = (p?.variants || []).find(
-          (v: any) => v.id === item.variantId || v.sku === item.sku
+          (v: any) =>
+            (item.variantId && (v.id === item.variantId || v.sku === item.variantId)) ||
+            (item.sku && v.sku === item.sku)
         );
-        const l = Number(variant?.length || p?.length || (item as any).length || 0);
-        const b = Number(variant?.breadth || p?.breadth || (item as any).breadth || (item as any).width || 0);
-        const h = Number(variant?.height || p?.height || (item as any).height || 0);
 
-        if (l > 0) computedMaxL = Math.max(computedMaxL, l);
-        if (b > 0) computedMaxB = Math.max(computedMaxB, b);
-        if (h > 0) computedTotalH += h * (item.quantity || 1);
-      }
+        const vW = Number(variant?.weight);
+        const pW = Number(p?.weight);
+        const itemW = Number(item.weight);
+
+        let weight: number | undefined;
+        let weightUnit: string = "kg";
+        if (vW > 0) {
+          weight = vW;
+          weightUnit = variant?.weightUnit || p?.weightUnit || item.weightUnit || "kg";
+        } else if (pW > 0) {
+          weight = pW;
+          weightUnit = p?.weightUnit || item.weightUnit || "kg";
+        } else if (itemW > 0) {
+          weight = itemW;
+          weightUnit = item.weightUnit || "kg";
+        }
+
+        const vL = Number(variant?.length);
+        const vB = Number(variant?.breadth);
+        const vH = Number(variant?.height);
+        const pL = Number(p?.length);
+        const pB = Number(p?.breadth);
+        const pH = Number(p?.height);
+        const itemL = Number(item.length);
+        const itemB = Number(item.breadth || item.width);
+        const itemH = Number(item.height);
+
+        return {
+          sku: item.sku,
+          quantity: item.quantity || 1,
+          weight,
+          weightUnit,
+          length: vL > 0 ? vL : pL > 0 ? pL : itemL > 0 ? itemL : undefined,
+          breadth: vB > 0 ? vB : pB > 0 ? pB : itemB > 0 ? itemB : undefined,
+          height: vH > 0 ? vH : pH > 0 ? pH : itemH > 0 ? itemH : undefined,
+          dimensionUnit: variant?.dimensionUnit || p?.dimensionUnit || item.dimensionUnit || "cm",
+        };
+      });
     } catch {
-      totalWeight = (order.items?.length || 1) * 0.5;
+      specItems = orderItems.map((item: any) => ({
+        sku: item.sku,
+        quantity: item.quantity || 1,
+        weight: Number(item.weight) > 0 ? Number(item.weight) : undefined,
+        weightUnit: item.weightUnit || "kg",
+        length: Number(item.length) > 0 ? Number(item.length) : undefined,
+        breadth: Number(item.breadth || item.width) > 0 ? Number(item.breadth || item.width) : undefined,
+        height: Number(item.height) > 0 ? Number(item.height) : undefined,
+        dimensionUnit: item.dimensionUnit || "cm",
+      }));
     }
 
-    if (overrides?.weightKg !== undefined && Number(overrides.weightKg) > 0) {
-      totalWeight = Number(overrides.weightKg);
+    const hasAnyDimensions = specItems.some(
+      (i) => (i.length || 0) > 0 && (i.breadth || 0) > 0 && (i.height || 0) > 0
+    );
+    const needsAutoDimensions =
+      hasAnyDimensions &&
+      !(
+        overrides?.length &&
+        Number(overrides.length) > 0 &&
+        overrides?.breadth &&
+        Number(overrides.breadth) > 0 &&
+        overrides?.height &&
+        Number(overrides.height) > 0
+      );
+
+    let packagePresets: IPackageBoxPreset[] | undefined;
+    if (needsAutoDimensions) {
+      try {
+        const settings = await SettingRepository.getSettings();
+        if (Array.isArray(settings?.packagePresets)) {
+          packagePresets = settings.packagePresets;
+        }
+      } catch {
+        packagePresets = undefined;
+      }
     }
-    if (totalWeight <= 0) totalWeight = 0.5;
+
+    const estimated = estimateOrderPackageDimensions(specItems, packagePresets);
+
+    const finalWeight =
+      overrides?.weightKg !== undefined && overrides.weightKg !== null && Number(overrides.weightKg) > 0
+        ? Number(Number(overrides.weightKg).toFixed(2))
+        : estimated.weight;
+    const finalLength =
+      overrides?.length !== undefined && overrides.length !== null && Number(overrides.length) > 0
+        ? Math.round(Number(overrides.length))
+        : estimated.length;
+    const finalBreadth =
+      overrides?.breadth !== undefined && overrides.breadth !== null && Number(overrides.breadth) > 0
+        ? Math.round(Number(overrides.breadth))
+        : estimated.breadth;
+    const finalHeight =
+      overrides?.height !== undefined && overrides.height !== null && Number(overrides.height) > 0
+        ? Math.round(Number(overrides.height))
+        : estimated.height;
 
     return {
-      weight: Number(totalWeight.toFixed(2)),
-      length:
-        overrides?.length && Number(overrides.length) > 0
-          ? Number(overrides.length)
-          : computedMaxL > 0
-          ? Math.round(computedMaxL)
-          : 15,
-      breadth:
-        overrides?.breadth && Number(overrides.breadth) > 0
-          ? Number(overrides.breadth)
-          : computedMaxB > 0
-          ? Math.round(computedMaxB)
-          : 15,
-      height:
-        overrides?.height && Number(overrides.height) > 0
-          ? Number(overrides.height)
-          : computedTotalH > 0
-          ? Math.round(computedTotalH)
-          : 10,
+      weight: finalWeight > 0 ? finalWeight : 0.5,
+      length: Math.max(1, finalLength),
+      breadth: Math.max(1, finalBreadth),
+      height: Math.max(1, finalHeight),
     };
   }
 
@@ -893,9 +919,38 @@ export class ShipmentService {
   }
 
   /**
-   * Fetch shipments for a customer order
+   * Fetch shipments for a customer order (strictly enforcing order ownership or staff role)
    */
-  static async getShipmentsByOrderId(orderId: string) {
+  static async getShipmentsByOrderId(orderId: string, requesterUserId?: string) {
+    if (requesterUserId) {
+      const isObjectId = mongoose.Types.ObjectId.isValid(orderId);
+      const order: any = await OrderModel.findOne(
+        isObjectId ? { $or: [{ _id: orderId }, { orderNumber: orderId }] } : { orderNumber: orderId }
+      )
+        .select("_id orderNumber userId")
+        .lean()
+        .exec();
+
+      if (!order) {
+        const { UserService } = await import("../user/user.service");
+        const role = await UserService.getRole(requesterUserId);
+        if (role === "customer") {
+          throw new NotFoundError("Order");
+        }
+        return ShipmentRepository.findByOrderId(orderId);
+      }
+
+      const isOwner = Boolean(order.userId && String(order.userId) === String(requesterUserId));
+      if (!isOwner) {
+        const { UserService } = await import("../user/user.service");
+        const role = await UserService.getRole(requesterUserId);
+        if (role === "customer") {
+          const { ForbiddenError } = await import("../../core/errors/AppError");
+          throw new ForbiddenError("You do not have permission to view shipments for this order");
+        }
+      }
+    }
+
     return ShipmentRepository.findByOrderId(orderId);
   }
 

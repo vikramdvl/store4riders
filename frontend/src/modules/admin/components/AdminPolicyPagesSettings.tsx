@@ -742,7 +742,7 @@ export function AdminPolicyPagesSettings() {
 
       toast.success("Policy & page contents saved successfully! Live website updated.");
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to save page contents");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to save page contents");
     } finally {
       setSaving(false);
     }

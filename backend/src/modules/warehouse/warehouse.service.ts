@@ -90,14 +90,21 @@ export class WarehouseService {
       const code = `SR-${loc.id || nickname.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
       const isPrimary = loc.is_primary === 1;
 
+      const primaryAddress = loc.address?.trim() || "";
+      const secondaryAddress = loc.address_2?.trim() || "";
+      const hasDistinctSecondary =
+        Boolean(primaryAddress) &&
+        Boolean(secondaryAddress) &&
+        !primaryAddress.toLowerCase().includes(secondaryAddress.toLowerCase());
+
       const warehouseData: Partial<IWarehouse> = {
         name: nickname,
         warehouseCode: code,
         contactPerson: loc.name?.trim() || "Warehouse Manager",
         phone: loc.phone?.trim() || "0000000000",
         email: loc.email?.trim() || "shipping@store4riders.com",
-        addressLine1: [loc.address?.trim(), loc.address_2?.trim()].filter(Boolean).join(", ") || nickname,
-        addressLine2: loc.address_2?.trim() || "",
+        addressLine1: primaryAddress || secondaryAddress || nickname,
+        addressLine2: hasDistinctSecondary ? secondaryAddress : "",
         city: loc.city?.trim() || "",
         state: loc.state?.trim() || "",
         country: loc.country?.trim() || "India",

@@ -14,12 +14,31 @@ import { ProductValidator } from "./product.validator";
 export class ProductController {
   
   static async list(req: NextRequest) {
+    const isAdmin = req.nextUrl.searchParams.get("scope") === "admin";
+    if (isAdmin) {
+      const { extractAdminFromAuth } = await import("../../core/middlewares/auth");
+      const { checkPermission } = await import("../../core/middlewares/permission");
+      const { PermissionAction } = await import("../../core/config/permissions");
+      const { UserService } = await import("../user/user.service");
+      const userId = extractAdminFromAuth(req);
+      await checkPermission(userId, PermissionAction.VIEW_DASHBOARD, UserService.getRole);
+    }
     const { filters, page, limit, sort } = ProductValidator.validateListQuery(req);
-    const { items, totalCount } = await ProductService.getProducts(filters, page, limit, sort);
+    const { items, totalCount } = await ProductService.getProducts(filters, page, limit, sort, {
+      bypassCache: isAdmin,
+    });
     return ApiResponse.paginated(items, totalCount, page, limit);
   }
 
   static async getAggregations(req: NextRequest) {
+    if (req.nextUrl.searchParams.get("scope") === "admin") {
+      const { extractAdminFromAuth } = await import("../../core/middlewares/auth");
+      const { checkPermission } = await import("../../core/middlewares/permission");
+      const { PermissionAction } = await import("../../core/config/permissions");
+      const { UserService } = await import("../user/user.service");
+      const userId = extractAdminFromAuth(req);
+      await checkPermission(userId, PermissionAction.VIEW_DASHBOARD, UserService.getRole);
+    }
     const { filters, category } = ProductValidator.validateListQuery(req);
     const searchParams = req.nextUrl.searchParams;
     

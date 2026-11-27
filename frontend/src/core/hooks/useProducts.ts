@@ -189,6 +189,7 @@ export function useProducts(
   options?: {
     enabled?: boolean;
     initialData?: PaginatedProductsResult;
+    staleTime?: number;
   }
 ) {
   return useQuery({
@@ -196,7 +197,7 @@ export function useProducts(
     queryFn: () => fetchProductsPage(params),
     enabled: options?.enabled !== undefined ? options.enabled : true,
     initialData: options?.initialData,
-    staleTime: 1000 * 60 * 3, // 3 minutes instant cache
+    staleTime: options?.staleTime ?? 1000 * 60 * 3, // 3 minutes instant cache for storefront
     gcTime: 1000 * 60 * 10,    // 10 minutes memory
     placeholderData: keepPreviousData,
   });
@@ -217,10 +218,13 @@ export function usePrefetchProducts() {
 }
 
 export function useAdminProducts(params?: UseProductsParams) {
-  return useProducts({
-    ...params,
-    scope: "admin",
-  });
+  return useProducts(
+    {
+      ...params,
+      scope: "admin",
+    },
+    { staleTime: 0 }
+  );
 }
 
 export function useProductBySlug(slug: string, initialData?: IBackendProduct) {

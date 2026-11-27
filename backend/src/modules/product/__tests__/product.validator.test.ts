@@ -120,4 +120,54 @@ describe('ProductValidator', () => {
     const result = ProductValidator.validateListQuery(req);
     expect(result.filters).toHaveProperty('$and');
   });
+
+  it('should default scope=admin listings and searches to parent/standalone products only (hiding standalone child docs)', () => {
+    const req = createMockReq('http://localhost/api/products?scope=admin&search=CHILD-SKU-M');
+    const result = ProductValidator.validateListQuery(req);
+    const andConditions = (result.filters as any).$and as any[];
+
+    const visibilityGuard = andConditions.find(
+      (cond) =>
+        Array.isArray(cond?.$and) &&
+        cond.$and.some((sub: any) => sub?.visibility?.$ne === '1') &&
+        cond.$and.some((sub: any) => sub?.visibility?.$not instanceof RegExp)
+    );
+    expect(visibilityGuard).toBeDefined();
+
+    const searchWrapper = andConditions.find(
+      (cond) =>
+        Array.isArray(cond?.$or) &&
+        cond.$or.some(
+          (branch: any) =>
+            Array.isArray(branch?.$or) &&
+            branch.$or.some((sub: any) => sub?.['variants.sku'] instanceof RegExp) &&
+            branch.$or.some((sub: any) => sub?.sku instanceof RegExp)
+        )
+    );
+    expect(searchWrapper).toBeDefined();
+
+    const skuReq = createMockReq('http://localhost/api/products?scope=admin&sku=CHILD-SKU-M');
+    const skuResult = ProductValidator.validateListQuery(skuReq);
+    const skuAnd = (skuResult.filters as any).$and as any[];
+    const skuCond = skuAnd.find(
+      (cond) =>
+        Array.isArray(cond?.$or) &&
+        cond.$or.some((clause: any) => clause?.['variants.sku'] instanceof RegExp)
+    );
+    expect(skuCond).toBeDefined();
+    expect(skuCond.$or.some((clause: any) => clause.sku instanceof RegExp)).toBe(true);
+  });
+
+  it('should allow explicit parentOnly=false in scope=admin when requested', () => {
+    const req = createMockReq('http://localhost/api/products?scope=admin&parentOnly=false');
+    const result = ProductValidator.validateListQuery(req);
+    const andConditions = (result.filters as any).$and as any[] | undefined;
+
+    const visibilityGuard = andConditions?.find(
+      (cond) =>
+        Array.isArray(cond?.$and) &&
+        cond.$and.some((sub: any) => sub?.visibility?.$ne === '1')
+    );
+    expect(visibilityGuard).toBeUndefined();
+  });
 });

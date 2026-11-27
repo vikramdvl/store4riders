@@ -27,7 +27,7 @@ export function LoginForm() {
     resolver: zodResolver(loginSchema),
   });
 
-  const loginMutation = useLogin();
+  const loginMutation = useLogin({ scope: "customer" });
 
   return (
     <form onSubmit={handleSubmit(data => loginMutation.mutate(data))} className="flex flex-col gap-4 w-full" noValidate>

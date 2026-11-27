@@ -148,7 +148,6 @@ export class OrderRepository {
               { userId: { $exists: false } },
               { userId: null },
               { userId: "" },
-              { userId: { $ne: userId } },
             ],
           },
         ],
@@ -162,6 +161,30 @@ export class OrderRepository {
       }
     ).exec();
     return result.modifiedCount;
+  }
+
+  static async findStalePendingOrders(cutoffDate: Date, limit = 50): Promise<IOrder[]> {
+    return OrderModel.find({
+      status: "pending_payment",
+      createdAt: { $lt: cutoffDate },
+    })
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .lean()
+      .exec() as unknown as IOrder[];
+  }
+
+  static async findRecentFailedGatewayOrders(sinceDate: Date, limit = 100): Promise<IOrder[]> {
+    return OrderModel.find({
+      status: "failed",
+      paymentMethod: { $ne: "cod" },
+      gatewayOrderId: { $exists: true, $ne: "" },
+      createdAt: { $gte: sinceDate },
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean()
+      .exec() as unknown as IOrder[];
   }
 
   static async markStaleOrdersAsFailed(): Promise<number> {
@@ -182,17 +205,25 @@ export class OrderRepository {
   }
 
   static async updateStatus(id: string, status: string, gatewayData?: any, session?: ClientSession): Promise<IOrder | null> {
-    const update: any = { status };
+    const setFields: any = { status };
+    const unsetFields: any = {};
     if (status === "delivered") {
-      update.deliveredAt = new Date();
+      setFields.deliveredAt = new Date();
+    }
+    if (status === "confirmed") {
+      unsetFields.failureReason = 1;
     }
     if (gatewayData) {
-      if (gatewayData.gatewayOrderId) update.gatewayOrderId = gatewayData.gatewayOrderId;
-      if (gatewayData.paymentId) update.paymentId = gatewayData.paymentId;
-      if (gatewayData.paymentSignature) update.paymentSignature = gatewayData.paymentSignature;
-      if (gatewayData.failureReason) update.failureReason = gatewayData.failureReason;
+      if (gatewayData.gatewayOrderId) setFields.gatewayOrderId = gatewayData.gatewayOrderId;
+      if (gatewayData.paymentId) setFields.paymentId = gatewayData.paymentId;
+      if (gatewayData.paymentSignature) setFields.paymentSignature = gatewayData.paymentSignature;
+      if (gatewayData.failureReason) setFields.failureReason = gatewayData.failureReason;
     }
-    return OrderModel.findByIdAndUpdate(id, update, { new: true, session }).lean().exec() as unknown as IOrder | null;
+    const updateDoc: any = { $set: setFields };
+    if (Object.keys(unsetFields).length > 0) {
+      updateDoc.$unset = unsetFields;
+    }
+    return OrderModel.findByIdAndUpdate(id, updateDoc, { new: true, session }).lean().exec() as unknown as IOrder | null;
   }
 
   static async findPaginated(query: any, page: number, limit: number, session?: ClientSession) {
@@ -272,6 +303,110 @@ export class OrderRepository {
       update.$push = { notes: note };
     }
     return OrderModel.findByIdAndUpdate(id, update, { new: true, session }).lean().exec() as unknown as IOrder | null;
+  }
+
+  static async populateItemShippingSpecs(order: any): Promise<void> {
+    if (!order || !Array.isArray(order.items) || order.items.length === 0) return;
+
+    const missingProductIds = new Set<string>();
+    const missingSkus = new Set<string>();
+
+    for (const item of order.items) {
+      const needsWeight = !(Number(item.weight) > 0);
+      const needsDims = !(Number(item.length) > 0 && Number(item.breadth) > 0 && Number(item.height) > 0);
+      if (needsWeight || needsDims) {
+        if (item.productId && mongoose.Types.ObjectId.isValid(item.productId)) {
+          missingProductIds.add(String(item.productId));
+        }
+        if (item.sku) {
+          missingSkus.add(String(item.sku));
+        }
+      }
+    }
+
+    if (missingProductIds.size === 0 && missingSkus.size === 0) return;
+
+    try {
+      const { ProductModel } = await import("../product/product.model");
+      const orClauses: any[] = [];
+      if (missingProductIds.size > 0) {
+        orClauses.push({ _id: { $in: Array.from(missingProductIds) } });
+      }
+      if (missingSkus.size > 0) {
+        orClauses.push({ sku: { $in: Array.from(missingSkus) } });
+      }
+
+      const products = await ProductModel.find({ $or: orClauses })
+        .select("sku weight weightUnit length breadth height dimensionUnit variants")
+        .lean()
+        .exec();
+
+      const productMap = new Map<string, any>();
+      const skuMap = new Map<string, any>();
+      for (const p of products) {
+        productMap.set(String(p._id), p);
+        if (p.sku) skuMap.set(String(p.sku), p);
+        if (Array.isArray(p.variants)) {
+          for (const v of p.variants) {
+            if (v?.sku) skuMap.set(String(v.sku), p);
+          }
+        }
+      }
+
+      for (const item of order.items) {
+        const p =
+          (item.productId ? productMap.get(String(item.productId)) : null) ||
+          (item.sku ? skuMap.get(String(item.sku)) : null);
+        if (!p) continue;
+
+        const variantObj = Array.isArray(p.variants)
+          ? p.variants.find(
+              (v: any) =>
+                (item.variantId && (v.id === item.variantId || v.sku === item.variantId)) ||
+                (item.sku && v.sku === item.sku)
+            )
+          : null;
+
+        if (!(Number(item.weight) > 0)) {
+          const vW = Number(variantObj?.weight);
+          const pW = Number(p.weight);
+          if (vW > 0) {
+            item.weight = vW;
+            item.weightUnit = variantObj?.weightUnit || p.weightUnit || "kg";
+          } else if (pW > 0) {
+            item.weight = pW;
+            item.weightUnit = p.weightUnit || "kg";
+          }
+        } else if (!item.weightUnit) {
+          item.weightUnit = variantObj?.weightUnit || p.weightUnit || "kg";
+        }
+
+        const vL = Number(variantObj?.length);
+        const vB = Number(variantObj?.breadth);
+        const vH = Number(variantObj?.height);
+        const pL = Number(p.length);
+        const pB = Number(p.breadth);
+        const pH = Number(p.height);
+
+        if (!(Number(item.length) > 0)) {
+          if (vL > 0) item.length = vL;
+          else if (pL > 0) item.length = pL;
+        }
+        if (!(Number(item.breadth) > 0)) {
+          if (vB > 0) item.breadth = vB;
+          else if (pB > 0) item.breadth = pB;
+        }
+        if (!(Number(item.height) > 0)) {
+          if (vH > 0) item.height = vH;
+          else if (pH > 0) item.height = pH;
+        }
+        if (!item.dimensionUnit) {
+          item.dimensionUnit = variantObj?.dimensionUnit || p.dimensionUnit || "cm";
+        }
+      }
+    } catch {
+      // Non-fatal fallback: shipping panel uses defaults when product lookup fails
+    }
   }
 
   static async countUserOrders(userId?: string, guestEmail?: string): Promise<number> {

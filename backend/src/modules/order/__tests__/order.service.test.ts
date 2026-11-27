@@ -466,7 +466,200 @@ describe('OrderService', () => {
       const result = await OrderService.syncPaymentStatus('txn_sync_2');
       expect(result.status).toBe('failed');
       expect(result.isConfirmed).toBe(false);
+      expect(result.isPending).toBe(false);
+      expect(result.gatewayStatus).toBe('failed');
       expect(result.failureReason).toBe('User cancelled');
+    });
+
+    it('should return isPending=true when PayU verify_payment reports pending or in-progress', async () => {
+      const mockOrder = {
+        _id: 'order_sync_pending',
+        orderNumber: 'OD-S4R-SYNC-3',
+        status: 'pending_payment',
+        gatewayOrderId: 'txn_sync_3',
+      };
+      const mockPayment = {
+        _id: 'pay_sync_3',
+        gateway: 'payu',
+        gatewayOrderId: 'txn_sync_3',
+        amount: 2500,
+      };
+
+      vi.mocked(OrderRepository.findByGatewayOrderId).mockResolvedValue(mockOrder as any);
+      vi.mocked(PaymentRepository.findByGatewayOrderId).mockResolvedValue(mockPayment as any);
+
+      const mockGateway = {
+        getPaymentStatus: vi.fn().mockResolvedValue({
+          transaction_details: {
+            txn_sync_3: { status: 'pending', unmappedstatus: 'in progress' }
+          }
+        })
+      };
+      vi.mocked(PaymentGatewayFactory.create).mockReturnValue(mockGateway as any);
+
+      const result = await OrderService.syncPaymentStatus('txn_sync_3');
+      expect(result.isConfirmed).toBe(false);
+      expect(result.isPending).toBe(true);
+      expect(result.gatewayStatus).toBe('pending');
+      expect(OrderRepository.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('should not double-decrement stock if concurrent transition already captured the payment', async () => {
+      const mockOrder = {
+        _id: 'order_sync_race',
+        orderNumber: 'OD-S4R-RACE',
+        status: 'pending_payment',
+        gatewayOrderId: 'txn_race',
+        items: [{ productId: 'prod_1', quantity: 2, unitPrice: 1500 }]
+      };
+      const mockPayment = {
+        _id: 'pay_race',
+        gateway: 'payu',
+        gatewayOrderId: 'txn_race',
+        amount: 3000,
+        status: 'created'
+      };
+
+      vi.mocked(OrderRepository.findByGatewayOrderId).mockResolvedValue(mockOrder as any);
+      vi.mocked(PaymentRepository.findByGatewayOrderId).mockResolvedValue(mockPayment as any);
+      vi.mocked(PaymentRepository.atomicStatusTransition).mockResolvedValue(null as any);
+      vi.mocked(OrderRepository.updateStatus).mockResolvedValue(true as any);
+
+      const mockGateway = {
+        getPaymentStatus: vi.fn().mockResolvedValue({
+          transaction_details: {
+            txn_race: { status: 'success', mihpayid: 'mih_race_1', amt: '3000.00' }
+          }
+        })
+      };
+      vi.mocked(PaymentGatewayFactory.create).mockReturnValue(mockGateway as any);
+
+      const result = await OrderService.syncPaymentStatus('txn_race');
+      expect(result.isConfirmed).toBe(true);
+      expect(ProductRepository.decrementStock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Pending Webhook Handling', () => {
+    it('should keep order in pending_payment and not mark failed on payment.pending event', async () => {
+      const mockOrder = {
+        _id: 'order_pend',
+        orderNumber: 'OD-S4R-PEND',
+        status: 'pending_payment',
+        items: [{ productId: 'prod1', quantity: 1 }]
+      };
+      const mockPayment = {
+        _id: 'pay_pend',
+        gatewayOrderId: 'txn_pend',
+        status: 'created',
+        gateway: 'payu'
+      };
+
+      vi.mocked(OrderRepository.findByGatewayOrderId).mockResolvedValue(mockOrder as any);
+      vi.mocked(PaymentRepository.findByGatewayOrderId).mockResolvedValue(mockPayment as any);
+
+      const event = {
+        event: 'payment.pending',
+        gatewayOrderId: 'txn_pend',
+        id: 'mih_pend:payment.pending',
+        payload: { id: 'mih_pend', amount: 1500, status: 'pending', unmappedStatus: 'in progress' }
+      };
+      const mockGateway = { handleWebhook: vi.fn().mockResolvedValue(event) };
+      vi.mocked(PaymentGatewayFactory.create).mockReturnValue(mockGateway as any);
+
+      const res = await OrderService.handleWebhook('status=pending&txnid=txn_pend', {}, 'payu');
+      expect(res.success).toBe(false);
+      expect(res.isPending).toBe(true);
+      expect(OrderRepository.updateStatus).not.toHaveBeenCalled();
+      expect(PaymentRepository.atomicStatusTransition).toHaveBeenCalledWith(
+        'pay_pend',
+        'created',
+        'pending',
+        { gatewayPaymentId: 'mih_pend' },
+        expect.anything()
+      );
+    });
+  });
+
+  describe('Multi-gateway syncPaymentStatus (CCAvenue & Snapmint)', () => {
+    it('should reconcile nested CCAvenue Order_Status_Result when status is Shipped', async () => {
+      const mockOrder = {
+        _id: 'order_cc_1',
+        orderNumber: 'OD-S4R-CC1',
+        status: 'pending_payment',
+        paymentMethod: 'ccavenue',
+        gatewayOrderId: 'OD-S4R-CC1',
+        items: [{ productId: 'prod_1', quantity: 1, unitPrice: 2500 }],
+      };
+      const mockPayment = {
+        _id: 'pay_cc_1',
+        gateway: 'ccavenue',
+        gatewayOrderId: 'OD-S4R-CC1',
+        amount: 2500,
+        status: 'pending',
+      };
+
+      vi.mocked(OrderRepository.findByGatewayOrderId).mockResolvedValue(mockOrder as any);
+      vi.mocked(PaymentRepository.findByGatewayOrderId).mockResolvedValue(mockPayment as any);
+      vi.mocked(PaymentRepository.atomicStatusTransition).mockResolvedValue(mockPayment as any);
+      vi.mocked(OrderRepository.updateStatus).mockResolvedValue(true as any);
+      vi.mocked(ProductRepository.decrementStock).mockResolvedValue(true as any);
+
+      const mockGateway = {
+        getPaymentStatus: vi.fn().mockResolvedValue({
+          Order_Status_Result: {
+            order_status: 'Shipped',
+            reference_no: '312009998887',
+            order_amt: '2500.00',
+          },
+        }),
+      };
+      vi.mocked(PaymentGatewayFactory.create).mockReturnValue(mockGateway as any);
+
+      const result = await OrderService.syncPaymentStatus('OD-S4R-CC1');
+      expect(result.isConfirmed).toBe(true);
+      expect(result.paymentMethod).toBe('ccavenue');
+      expect(OrderRepository.updateStatus).toHaveBeenCalledWith(
+        'order_cc_1',
+        'confirmed',
+        { paymentId: '312009998887' },
+        expect.anything()
+      );
+    });
+
+    it('should keep Snapmint payment pending when S2S API temporarily returns network_error or in_progress', async () => {
+      const mockOrder = {
+        _id: 'order_snap_1',
+        orderNumber: 'OD-S4R-SNAP1',
+        status: 'pending_payment',
+        paymentMethod: 'snapmint',
+        gatewayOrderId: 'OD-S4R-SNAP1',
+        items: [],
+      };
+      const mockPayment = {
+        _id: 'pay_snap_1',
+        gateway: 'snapmint',
+        gatewayOrderId: 'OD-S4R-SNAP1',
+        amount: 12000,
+        status: 'created',
+      };
+
+      vi.mocked(OrderRepository.findByGatewayOrderId).mockResolvedValue(mockOrder as any);
+      vi.mocked(PaymentRepository.findByGatewayOrderId).mockResolvedValue(mockPayment as any);
+
+      const mockGateway = {
+        getPaymentStatus: vi.fn().mockResolvedValue({
+          status: 'network_error',
+          error: 'Socket timeout',
+        }),
+      };
+      vi.mocked(PaymentGatewayFactory.create).mockReturnValue(mockGateway as any);
+
+      const result = await OrderService.syncPaymentStatus('OD-S4R-SNAP1');
+      expect(result.isConfirmed).toBe(false);
+      expect(result.isPending).toBe(true);
+      expect(result.gatewayStatus).toBe('pending');
+      expect(OrderRepository.updateStatus).not.toHaveBeenCalled();
     });
   });
 });

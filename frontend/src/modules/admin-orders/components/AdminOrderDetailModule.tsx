@@ -6,7 +6,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { format } from "date-fns";
 import { formatPrice, getOrderExchangesList } from "@store4riders/shared-utils";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAdminOrderById } from "@/core/hooks/useOrderById";
+import { syncOrderPaymentStatus } from "@/core/hooks/useCheckout";
 import { 
   useAdminUpdateOrderStatus, 
   useAdminAddOrderNote, 
@@ -132,7 +134,9 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
   const deleteOrderMutation = useAdminDeleteOrder();
   const pushToShiprocketMutation = usePushToShiprocket();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
+  const [isSyncingGateway, setIsSyncingGateway] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [returnNote, setReturnNote] = useState("");
   const [activeExchangeModal, setActiveExchangeModal] = useState<ActiveExchangeActionModal>(null);
@@ -225,6 +229,26 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
     setIsStatusDropdownOpen(false);
   };
 
+  const handleAdminSyncPayment = async () => {
+    const orderRef = order?.orderNumber || String((order as any)?._id || order?.id || orderId);
+    if (!orderRef || isSyncingGateway) return;
+    try {
+      setIsSyncingGateway(true);
+      const res = await syncOrderPaymentStatus(orderRef);
+      if (res?.isConfirmed) {
+        toast.success(res.message || "Payment verified with gateway! Order is now confirmed.");
+      } else {
+        toast.info(res?.message || "Payment has not been captured at the gateway yet.");
+      }
+      queryClient.invalidateQueries({ queryKey: ["admin", "order", orderId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "orders"] });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Could not verify payment with gateway.");
+    } finally {
+      setIsSyncingGateway(false);
+    }
+  };
+
   const handleAddNote = (e: React.FormEvent) => {
     e.preventDefault();
     if (!noteText.trim()) return;
@@ -298,16 +322,28 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
   const mainContent = (
     <>
       {(order.status === "failed" || order.status === "pending_payment") && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-          <ExclamationTriangleIcon className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <div className="text-xs font-bold uppercase tracking-wider text-red-900">
-              {order.status === "failed" ? "Payment Failed / Transaction Uncaptured" : "Pending Payment / Checkout Drop-Off"}
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <ExclamationTriangleIcon className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <div className="text-xs font-bold uppercase tracking-wider text-red-900">
+                {order.status === "failed" ? "Payment Failed / Transaction Uncaptured" : "Pending Payment / Checkout Drop-Off"}
+              </div>
+              <p className="text-xs text-red-700">
+                Reason: <span className="font-semibold">{order.failureReason || "Transaction was declined or abandoned at payment gateway"}</span>
+              </p>
             </div>
-            <p className="text-xs text-red-700">
-              Reason: <span className="font-semibold">{order.failureReason || "Transaction was declined or abandoned at payment gateway"}</span>
-            </p>
           </div>
+          {(order.paymentMethod !== "cod" || Boolean((order as any).gatewayOrderId)) && (
+            <button
+              type="button"
+              onClick={handleAdminSyncPayment}
+              disabled={isSyncingGateway}
+              className="shrink-0 px-3.5 py-2 bg-slate-900 hover:bg-black disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+            >
+              {isSyncingGateway ? "Checking Gateway..." : "Verify with Gateway / Bank"}
+            </button>
+          )}
         </div>
       )}
 
@@ -823,14 +859,25 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
                     <button
                       type="button"
                       onClick={() => pushToShiprocketMutation.mutate(orderId, {
-                        onSuccess: () => toast.success("AWB assigned and order dispatched via Shiprocket!"),
-                        onError: (err: any) => toast.error(err.response?.data?.message || err.message || "Failed to dispatch via Shiprocket")
+                        onSuccess: (data: any) =>
+                          toast.success(
+                            data?.awb
+                              ? `AWB ${data.awb} assigned and order dispatched via Shiprocket!`
+                              : "Order pushed to Shiprocket Dashboard! Select courier inside Shiprocket."
+                          ),
+                        onError: (err: any) =>
+                          toast.error(
+                            err?.response?.data?.error ||
+                              err?.response?.data?.message ||
+                              err.message ||
+                              "Failed to dispatch via Shiprocket"
+                          )
                       })}
                       disabled={pushToShiprocketMutation.isPending}
                       className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs uppercase tracking-wider rounded shadow-xs transition-colors disabled:opacity-50"
                     >
                       <TruckIcon className="w-4 h-4" />
-                      {pushToShiprocketMutation.isPending ? "Generating AWB via Shiprocket..." : "Dispatch & Generate AWB via Shiprocket"}
+                      {pushToShiprocketMutation.isPending ? "Pushing to Shiprocket..." : "Push Order to Shiprocket"}
                     </button>
                   )}
                 </div>
@@ -853,6 +900,7 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
               </div>
 
               {/* Collapsible Manual Override (For Offline / Emergency) */}
+              {!isCustomerCare && (
               <details className="text-xs text-neutral-500 pt-1 group">
                 <summary className="cursor-pointer font-bold text-[11px] text-neutral-600 hover:text-neutral-900 select-none flex items-center justify-between">
                   <span>Manual Warehouse Override (Offline Orders)</span>
@@ -876,6 +924,7 @@ export const AdminOrderDetailModule = ({ orderId, isModal = false, onClose }: Ad
                   </p>
                 </div>
               </details>
+              )}
             </div>
           </div>
 

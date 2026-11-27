@@ -203,7 +203,7 @@ export function AdminUrlRedirectsManager() {
       toast.success(`Redirect "${item.fromPath}" ${!item.isActive ? "enabled" : "paused"}`);
       refetch();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to toggle redirect");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to toggle redirect");
     }
   };
 
@@ -217,7 +217,7 @@ export function AdminUrlRedirectsManager() {
       toast.success(`Redirect for "${item.fromPath}" deleted`);
       refetch();
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to delete redirect");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to delete redirect");
     }
   };
 

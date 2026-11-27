@@ -25,12 +25,26 @@ export const WarehouseManager = () => {
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this warehouse?")) {
-      deleteMutation.mutate(id);
+      deleteMutation.mutate(id, {
+        onSuccess: () => {
+          toast.success("Warehouse deleted successfully");
+        },
+        onError: (err: any) => {
+          toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to delete warehouse");
+        },
+      });
     }
   };
 
   const handleSetDefault = (id: string) => {
-    setDefaultMutation.mutate(id);
+    setDefaultMutation.mutate(id, {
+      onSuccess: () => {
+        toast.success("Default warehouse updated");
+      },
+      onError: (err: any) => {
+        toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to update default warehouse");
+      },
+    });
   };
 
   const handleToggleActive = (wh: IWarehouse) => {
@@ -43,7 +57,7 @@ export const WarehouseManager = () => {
           toast.success(newStatus ? `"${wh.name}" is now Active` : `"${wh.name}" is now Disabled (hidden from dispatch)`);
         },
         onError: (err: any) => {
-          toast.error(err.response?.data?.message || err.message || "Failed to update warehouse status");
+          toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to update warehouse status");
         }
       }
     );
@@ -55,7 +69,7 @@ export const WarehouseManager = () => {
         toast.success(data?.message || "Successfully imported warehouse pickup locations from Shiprocket!");
       },
       onError: (err: any) => {
-        toast.error(err.response?.data?.message || err.message || "Failed to import pickup locations from Shiprocket");
+        toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to import pickup locations from Shiprocket");
       }
     });
   };
@@ -252,12 +266,27 @@ const WarehouseEditorModal = ({ warehouse, onClose }: { warehouse: Partial<IWare
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isEditing) {
-      updateMutation.mutate({ id: String(warehouse.id || warehouse._id), data: formData }, {
-        onSuccess: onClose
-      });
+      updateMutation.mutate(
+        { id: String(warehouse.id || warehouse._id), data: formData },
+        {
+          onSuccess: () => {
+            toast.success("Warehouse updated successfully");
+            onClose();
+          },
+          onError: (err: any) => {
+            toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to update warehouse");
+          },
+        }
+      );
     } else {
       createMutation.mutate(formData, {
-        onSuccess: onClose
+        onSuccess: () => {
+          toast.success("Warehouse created successfully");
+          onClose();
+        },
+        onError: (err: any) => {
+          toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to create warehouse");
+        },
       });
     }
   };

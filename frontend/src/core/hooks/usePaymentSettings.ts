@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
-import { IFooterConfig, IPolicyPageConfig } from "@store4riders/shared-types";
+import { IFooterConfig, IPolicyPageConfig, IPackagePreset } from "@store4riders/shared-types";
 
 export interface IPublicSettings {
   enabledGateways: string[];
@@ -33,6 +33,7 @@ export interface IPublicSettings {
   twitterUrl?: string;
   returnWindowDays?: number;
   exchangeShippingFee?: number;
+  packagePresets?: IPackagePreset[];
   snapmintMinOrderValue?: number;
   footerConfig?: IFooterConfig;
   policyPages?: IPolicyPageConfig[];

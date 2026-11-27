@@ -29,6 +29,9 @@
      *         application/json:
      *           schema:
      *             type: object
+     *             required:
+     *               - email
+     *               - password
      *             properties:
      *               email:
      *                 type: string
@@ -36,22 +39,59 @@
      *               password:
      *                 type: string
      *                 example: password123
+     *               scope:
+     *                 type: string
+     *                 enum: [customer, admin]
+     *                 default: customer
+     *                 description: Portal scope. Customer form rejects staff roles; Admin Portal rejects customers.
      *     responses:
      *       200:
      *         description: Logged in successfully
+     *       403:
+     *         description: Account role is not permitted for the requested portal scope
+     */
+
+/**
+     * @swagger
+     * /auth/send-register-otp:
+     *   post:
+     *     summary: Send 6-digit email verification OTP for registration
+     *     operationId: authSendRegisterOtp
+     *     description: Sends a single-use 6-digit verification OTP to the provided email address (valid for 10 minutes, 60s resend cooldown).
+     *     tags: [Auth]
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             required:
+     *               - email
+     *             properties:
+     *               email:
+     *                 type: string
+     *                 format: email
+     *                 example: newuser@example.com
+     *     responses:
+     *       200:
+     *         description: Verification code sent to email
+     *       409:
+     *         description: Email already in use
+     *       429:
+     *         description: Cooldown or rate limit exceeded
      */
 
 /**
      * @swagger
      * /auth/register:
      *   post:
-     *     summary: Register a new user
+     *     summary: Register a new user (with Email OTP verification)
      *     operationId: authRegister
      *     description: |
-     *       2. **Change the email address** (e.g. `test1@example.com`, `test2@example.com`).
-     *       3. Click **"Send API Request"**.
+     *       1. Call `POST /auth/send-register-otp` first to receive the 6-digit OTP on your email.
+     *       2. Provide the received `otp` along with your account details below.
      *       
-     *       **Note:** If you click "Send" multiple times without changing the email, you will get a **409 Conflict Error** because that email is already registered. If you already registered, go to the Login API instead!
+     *       **Note:** If you click "Send" multiple times without changing the email, you will get a **409 Conflict Error** once that email is registered.
      *     tags: [Auth]
      *     requestBody:
      *       required: true
@@ -63,6 +103,7 @@
      *               - firstName
      *               - email
      *               - password
+     *               - otp
      *             properties:
      *               firstName:
      *                 type: string
@@ -82,17 +123,23 @@
      *                 example: newuser@example.com
      *               password:
      *                 type: string
-     *                 minLength: 6
-     *                 description: "Strong password (Minimum 6 characters required)"
+     *                 minLength: 8
+     *                 description: "Strong password (Minimum 8 characters required)"
      *                 example: SecurePass!123
      *               phone:
      *                 type: string
-     *                 pattern: "^[0-9]{10}$"
-     *                 description: "10-digit mobile number (Optional, numbers only)"
-     *                 example: "1234567890"
+     *                 description: "Mobile number (Optional)"
+     *                 example: "+919876543210"
+     *               otp:
+     *                 type: string
+     *                 pattern: "^\\d{6}$"
+     *                 description: "6-digit email verification OTP"
+     *                 example: "123456"
      *     responses:
      *       201:
      *         description: Registered successfully
+     *       400:
+     *         description: Invalid or expired OTP
      */
 
 /**
@@ -126,6 +173,31 @@
      *     responses:
      *       200:
      *         description: Logged out
+     */
+
+/**
+     * @swagger
+     * /auth/me:
+     *   get:
+     *     summary: Verify current session and return authenticated user profile
+     *     tags: [Auth]
+     *     parameters:
+     *       - in: query
+     *         name: scope
+     *         schema:
+     *           type: string
+     *           enum: [customer, admin]
+     *         description: Optional portal scope to enforce during verification.
+     *     security:
+     *       - bearerAuth: []
+     *       - cookieAuth: []
+     *     responses:
+     *       200:
+     *         description: Active session verified
+     *       401:
+     *         description: Unauthenticated or session revoked
+     *       403:
+     *         description: Portal scope mismatch or disabled account
      */
 
 // Fix for TypeScript isolatedModules error

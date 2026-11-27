@@ -4,6 +4,7 @@ import { AppError } from "../../core/errors/AppError";
 import { ReturnService } from "./return.service";
 import { ReturnValidator } from "./return.validator";
 import { ReturnModel } from "./return.model";
+import { extractUserFromAuth } from "../../core/middlewares/auth";
 
 export class ReturnController {
   
@@ -11,14 +12,9 @@ export class ReturnController {
   // Customer Routes
   // ---------------------------------------------------------------------------
   
-  static async requestReturn(req: NextRequest) {
+  static async requestReturn(req: NextRequest, authenticatedUserId?: string) {
+    const userId = authenticatedUserId || extractUserFromAuth(req);
     const data = await ReturnValidator.validateCreateReturn(req);
-    // User validation assumes `extractUserFromAuth` middleware has run
-    const userId = req.headers.get("x-user-id");
-    
-    if (!userId) {
-      throw new AppError("Unauthorized. Please log in.", 401);
-    }
 
     const result = await ReturnService.createReturnRequest({ ...data, userId });
     return ApiResponse.success(result, "Return request created successfully", 201);

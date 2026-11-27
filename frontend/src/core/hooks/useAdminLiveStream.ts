@@ -38,19 +38,24 @@ export function useAdminLiveStream() {
       "order_manager",
       "customer_care",
       "customer_support",
+      "product_manager",
+      "marketing_manager",
     ].includes(role || "");
     if (!isStaff) return;
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
     let isMounted = true;
     let lastConnectAttemptAt = 0;
+    let reconnectAttempt = 0;
 
-    const scheduleReconnect = (delayMs = 5000, forceRefresh = false) => {
+    const scheduleReconnect = (delayMs?: number, forceRefresh = false) => {
       if (!isMounted || reconnectTimeoutRef.current) return;
+      const backoffMs = delayMs ?? Math.min(30000, 5000 * Math.pow(2, Math.min(reconnectAttempt, 3)));
+      reconnectAttempt += 1;
       reconnectTimeoutRef.current = setTimeout(() => {
         reconnectTimeoutRef.current = null;
         void connect(forceRefresh);
-      }, delayMs);
+      }, backoffMs);
     };
 
     const connect = async (forceRefresh = false) => {
@@ -65,13 +70,13 @@ export function useAdminLiveStream() {
       if (!isAuthenticated) return;
 
       let activeToken = currentToken;
-      if (forceRefresh || isTokenExpiringSoon(currentToken, lastTokenRefreshAt)) {
+      if (forceRefresh || !currentToken || isTokenExpiringSoon(currentToken, lastTokenRefreshAt)) {
         try {
-          activeToken = await refreshAccessToken();
+          activeToken = await refreshAccessToken("admin");
         } catch {
           // If session expired (401/403), refreshAccessToken logs out and stops reconnection
           if (useAuthStore.getState().isAuthenticated) {
-            scheduleReconnect(5000);
+            scheduleReconnect(undefined, false);
           }
           return;
         }
@@ -145,13 +150,18 @@ export function useAdminLiveStream() {
         es.addEventListener("SHIPMENT_UPDATED", handleEvent);
         es.addEventListener("DASHBOARD_REFRESH", handleEvent);
 
+        es.onopen = () => {
+          reconnectAttempt = 0;
+        };
+
         es.onerror = () => {
           if (es.readyState === EventSource.CLOSED) {
             es.close();
             eventSourceRef.current = null;
-            // If connection failed quickly (e.g. expired JWT returning 401), force token refresh on retry
-            const failedQuickly = Date.now() - lastConnectAttemptAt < 15000;
-            scheduleReconnect(5000, failedQuickly);
+            // If connection failed quickly (e.g. expired JWT returning 401), force token refresh on retry (rate-guarded)
+            const lastRefreshAt = useAuthStore.getState().lastTokenRefreshAt || 0;
+            const failedQuickly = Date.now() - lastConnectAttemptAt < 15000 && Date.now() - lastRefreshAt > 20000;
+            scheduleReconnect(undefined, failedQuickly);
           }
         };
       } catch {

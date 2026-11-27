@@ -16,6 +16,15 @@ export class PaymentRepository {
     return PaymentModel.findOne({ gatewayOrderId }).session(session || null).exec();
   }
 
+  static async findByGatewayPaymentId(gatewayPaymentId: string, session?: ClientSession): Promise<PaymentDocument | null> {
+    return PaymentModel.findOne({
+      gatewayPaymentId,
+      status: { $in: ["captured", "refunded", "partially_refunded"] },
+    })
+      .session(session || null)
+      .exec();
+  }
+
   static async findByOrderId(orderId: string, session?: ClientSession): Promise<PaymentDocument | null> {
     return PaymentModel.findOne({
       orderId,
@@ -67,6 +76,19 @@ export class PaymentRepository {
       { $addToSet: { webhookEvents: eventId } },
       { new: true, session }
     ).exec();
+  }
+
+  /**
+   * Atomically claims a webhook event ID in a single DB operation to prevent concurrent check-then-insert races.
+   * Returns true if this call newly claimed the event ID, false if it had already been claimed.
+   */
+  static async claimWebhookEvent(id: string, eventId: string, session?: ClientSession): Promise<boolean> {
+    const claimed = await PaymentModel.findOneAndUpdate(
+      { _id: id, webhookEvents: { $ne: eventId } },
+      { $addToSet: { webhookEvents: eventId } },
+      { new: true, session }
+    ).exec();
+    return !!claimed;
   }
 
   static async hasProcessedEvent(id: string, eventId: string): Promise<boolean> {

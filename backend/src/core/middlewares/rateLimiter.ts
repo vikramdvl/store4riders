@@ -105,6 +105,22 @@ export const checkAdminAuthRateLimit = async (ip: string) => {
 };
 
 /**
+ * 📧 Registration Email OTP Rate Limiter
+ * 10 requests per 15 minutes per IP in production.
+ */
+export const checkRegisterOtpRateLimit = async (ip: string) => {
+  await consumeRateLimit(RATE_LIMIT_CONFIG.REGISTER_OTP, ip);
+};
+
+/**
+ * 🔍 Checkout Email Lookup Rate Limiter
+ * 20 requests per 15 minutes per IP in production.
+ */
+export const checkEmailRateLimit = async (ip: string) => {
+  await consumeRateLimit(RATE_LIMIT_CONFIG.CHECK_EMAIL, ip);
+};
+
+/**
  * 💳 Order & Checkout Rate Limiter
  * 10 requests per minute. Use on /order (POST)
  */
@@ -134,6 +150,14 @@ export const checkGeneralApiRateLimit = async (ip: string) => {
  */
 export const checkReviewRateLimit = async (ip: string) => {
   await consumeRateLimit(RATE_LIMIT_CONFIG.REVIEW, ip);
+};
+
+/**
+ * 💳 Payment Verification / S2S Sync Rate Limiter
+ * 45 requests per minute per IP. Use on /orders/sync-payment and /orders/verify
+ */
+export const checkPaymentSyncRateLimit = async (ip: string) => {
+  await consumeRateLimit(RATE_LIMIT_CONFIG.PAYMENT_SYNC, ip);
 };
 
 /**

@@ -28,10 +28,15 @@ export class ShippingController {
       const result = await ShipmentService.pushOrderToShiprocket({
         orderId: body.orderId,
         warehouseId: body.warehouseId,
-        weightKg: body.weightKg !== undefined ? Number(body.weightKg) : (body.weight !== undefined ? Number(body.weight) : undefined),
-        length: body.length !== undefined ? Number(body.length) : undefined,
-        breadth: body.breadth !== undefined ? Number(body.breadth) : undefined,
-        height: body.height !== undefined ? Number(body.height) : undefined,
+        weightKg:
+          body.weightKg !== undefined && body.weightKg !== null
+            ? Number(body.weightKg)
+            : body.weight !== undefined && body.weight !== null
+            ? Number(body.weight)
+            : undefined,
+        length: body.length !== undefined && body.length !== null ? Number(body.length) : undefined,
+        breadth: body.breadth !== undefined && body.breadth !== null ? Number(body.breadth) : undefined,
+        height: body.height !== undefined && body.height !== null ? Number(body.height) : undefined,
         autoAssignAwb: Boolean(body.autoAssignAwb),
         recipientPhone: body.recipientPhone || body.phone,
       });
@@ -81,10 +86,10 @@ export class ShippingController {
         orderId: body.orderId,
         provider: body.provider,
         warehouseId: body.warehouseId,
-        weightKg: Number(body.weightKg || body.weight || 1),
-        length: body.length ? Number(body.length) : 15,
-        breadth: body.breadth ? Number(body.breadth) : 15,
-        height: body.height ? Number(body.height) : 10,
+        weightKg: body.weightKg !== undefined ? Number(body.weightKg) : (body.weight !== undefined ? Number(body.weight) : undefined),
+        length: body.length !== undefined && body.length !== null ? Number(body.length) : undefined,
+        breadth: body.breadth !== undefined && body.breadth !== null ? Number(body.breadth) : undefined,
+        height: body.height !== undefined && body.height !== null ? Number(body.height) : undefined,
         recipientPhone: body.recipientPhone || body.phone,
       });
       const { AuditLogService } = await import("../audit-log/audit-log.service");
@@ -138,8 +143,13 @@ export class ShippingController {
   /**
    * Customer / Order tracking view
    */
-  static async getShipmentsByOrderId(req: NextRequest, orderId: string) {
-    const shipments = await ShipmentService.getShipmentsByOrderId(orderId);
+  static async getShipmentsByOrderId(req: NextRequest, orderId: string, requesterUserId?: string) {
+    let resolvedUserId = requesterUserId;
+    if (!resolvedUserId) {
+      const { extractUserFromAuth } = await import("../../core/middlewares/auth");
+      resolvedUserId = extractUserFromAuth(req);
+    }
+    const shipments = await ShipmentService.getShipmentsByOrderId(orderId, resolvedUserId);
     return ApiResponse.success(shipments, "Shipments retrieved");
   }
 

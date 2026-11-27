@@ -9,7 +9,8 @@ import { SettingRepository } from "../settings/setting.repository";
 import { PaymentRepository } from "../payment/payment.repository";
 import { PaymentGatewayFactory } from "../../core/payments/PaymentGatewayFactory";
 import { IOrder, IPayment, IExchangeDetails, IExchangeItem } from "@store4riders/shared-types";
-import { AppError, NotFoundError, ValidationError } from "../../core/errors/AppError";
+import { AppError, ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "../../core/errors/AppError";
+import { signGuestOrderToken, verifyGuestOrderToken } from "../../core/utils/guestOrderToken";
 import { addEmailJob } from "../../core/queue/email.queue";
 import { logger } from "../../core/utils/logger";
 import { ENV } from "../../core/config/env";
@@ -48,8 +49,9 @@ export class OrderService {
         return {
           orderId: String((existingOrder as any)._id || existingOrder.id),
           gatewayOrderId: existingOrder.gatewayOrderId || "",
-          amount: existingOrder.pricing.total, // For partial COD this might be off, but it's okay for general idempotency fallback
+          amount: existingOrder.pricing.total,
           orderNumber: existingOrder.orderNumber,
+          paymentMethod: existingOrder.paymentMethod,
         };
       }
     }
@@ -269,6 +271,36 @@ export class OrderService {
       const itemShipCost = Number(rawShipCost) || (product as any).shippingFee || 0;
       const isItemFreeShipping = itemShipCost > 0 ? false : Boolean(product.isFreeShipping);
 
+      const itemWeight =
+        variantObj?.weight && Number(variantObj.weight) > 0
+          ? Number(variantObj.weight)
+          : product.weight && Number(product.weight) > 0
+          ? Number(product.weight)
+          : undefined;
+      const itemWeightUnit =
+        variantObj?.weight && Number(variantObj.weight) > 0
+          ? (variantObj as any).weightUnit || product.weightUnit || "kg"
+          : product.weightUnit || "kg";
+      const itemLength =
+        variantObj?.length && Number(variantObj.length) > 0
+          ? Number(variantObj.length)
+          : product.length && Number(product.length) > 0
+          ? Number(product.length)
+          : undefined;
+      const itemBreadth =
+        variantObj?.breadth && Number(variantObj.breadth) > 0
+          ? Number(variantObj.breadth)
+          : product.breadth && Number(product.breadth) > 0
+          ? Number(product.breadth)
+          : undefined;
+      const itemHeight =
+        variantObj?.height && Number(variantObj.height) > 0
+          ? Number(variantObj.height)
+          : product.height && Number(product.height) > 0
+          ? Number(product.height)
+          : undefined;
+      const itemDimensionUnit = (variantObj as any)?.dimensionUnit || product.dimensionUnit || "cm";
+
       orderItems.push({
         productId: String(product._id),
         variantId: item.variantId,
@@ -284,6 +316,13 @@ export class OrderService {
         shippingFee: itemShipCost > 0 ? itemShipCost : 0,
         image: itemImage,
         slug: product.slug || "",
+        ...(itemWeight !== undefined ? { weight: itemWeight, weightUnit: itemWeightUnit } : {}),
+        ...(itemLength !== undefined ? { length: itemLength } : {}),
+        ...(itemBreadth !== undefined ? { breadth: itemBreadth } : {}),
+        ...(itemHeight !== undefined ? { height: itemHeight } : {}),
+        ...(itemLength !== undefined || itemBreadth !== undefined || itemHeight !== undefined
+          ? { dimensionUnit: itemDimensionUnit }
+          : {}),
       });
     }
 
@@ -371,6 +410,8 @@ export class OrderService {
     }
 
     if (paymentMethod === "snapmint") {
+      // Lock Snapmint payment record amount to rounded integer rupee matching SnapmintGateway's orderValue payload
+      gatewayAmount = Math.round(totalAmount);
       const snapmintMin = typeof settings.snapmintMinOrderValue === "number" ? settings.snapmintMinOrderValue : 0;
 
       if (snapmintMin > 0 && totalAmount < snapmintMin) {
@@ -383,7 +424,13 @@ export class OrderService {
 
     const orderNumber = await this.generateOrderNumber();
 
-    const resultData = await withTransactionSafe(async (session) => {
+    let resultData: any;
+    let postCommitEmails: Array<[string, string, string]> = [];
+    // Cache gateway session across MongoDB TransientTransactionError retries so S2S gateways (Snapmint) are called at most once
+    let cachedGatewayResult: { gatewayOrderId: string; gatewayResponse: any } | null = null;
+    try {
+      resultData = await withTransactionSafe(async (session) => {
+      postCommitEmails = [];
       // If guestEmail was explicitly provided and does not match the active session user,
       // save it as a guest order so it can be claimed/linked by the guest upon register/login
       const isMismatchedUser = Boolean(userId && user && cleanGuestEmail && user.email?.toLowerCase().trim() !== cleanGuestEmail);
@@ -412,10 +459,21 @@ export class OrderService {
       let gatewayResponse: any = null;
       
       if (paymentMethod !== "cod" || collectGatewayForCod) {
-        const gateway = PaymentGatewayFactory.create(actualGatewayType);
-        const gatewayResult = await gateway.createOrder({ ...orderData, id: orderIdStr, userEmail: user?.email, snapmintMinOrderValue: settings.snapmintMinOrderValue } as any, gatewayAmount);
-        gatewayOrderId = gatewayResult.gatewayOrderId;
-        gatewayResponse = gatewayResult.gatewayResponse;
+        if (!cachedGatewayResult) {
+          const gateway = PaymentGatewayFactory.create(actualGatewayType);
+          cachedGatewayResult = await gateway.createOrder(
+            {
+              ...orderData,
+              id: orderIdStr,
+              userEmail: user?.email,
+              snapmintMinOrderValue: settings.snapmintMinOrderValue,
+              ...(input.clientIp ? { clientIp: input.clientIp } : {}),
+            } as any,
+            gatewayAmount
+          );
+        }
+        gatewayOrderId = cachedGatewayResult.gatewayOrderId;
+        gatewayResponse = cachedGatewayResult.gatewayResponse;
         
         await PaymentRepository.create({
           orderId: orderIdStr,
@@ -465,7 +523,7 @@ export class OrderService {
         }
         if (user?.email || guestEmail) {
           const emailTarget = user?.email || guestEmail;
-          addEmailJob(emailTarget, "Order Confirmed (Cash on Delivery)", `Your order #${orderNumber} has been placed successfully via Cash on Delivery.`);
+          postCommitEmails.push([emailTarget, "Order Confirmed (Cash on Delivery)", `Your order #${orderNumber} has been placed successfully via Cash on Delivery.`]);
         }
       }
 
@@ -481,9 +539,39 @@ export class OrderService {
         amount: gatewayAmount, 
         orderNumber,
         gatewayResponse,
-        paymentMethod: actualGatewayType
+        paymentMethod: actualGatewayType,
+        ...(!userId
+          ? { guestOrderToken: signGuestOrderToken(gatewayOrderId || orderNumber, guestEmail) }
+          : {}),
       };
-    });
+      });
+    } catch (err: any) {
+      if (idempotencyKey && err?.code === 11000) {
+        const existingOrder = await OrderRepository.findByIdempotencyKey(idempotencyKey);
+        if (existingOrder) {
+          return {
+            orderId: String((existingOrder as any)._id || existingOrder.id),
+            gatewayOrderId: existingOrder.gatewayOrderId || "",
+            amount: existingOrder.pricing.total,
+            orderNumber: existingOrder.orderNumber,
+            paymentMethod: existingOrder.paymentMethod,
+            ...(!userId && !existingOrder.userId
+              ? {
+                  guestOrderToken: signGuestOrderToken(
+                    existingOrder.gatewayOrderId || existingOrder.orderNumber,
+                    (existingOrder as any).guestEmail || existingOrder.shippingAddress?.email
+                  ),
+                }
+              : {}),
+          };
+        }
+      }
+      throw err;
+    }
+
+    for (const [to, subject, body] of postCommitEmails) {
+      addEmailJob(to, subject, body);
+    }
 
     if (resultData) {
       try {
@@ -500,24 +588,131 @@ export class OrderService {
     return resultData;
   }
 
+  private static async executeStockFailureAutoRefund(
+    order: any,
+    payment: any,
+    gatewayPaymentId?: string,
+    contextLabel = "OrderService"
+  ): Promise<{ refunded: boolean; refundId?: string; errorMessage?: string }> {
+    const orderIdStr = String(order?._id || order?.id || "");
+    const paymentIdStr = String(payment?._id || payment?.id || "");
+    const effectiveGatewayPaymentId = gatewayPaymentId || payment?.gatewayPaymentId;
+
+    try {
+      const gateway = PaymentGatewayFactory.create(payment.gateway);
+      const refundResult = await gateway.initiateRefund({
+        ...(payment as unknown as IPayment),
+        gatewayPaymentId: effectiveGatewayPaymentId,
+      });
+
+      if (refundResult?.success) {
+        const refundId = refundResult.refundId || `auto_ref_${Date.now()}`;
+        try {
+          if (typeof PaymentRepository.addRefund === "function") {
+            await PaymentRepository.addRefund(paymentIdStr, {
+              refundId,
+              amount: Number(payment.amount) || 0,
+              status: "processed",
+              createdAt: new Date(),
+            });
+          }
+          await PaymentRepository.atomicStatusTransition(
+            paymentIdStr,
+            "captured",
+            "refunded",
+            effectiveGatewayPaymentId ? { gatewayPaymentId: effectiveGatewayPaymentId } : {}
+          );
+          if (orderIdStr) {
+            await OrderRepository.updateStatus(orderIdStr, "failed", {
+              failureReason: `Insufficient stock after capture; automatic refund initiated (Ref: ${refundId})`,
+            });
+            await OrderRepository.addNote(orderIdStr, {
+              text: `Stock exhausted after payment capture. Automatic refund succeeded (Refund Ref: ${refundId}, Payment Ref: ${effectiveGatewayPaymentId || "N/A"}).`,
+              author: "system",
+              timestamp: new Date(),
+            });
+          }
+        } catch (persistErr: any) {
+          logger.error(`[${contextLabel}] Refund succeeded (${refundId}) but failed persisting refund metadata: ${persistErr.message}`);
+        }
+
+        const emailTarget = order?.guestEmail || order?.customerEmail;
+        if (emailTarget) {
+          addEmailJob(
+            emailTarget,
+            `Automatic Refund Initiated — Order #${order.orderNumber}`,
+            `Your payment of INR ${payment.amount} was captured, but one or more items went out of stock. An automatic refund (Ref: ${refundId}) has been initiated and will credit back per RBI TAT (1-5 business days).`
+          );
+        }
+
+        logger.info(`[${contextLabel}] Initiated automatic refund (${refundId}) for payment ${paymentIdStr} due to insufficient stock.`);
+        return { refunded: true, refundId };
+      }
+
+      const reason = refundResult?.message || "Gateway declined automatic refund request";
+      throw new Error(reason);
+    } catch (err: any) {
+      const errMsg = err?.message || "Unknown refund failure";
+      logger.error(
+        `CRITICAL REFUND ALERT [${contextLabel}]: Stock exhausted after capture for order ${order?.orderNumber || orderIdStr} (Payment ${paymentIdStr}), automatic refund FAILED: ${errMsg}`
+      );
+      try {
+        if (orderIdStr) {
+          await OrderRepository.updateStatus(orderIdStr, "failed", {
+            failureReason: `URGENT MANUAL REFUND REQUIRED: Stock exhausted after payment capture; automatic refund failed (${errMsg})`,
+          });
+          await OrderRepository.addNote(orderIdStr, {
+            text: `[URGENT MANUAL REFUND REQUIRED] Customer payment of INR ${payment?.amount || 0} captured (Ref: ${effectiveGatewayPaymentId || "N/A"}), but stock ran out and auto-refund failed: ${errMsg}`,
+            author: "system",
+            timestamp: new Date(),
+          });
+        }
+        const emailTarget = order?.guestEmail || order?.customerEmail;
+        if (emailTarget) {
+          addEmailJob(
+            emailTarget,
+            `Order Stock Update & Refund Pending — Order #${order?.orderNumber || orderIdStr}`,
+            `We received your payment of INR ${payment?.amount || 0}, however one or more items went out of stock. Our finance team has been alerted to process your refund manually (1-5 business days). Order Ref: #${order?.orderNumber || orderIdStr}.`
+          );
+        }
+      } catch {}
+      return { refunded: false, errorMessage: errMsg };
+    }
+  }
+
   static async verifyPayment(
     userId: string | undefined,
     gatewayOrderId: string,
     paymentId: string,
     signature: string,
-    extraData?: { paymentData?: any; tezResponse?: any; utr?: string }
+    extraData?: { paymentData?: any; tezResponse?: any; utr?: string; guestToken?: string; requireCallerProof?: boolean }
   ) {
     let stockFailed = false;
     let paymentRecord: any = null;
+    let postCommitEmails: Array<[string, string, string]> = [];
     await withTransactionSafe(async (session) => {
+      stockFailed = false;
+      postCommitEmails = [];
       const paymentByGateway = await PaymentRepository.findByGatewayOrderId(gatewayOrderId, session);
       const order =
         (await OrderRepository.findByGatewayOrderId(gatewayOrderId, session)) ||
         (paymentByGateway?.orderId ? await OrderRepository.findById(paymentByGateway.orderId, session) : null);
       if (!order) throw new AppError("Order not found", 404);
 
-      // Ownership check
-      if (userId && order.userId && String(order.userId) !== userId) throw new AppError("Order belongs to different user", 403);
+      // Strict ownership check (no bypassing registered-order ownership by omitting auth)
+      if (order.userId) {
+        if (userId) {
+          if (String(order.userId) !== String(userId)) {
+            throw new AppError("Order belongs to different user", 403);
+          }
+        } else if (extraData?.requireCallerProof) {
+          throw new UnauthorizedError("Authentication required to verify this order");
+        }
+      } else if (extraData?.requireCallerProof || extraData?.guestToken !== undefined) {
+        if (!verifyGuestOrderToken(extraData?.guestToken, order)) {
+          throw new ForbiddenError("Valid guest order verification token is required");
+        }
+      }
 
       const orderIdStr = String((order as any)._id || order.id);
       const payment = paymentByGateway
@@ -567,21 +762,47 @@ export class OrderService {
           }
         }
 
+        const paymentIdStr = String((payment as any)._id || payment.id);
+        const fromVerifyStatuses = ["created", "pending", "failed"] as any;
+
         if (!allStockDecremented) {
           // Manual rollback of stock
           for (const itm of decrementedItems) {
             await ProductRepository.incrementStock(itm.productId, itm.variantId, itm.quantity, session);
           }
-          
+
+          const racedInsufficientStock = await PaymentRepository.atomicStatusTransition(
+            paymentIdStr,
+            fromVerifyStatuses,
+            "captured",
+            { gatewayPaymentId: verifyResult.gatewayPaymentId },
+            session
+          );
+          if (racedInsufficientStock === null) {
+            return;
+          }
+
           await OrderRepository.updateStatus(orderIdStr, "failed", { paymentId, paymentSignature: signature }, session);
-          await PaymentRepository.atomicStatusTransition(String((payment as any)._id || payment.id), "created", "captured", { gatewayPaymentId: verifyResult.gatewayPaymentId }, session);
-          
           stockFailed = true;
           return;
         }
 
+        const transitionedPayment = await PaymentRepository.atomicStatusTransition(
+          paymentIdStr,
+          fromVerifyStatuses,
+          "captured",
+          { gatewayPaymentId: verifyResult.gatewayPaymentId },
+          session
+        );
+        if (transitionedPayment === null) {
+          for (const itm of decrementedItems) {
+            await ProductRepository.incrementStock(itm.productId, itm.variantId, itm.quantity, session);
+          }
+          logger.info(`verifyPayment skipped duplicate confirmation because payment ${paymentIdStr} was already captured.`);
+          return;
+        }
+
         await OrderRepository.updateStatus(orderIdStr, "confirmed", { paymentId, paymentSignature: signature }, session);
-        await PaymentRepository.atomicStatusTransition(String((payment as any)._id || payment.id), "created", "captured", { gatewayPaymentId: verifyResult.gatewayPaymentId }, session);
         
         for (const itm of order.items) {
           await ProductRepository.incrementSalesCount(itm.productId, itm.quantity, session);
@@ -597,23 +818,26 @@ export class OrderService {
         if (order.userId) {
           const user = await UserRepository.findById(order.userId);
           if (user) {
-            addEmailJob(user.email, "Order Confirmed", `Your payment of ${paymentId} was successful.`);
+            postCommitEmails.push([user.email, "Order Confirmed", `Your payment of ${paymentId} was successful.`]);
           }
         } else if (order.guestEmail) {
-          addEmailJob(order.guestEmail, "Order Confirmed", `Your payment of ${paymentId} was successful.`);
+          postCommitEmails.push([order.guestEmail, "Order Confirmed", `Your payment of ${paymentId} was successful.`]);
         }
       }
     });
 
+    for (const [to, subject, body] of postCommitEmails) {
+      addEmailJob(to, subject, body);
+    }
+
     if (stockFailed && paymentRecord) {
       // Initiate refund outside the transaction since it's an external API call
-      try {
-        const gateway = PaymentGatewayFactory.create(paymentRecord.gateway);
-        await gateway.initiateRefund(paymentRecord as unknown as IPayment);
-        logger.info(`Initiated refund for payment ${paymentRecord._id || paymentRecord.id} due to insufficient stock.`);
-      } catch (err: any) {
-        logger.error(`Failed to initiate refund for payment ${paymentRecord._id || paymentRecord.id}: ${err.message}`);
-      }
+      await this.executeStockFailureAutoRefund(
+        { ...(paymentRecord.order || {}), _id: paymentRecord.orderId, orderNumber: gatewayOrderId },
+        paymentRecord,
+        paymentId,
+        "verifyPayment"
+      );
       throw new AppError("Insufficient stock for one or more items. Your payment will be refunded.", 400);
     }
   }
@@ -635,13 +859,59 @@ export class OrderService {
       return { success: false, message: "Missing gatewayOrderId" };
     }
 
+    // Security: Snapmint Checkout 3.0 callbacks lack an HMAC checksum, so never trust a claimed capture or refund without S2S verification
+    if (gatewayType === "snapmint" && (eventName === "payment.captured" || eventName === "refund.processed")) {
+      try {
+        const liveStatus = await gateway.getPaymentStatus(gatewayOrderId);
+        const s2sCheck = this.evaluateGatewaySyncResponse("snapmint", gatewayOrderId, liveStatus);
+        if (eventName === "payment.captured") {
+          if (s2sCheck.isSuccess) {
+            if (s2sCheck.gatewayPaymentId && paymentEntity && !paymentEntity.id) {
+              paymentEntity.id = s2sCheck.gatewayPaymentId;
+            }
+          } else if (s2sCheck.isPending) {
+            logger.info(`Snapmint webhook capture downgraded to pending after S2S check for ${gatewayOrderId}`);
+            eventName = "payment.pending";
+          } else {
+            logger.error(
+              `CRITICAL SECURITY ALERT: Unverified Snapmint capture webhook rejected against S2S status for ${gatewayOrderId}`
+            );
+            eventName = "payment.failed";
+            if (paymentEntity) {
+              paymentEntity.isCancelled = s2sCheck.isCancelled;
+              paymentEntity.statusMessage = s2sCheck.failureReason || "Rejected by Snapmint S2S verification";
+            }
+          }
+        } else if (eventName === "refund.processed") {
+          const snapPayload = liveStatus?.data && typeof liveStatus.data === "object" ? liveStatus.data : liveStatus;
+          const liveState = String(snapPayload?.order_status || snapPayload?.status || "").trim().toLowerCase();
+          if (!liveState.includes("refund")) {
+            logger.warn(`Ignoring unconfirmed Snapmint refund webhook for ${gatewayOrderId} (S2S state: ${liveState || "unknown"})`);
+            return { success: false, message: "Unconfirmed Snapmint refund webhook" };
+          }
+        }
+      } catch {
+        if (eventName === "payment.captured") {
+          eventName = "payment.pending";
+        } else {
+          return { success: false, message: "Unable to verify Snapmint refund against S2S API" };
+        }
+      }
+    }
+
     let stockFailed = false;
     let paymentRecord: any = null;
     let finalOrderNumber = "";
     let finalOrderId = "";
+    let guestOrderToken: string | undefined = undefined;
     let isExchangeFeePayment = false;
+    let postCommitEmails: Array<[string, string, string]> = [];
+    let postCommitDisputeAlert: { orderId: string; orderNumber: string; noteText: string; gateway: string } | null = null;
 
     await withTransactionSafe(async (session) => {
+      stockFailed = false;
+      postCommitEmails = [];
+      postCommitDisputeAlert = null;
       const paymentByGateway = await PaymentRepository.findByGatewayOrderId(gatewayOrderId, session);
       const order =
         (await OrderRepository.findByGatewayOrderId(gatewayOrderId, session)) ||
@@ -654,6 +924,12 @@ export class OrderService {
 
         finalOrderNumber = order.orderNumber;
         finalOrderId = String((order as any)._id || order.id);
+        if (!order.userId) {
+          try {
+            const guestEmail = (order as any).guestEmail || order.shippingAddress?.email || (order as any).customerEmail || "";
+            guestOrderToken = signGuestOrderToken(finalOrderNumber || gatewayOrderId, guestEmail);
+          } catch {}
+        }
 
         let payment = paymentByGateway;
         if (!payment) {
@@ -671,12 +947,20 @@ export class OrderService {
         const eventId = headers["x-payu-event-id"] || headers["x-ccavenue-event-id"] || event?.id;
 
         if (eventId) {
-          const alreadyProcessed = await PaymentRepository.hasProcessedEvent(paymentIdStr, eventId);
-          if (alreadyProcessed) {
-            logger.info(`Webhook event ${eventId} already processed for payment ${paymentIdStr}`);
-            return;
+          if (typeof PaymentRepository.claimWebhookEvent === "function") {
+            const claimed = await PaymentRepository.claimWebhookEvent(paymentIdStr, eventId, session);
+            if (claimed === false) {
+              logger.info(`Webhook event ${eventId} already processed for payment ${paymentIdStr}`);
+              return;
+            }
+          } else {
+            const alreadyProcessed = await PaymentRepository.hasProcessedEvent(paymentIdStr, eventId);
+            if (alreadyProcessed) {
+              logger.info(`Webhook event ${eventId} already processed for payment ${paymentIdStr}`);
+              return;
+            }
+            await PaymentRepository.addWebhookEvent(paymentIdStr, eventId, session);
           }
-          await PaymentRepository.addWebhookEvent(paymentIdStr, eventId, session);
         }
 
         if (isExchangeFeePayment) {
@@ -684,7 +968,7 @@ export class OrderService {
             if (paymentEntity?.amount !== undefined && paymentEntity.amount !== null) {
               const receivedAmountPaise = Math.round(Number(paymentEntity.amount) * 100);
               const expectedAmountPaise = Math.round(Number(payment.amount) * 100);
-              if (receivedAmountPaise < expectedAmountPaise) {
+              if (Number.isNaN(receivedAmountPaise) || receivedAmountPaise < expectedAmountPaise) {
                 logger.error(
                   `CRITICAL SECURITY ALERT: Exchange fee amount tampering detected for order ${orderIdStr}! Expected ₹${payment.amount}, received ₹${paymentEntity.amount}`
                 );
@@ -704,6 +988,14 @@ export class OrderService {
               paymentEntity?.id || gatewayOrderId,
               session
             );
+          } else if (eventName === "payment.pending") {
+            await PaymentRepository.atomicStatusTransition(
+              paymentIdStr,
+              "created",
+              "pending",
+              { ...(paymentEntity?.id ? { gatewayPaymentId: paymentEntity.id } : {}) },
+              session
+            );
           } else if (eventName === "payment.failed") {
             await PaymentRepository.atomicStatusTransition(
               paymentIdStr,
@@ -717,13 +1009,13 @@ export class OrderService {
         }
 
         if (eventName === "payment.captured") {
-          if (order.status === "confirmed") return;
+          if (["confirmed", "processing", "packed", "shipped", "delivered"].includes(order.status)) return;
 
           // CRITICAL SECURITY: Verify payment amount matches order payment record amount
           if (paymentEntity?.amount !== undefined && paymentEntity.amount !== null) {
             const receivedAmountPaise = Math.round(Number(paymentEntity.amount) * 100);
             const expectedAmountPaise = Math.round(Number(payment.amount) * 100);
-            if (receivedAmountPaise < expectedAmountPaise) {
+            if (Number.isNaN(receivedAmountPaise) || receivedAmountPaise < expectedAmountPaise) {
               logger.error(
                 `CRITICAL SECURITY ALERT: Payment amount tampering detected for order ${orderIdStr}! Expected ₹${payment.amount}, received ₹${paymentEntity.amount}`
               );
@@ -755,20 +1047,46 @@ export class OrderService {
             }
           }
 
+          const fromCaptureStatuses = payment.status === "failed" ? ["created", "pending", "failed"] as any : ["created", "pending"] as any;
+
           if (!allStockDecremented) {
             for (const itm of decrementedItems) {
               await ProductRepository.incrementStock(itm.productId, itm.variantId, itm.quantity, session);
             }
-            
+
+            const racedInsufficientStock = await PaymentRepository.atomicStatusTransition(
+              paymentIdStr,
+              fromCaptureStatuses,
+              "captured",
+              { gatewayPaymentId: paymentEntity?.id },
+              session
+            );
+            if (racedInsufficientStock === null) {
+              return;
+            }
+
             await OrderRepository.updateStatus(orderIdStr, "failed", { paymentId: paymentEntity?.id }, session);
-            await PaymentRepository.atomicStatusTransition(paymentIdStr, ["created", "pending"], "captured", { gatewayPaymentId: paymentEntity?.id }, session);
-            
             stockFailed = true;
             return;
           }
 
+          // Atomic guard prevents duplicate stock/coupon/email side effects if concurrent webhook/sync-payment already captured payment
+          const transitionedPayment = await PaymentRepository.atomicStatusTransition(
+            paymentIdStr,
+            fromCaptureStatuses,
+            "captured",
+            { gatewayPaymentId: paymentEntity?.id },
+            session
+          );
+          if (transitionedPayment === null) {
+            for (const itm of decrementedItems) {
+              await ProductRepository.incrementStock(itm.productId, itm.variantId, itm.quantity, session);
+            }
+            logger.info(`Webhook skipped duplicate side effects for order ${orderIdStr} (already captured concurrently).`);
+            return;
+          }
+
           await OrderRepository.updateStatus(orderIdStr, "confirmed", { paymentId: paymentEntity?.id }, session);
-          await PaymentRepository.atomicStatusTransition(paymentIdStr, ["created", "pending"], "captured", { gatewayPaymentId: paymentEntity?.id }, session);
           
           for (const itm of order.items) {
             await ProductRepository.incrementSalesCount(itm.productId, itm.quantity, session);
@@ -784,13 +1102,24 @@ export class OrderService {
           if (order.userId) {
             const user = await UserRepository.findById(order.userId);
             if (user) {
-              addEmailJob(user.email, "Order Confirmed", `Your payment was successfully captured.`);
+              postCommitEmails.push([user.email, "Order Confirmed", `Your payment was successfully captured.`]);
             }
           } else if (order.guestEmail) {
-            addEmailJob(order.guestEmail, "Order Confirmed", `Your payment was successfully captured.`);
+            postCommitEmails.push([order.guestEmail, "Order Confirmed", `Your payment was successfully captured.`]);
           }
           logger.info(`Webhook successfully processed order ${orderIdStr}`);
         } 
+        else if (eventName === "payment.pending") {
+          // Keep order in pending_payment and do not fire a premature failure email while bank settles
+          await PaymentRepository.atomicStatusTransition(
+            paymentIdStr,
+            "created",
+            "pending",
+            { ...(paymentEntity?.id ? { gatewayPaymentId: paymentEntity.id } : {}) },
+            session
+          );
+          logger.info(`Webhook recorded pending payment confirmation for order ${orderIdStr}`);
+        }
         else if (eventName === "payment.failed") {
           if (order.status !== "pending_payment") return;
           const failureReason = event?.payload?.statusMessage || event?.payload?.error_Message || (event?.payload?.status ? `Payment failed: ${event.payload.status}` : "Payment declined or cancelled by customer at gateway");
@@ -800,52 +1129,295 @@ export class OrderService {
           if (order.userId) {
             const user = await UserRepository.findById(order.userId);
             if (user) {
-              addEmailJob(user.email, "Payment Failed", `Your payment attempt failed: ${failureReason}. Please try again.`);
+              postCommitEmails.push([user.email, "Payment Failed", `Your payment attempt failed: ${failureReason}. Please try again.`]);
             }
           } else if (order.guestEmail) {
-            addEmailJob(order.guestEmail, "Payment Failed", `Your payment attempt failed: ${failureReason}. Please try again.`);
+            postCommitEmails.push([order.guestEmail, "Payment Failed", `Your payment attempt failed: ${failureReason}. Please try again.`]);
           }
           logger.info(`Webhook processed failure for order ${orderIdStr}: ${failureReason}`);
         }
         else if (eventName === "refund.processed") {
-          if (order.status === "refunded") return;
-          await OrderRepository.updateStatus(orderIdStr, "refunded", null, session);
-          await PaymentRepository.atomicStatusTransition(paymentIdStr, "captured", "refunded", {}, session);
-          const refundAmount = paymentEntity?.amount ? paymentEntity.amount : (payment.amount || 0);
+          const parsedRefundAmt = Number(paymentEntity?.amount);
+          const refundAmount = Number.isFinite(parsedRefundAmt) && parsedRefundAmt > 0 ? parsedRefundAmt : (Number(payment.amount) || 0);
+          const refundRefId = String(paymentEntity?.refundId || paymentEntity?.bankArn || paymentEntity?.id || eventId || `wh_ref_${Date.now()}`);
+          const existingRefunds: any[] = Array.isArray(payment.refunds) ? payment.refunds : [];
+          const alreadyLoggedRefund = existingRefunds.some((r: any) => String(r?.refundId || "") === refundRefId);
+          const refundedSoFar = existingRefunds.reduce((sum: number, r: any) => sum + (Number(r?.amount) || 0), 0);
+          const newTotalRefunded = refundedSoFar + (alreadyLoggedRefund ? 0 : refundAmount);
+          const paymentTotal = Number(payment.amount) || refundAmount;
+          const isFullRefund = paymentTotal > 0 ? newTotalRefunded + 0.01 >= paymentTotal : true;
+
+          if (!alreadyLoggedRefund && refundAmount > 0 && typeof PaymentRepository.addRefund === "function") {
+            await PaymentRepository.addRefund(
+              paymentIdStr,
+              {
+                refundId: refundRefId,
+                amount: refundAmount,
+                status: "processed",
+                createdAt: new Date(),
+              },
+              session
+            );
+          }
+
+          await PaymentRepository.atomicStatusTransition(
+            paymentIdStr,
+            ["captured", "partially_refunded"],
+            isFullRefund ? "refunded" : "partially_refunded",
+            {},
+            session
+          );
+
+          if (isFullRefund && order.status !== "refunded") {
+            if (["confirmed", "processing", "packed"].includes(order.status)) {
+              for (const itm of order.items || []) {
+                await ProductRepository.incrementStock(itm.productId, itm.variantId, itm.quantity, session);
+                await ProductRepository.decrementSalesCount(itm.productId, itm.quantity, session);
+              }
+            }
+            await OrderRepository.updateStatus(orderIdStr, "refunded", null, session);
+          }
+
+          if (typeof OrderRepository.addNote === "function") {
+            await OrderRepository.addNote(
+              orderIdStr,
+              {
+                text: `${isFullRefund ? "Full" : "Partial"} refund confirmed by ${gatewayType.toUpperCase()} webhook (Ref: ${refundRefId}, Amount: INR ${refundAmount}).`,
+                author: "system",
+                timestamp: new Date(),
+              },
+              session
+            );
+          }
+
           if (order.userId) {
             const user = await UserRepository.findById(order.userId);
             if (user) {
-              addEmailJob(user.email, "Refund Processed", `Your refund of INR ${refundAmount} has been processed.`);
+              postCommitEmails.push([user.email, "Refund Processed", `Your refund of INR ${refundAmount} has been processed (Ref: ${refundRefId}).`]);
             }
           } else if (order.guestEmail) {
-            addEmailJob(order.guestEmail, "Refund Processed", `Your refund of INR ${refundAmount} has been processed.`);
+            postCommitEmails.push([order.guestEmail, "Refund Processed", `Your refund of INR ${refundAmount} has been processed (Ref: ${refundRefId}).`]);
           }
-          logger.info(`Webhook processed refund for order ${orderIdStr}`);
+          logger.info(`Webhook processed ${isFullRefund ? "full" : "partial"} refund for order ${orderIdStr}`);
+        }
+        else if (eventName === "payment.disputed") {
+          const cbId = String(paymentEntity?.disputeId || paymentEntity?.id || eventId || "N/A");
+          const cbStatus = String(paymentEntity?.disputeStatus || paymentEntity?.status || "Open");
+          const cbReason = String(paymentEntity?.reasonCode || paymentEntity?.statusMessage || "Bank/Cardholder Dispute");
+          const cbAmount = paymentEntity?.amount ? Number(paymentEntity.amount) : (Number(payment.amount) || 0);
+          const dueDate = String(paymentEntity?.dueDate || "Review urgently (RBI URCS 15-day TAT)");
+          const noteText = `[CHARGEBACK / DISPUTE ALERT] ${gatewayType.toUpperCase()} Dispute ID: ${cbId} | Status: ${cbStatus} | Disputed Amount: INR ${cbAmount} | Reason: ${cbReason} | Due: ${dueDate}`;
+
+          if (typeof OrderRepository.addNote === "function") {
+            await OrderRepository.addNote(
+              orderIdStr,
+              { text: noteText, author: "system", timestamp: new Date() },
+              session
+            );
+          }
+          postCommitDisputeAlert = {
+            orderId: orderIdStr,
+            orderNumber: finalOrderNumber || gatewayOrderId,
+            noteText,
+            gateway: gatewayType,
+          };
+          logger.warn(`Dispute/chargeback webhook recorded for order ${orderIdStr}: ${noteText}`);
         }
       });
 
-    if (stockFailed && paymentRecord) {
+    for (const [to, subject, body] of postCommitEmails) {
+      addEmailJob(to, subject, body);
+    }
+
+    if (postCommitDisputeAlert) {
+      const disputeAlert = postCommitDisputeAlert as { orderId: string; orderNumber: string; noteText: string; gateway: string };
       try {
-        const refundGateway = PaymentGatewayFactory.create(paymentRecord.gateway);
-        await refundGateway.initiateRefund(paymentRecord as unknown as IPayment);
-        logger.info(`Webhook initiated refund for payment ${paymentRecord._id || paymentRecord.id} due to insufficient stock.`);
-      } catch (err: any) {
-        logger.error(`Webhook failed to initiate refund for payment ${paymentRecord._id || paymentRecord.id}: ${err.message}`);
-      }
+        const { adminEventHub } = await import("../../core/events/adminEventHub");
+        adminEventHub.publish("PAYMENT_DISPUTE", {
+          orderId: disputeAlert.orderId,
+          orderNumber: disputeAlert.orderNumber,
+          gateway: disputeAlert.gateway,
+          message: disputeAlert.noteText,
+        });
+      } catch {}
+    }
+
+    if (stockFailed && paymentRecord) {
+      await this.executeStockFailureAutoRefund(
+        { _id: finalOrderId, orderNumber: finalOrderNumber },
+        paymentRecord,
+        paymentEntity?.id,
+        "handleWebhook"
+      );
     }
 
     return {
       success: eventName === "payment.captured" && !stockFailed,
+      isPending: eventName === "payment.pending",
+      isCancelled: Boolean(paymentEntity?.isCancelled),
       isExchangeFee: isExchangeFeePayment,
       orderNumber: finalOrderNumber || gatewayOrderId,
       orderId: finalOrderId || gatewayOrderId,
+      ...(guestOrderToken ? { guestOrderToken } : {}),
       eventName,
-      message: eventName === "payment.captured" ? (stockFailed ? "Insufficient stock" : "Payment captured") : "Payment failed",
+      message:
+        eventName === "payment.captured"
+          ? stockFailed
+            ? "Insufficient stock"
+            : "Payment captured"
+          : eventName === "payment.pending"
+          ? "Payment pending bank confirmation"
+          : "Payment failed",
     };
   }
 
 
-  static async syncPaymentStatus(orderIdOrNumber: string, userId?: string) {
+  private static evaluateGatewaySyncResponse(gateway: string, gatewayOrderId: string, liveStatus: any, expectedAmount?: number) {
+    let isSuccess = false;
+    let isPending = false;
+    let isCancelled = false;
+    let gatewayPaymentId = "";
+    let failureReason: string | undefined = undefined;
+
+    if (gateway === "payu") {
+      const rawTransObj = liveStatus?.transaction_details?.[gatewayOrderId];
+      const transObj = typeof rawTransObj === "object" && rawTransObj !== null ? rawTransObj : null;
+      const rawStatus = String(transObj?.status || "").trim().toLowerCase();
+      const rawUnmapped = String(transObj?.unmappedstatus || "").trim().toLowerCase();
+      const errMsg = String(transObj?.error_Message || transObj?.field9 || "").trim();
+
+      const pendingSet = new Set(["pending", "initiated", "in progress", "in_progress", "auth"]);
+      isSuccess = rawStatus === "success" || rawUnmapped === "captured";
+      isPending = !isSuccess && (rawStatus === "pending" || pendingSet.has(rawUnmapped) || !transObj);
+      isCancelled = !isSuccess && (rawUnmapped.includes("cancel") || errMsg.toLowerCase().includes("cancel"));
+      gatewayPaymentId = transObj?.mihpayid || "";
+
+      if (isSuccess && expectedAmount && transObj?.amt !== undefined && transObj?.amt !== "") {
+        const paidAmt = parseFloat(String(transObj.amt));
+        if (!isNaN(paidAmt) && Math.round(paidAmt * 100) < Math.round(expectedAmount * 100)) {
+          logger.error(`PayU sync amount mismatch for ${gatewayOrderId}: expected ${expectedAmount}, got ${paidAmt}`);
+          isSuccess = false;
+          isPending = false;
+          failureReason = "Amount mismatch detected";
+        }
+      }
+      if (!isSuccess && !isPending && errMsg && errMsg.toLowerCase() !== "no error") {
+        failureReason = errMsg;
+      }
+    } else if (gateway === "ccavenue") {
+      const ccPayload =
+        liveStatus?.Order_Status_Result && typeof liveStatus.Order_Status_Result === "object"
+          ? liveStatus.Order_Status_Result
+          : liveStatus;
+      const ccStatus = String(ccPayload?.order_status || ccPayload?.status || "").trim().toLowerCase();
+      const ccErrMsg = String(ccPayload?.status_message || ccPayload?.order_bank_response || "").trim();
+
+      isSuccess =
+        ccStatus === "success" ||
+        ccStatus === "successful" ||
+        ccStatus === "shipped" ||
+        ccStatus === "captured";
+      isPending =
+        !isSuccess &&
+        (!ccStatus ||
+          ccStatus === "awaited" ||
+          ccStatus === "initiated" ||
+          ccStatus === "pending" ||
+          ccStatus === "timeout" ||
+          ccStatus === "unknown" ||
+          ccStatus === "network_error");
+      isCancelled =
+        !isSuccess &&
+        !isPending &&
+        (ccStatus === "aborted" ||
+          ccStatus === "cancelled" ||
+          ccStatus === "cancel" ||
+          ccStatus === "user cancelled");
+      gatewayPaymentId = String(ccPayload?.tracking_id || ccPayload?.reference_no || "");
+
+      const ccAmtRaw = ccPayload?.order_amt ?? ccPayload?.amount;
+      if (isSuccess && expectedAmount && ccAmtRaw !== undefined && ccAmtRaw !== "") {
+        const paidAmt = parseFloat(String(ccAmtRaw));
+        if (!isNaN(paidAmt) && Math.round(paidAmt * 100) < Math.round(expectedAmount * 100)) {
+          logger.error(`CCAvenue sync amount mismatch for ${gatewayOrderId}: expected ${expectedAmount}, got ${paidAmt}`);
+          isSuccess = false;
+          isPending = false;
+          failureReason = "Amount mismatch detected";
+        }
+      }
+      if (!isSuccess && !isPending && ccErrMsg && !failureReason) {
+        failureReason = ccErrMsg;
+      }
+    } else if (gateway === "snapmint") {
+      const snapPayload =
+        liveStatus?.data && typeof liveStatus.data === "object" ? liveStatus.data : liveStatus;
+      const snapStatus = String(
+        snapPayload?.order_status || snapPayload?.status || snapPayload?.payment_status || ""
+      )
+        .trim()
+        .toLowerCase();
+      const snapErrMsg = String(snapPayload?.message || snapPayload?.error || "").trim();
+
+      isSuccess =
+        snapStatus === "success" ||
+        snapStatus === "completed" ||
+        snapStatus === "authorized" ||
+        snapStatus === "captured";
+      isPending =
+        !isSuccess &&
+        (!snapStatus ||
+          snapStatus === "pending" ||
+          snapStatus === "initiated" ||
+          snapStatus === "in_progress" ||
+          snapStatus === "in progress" ||
+          snapStatus === "processing" ||
+          snapStatus === "awaited" ||
+          snapStatus === "unknown" ||
+          snapStatus === "network_error");
+      isCancelled =
+        !isSuccess &&
+        !isPending &&
+        (snapStatus === "cancelled" ||
+          snapStatus === "canceled" ||
+          snapStatus === "aborted" ||
+          snapStatus === "user_cancelled");
+      gatewayPaymentId = String(snapPayload?.id || snapPayload?.payment_id || snapPayload?.token || "");
+
+      const snapAmtRaw = snapPayload?.orderValue ?? snapPayload?.order_value ?? snapPayload?.amount;
+      if (isSuccess && expectedAmount && snapAmtRaw !== undefined && snapAmtRaw !== "") {
+        const paidAmt = parseFloat(String(snapAmtRaw));
+        if (!isNaN(paidAmt) && Math.round(paidAmt * 100) < Math.round(expectedAmount * 100)) {
+          logger.error(`Snapmint sync amount mismatch for ${gatewayOrderId}: expected ${expectedAmount}, got ${paidAmt}`);
+          isSuccess = false;
+          isPending = false;
+          failureReason = "Amount mismatch detected";
+        }
+      }
+      if (!isSuccess && !isPending && snapErrMsg && !failureReason) {
+        failureReason = snapErrMsg;
+      }
+    } else if (gateway === "upi" || gateway === "gpay") {
+      isSuccess = liveStatus?.status === "SUCCESS" || liveStatus?.isSuccess === true;
+      isPending = !isSuccess && String(liveStatus?.status || "").toUpperCase() === "PENDING";
+      gatewayPaymentId = liveStatus?.gatewayPaymentId || "";
+    }
+
+    const gatewayStatus = isSuccess
+      ? "confirmed"
+      : isPending
+      ? "pending"
+      : isCancelled
+      ? "cancelled"
+      : "failed";
+
+    return { isSuccess, isPending, isCancelled, gatewayPaymentId, failureReason, gatewayStatus };
+  }
+
+  static async syncPaymentStatus(
+    orderIdOrNumber: string,
+    userId?: string,
+    options?: { requireCallerProof?: boolean; guestToken?: string; includeGuestToken?: boolean }
+  ) {
     const isObjectId = mongoose.Types.ObjectId.isValid(orderIdOrNumber);
     const paymentByGateway = await PaymentRepository.findByGatewayOrderId(orderIdOrNumber);
     const order = await OrderRepository.findByGatewayOrderId(orderIdOrNumber) 
@@ -856,11 +1428,41 @@ export class OrderService {
       throw new NotFoundError("Order");
     }
 
-    if (userId && order.userId && String(order.userId) !== String(userId)) {
-      throw new AppError("Unauthorized access to this order", 403);
+    if (order.userId) {
+      if (userId) {
+        if (String(order.userId) !== String(userId)) {
+          throw new AppError("Unauthorized access to this order", 403);
+        }
+      } else if (options?.requireCallerProof) {
+        throw new UnauthorizedError("Authentication required to access this order");
+      }
+    } else if (options?.requireCallerProof || options?.guestToken !== undefined) {
+      if (!verifyGuestOrderToken(options?.guestToken, order)) {
+        throw new ForbiddenError("Valid guest order verification token is required");
+      }
+    } else if (userId) {
+      const caller = await UserRepository.findById(userId);
+      const callerEmail = String(caller?.email || "").trim().toLowerCase();
+      const orderEmail = String(
+        (order as any).guestEmail || order.shippingAddress?.email || (order as any).customerEmail || ""
+      )
+        .trim()
+        .toLowerCase();
+      if (!callerEmail || !orderEmail || callerEmail !== orderEmail) {
+        throw new AppError("Unauthorized access to this order", 403);
+      }
     }
 
     const orderIdStr = String((order as any)._id || order.id);
+    const guestTokenSuffix =
+      options?.includeGuestToken && !order.userId
+        ? {
+            guestOrderToken: signGuestOrderToken(
+              order.orderNumber || order.gatewayOrderId || orderIdStr,
+              (order as any).guestEmail || order.shippingAddress?.email || (order as any).customerEmail || ""
+            ),
+          }
+        : {};
 
     // Handle Exchange Fee payment sync separately without altering main order confirmed status
     if (paymentByGateway?.paymentPurpose === "exchange_fee") {
@@ -869,6 +1471,9 @@ export class OrderService {
           status: order.status,
           orderNumber: order.orderNumber,
           isConfirmed: true,
+          isPending: false,
+          isCancelled: false,
+          gatewayStatus: "confirmed",
           isExchangeFee: true,
           message: "Exchange shipping fee is already paid!",
         };
@@ -876,40 +1481,56 @@ export class OrderService {
       try {
         const gateway = PaymentGatewayFactory.create(paymentByGateway.gateway);
         const liveStatus = await gateway.getPaymentStatus(paymentByGateway.gatewayOrderId);
-        let isSuccess = false;
-        let gatewayPaymentId = "";
+        const evaluated = this.evaluateGatewaySyncResponse(
+          paymentByGateway.gateway,
+          paymentByGateway.gatewayOrderId,
+          liveStatus,
+          paymentByGateway.amount
+        );
 
-        if (paymentByGateway.gateway === "payu") {
-          const transObj = liveStatus?.transaction_details?.[paymentByGateway.gatewayOrderId];
-          isSuccess = transObj?.status === "success";
-          gatewayPaymentId = transObj?.mihpayid;
-        } else if (paymentByGateway.gateway === "ccavenue") {
-          isSuccess = liveStatus?.order_status === "Success" || liveStatus?.status === "Success";
-          gatewayPaymentId = liveStatus?.tracking_id;
-        } else if (paymentByGateway.gateway === "upi" || paymentByGateway.gateway === "gpay") {
-          isSuccess = liveStatus?.status === "SUCCESS" || liveStatus?.isSuccess === true;
-          gatewayPaymentId = liveStatus?.gatewayPaymentId || paymentByGateway.gatewayPaymentId || "";
-        }
-
-        if (isSuccess) {
+        if (evaluated.isSuccess) {
           await withTransactionSafe(async (session) => {
-            await this.applyExchangeFeeCapture(order, paymentByGateway, gatewayPaymentId || paymentByGateway.gatewayOrderId, session);
+            await this.applyExchangeFeeCapture(
+              order,
+              paymentByGateway,
+              evaluated.gatewayPaymentId || paymentByGateway.gatewayPaymentId || paymentByGateway.gatewayOrderId,
+              session
+            );
           });
           return {
             status: order.status,
             orderNumber: order.orderNumber,
             isConfirmed: true,
+            isPending: false,
+            isCancelled: false,
+            gatewayStatus: "confirmed",
             isExchangeFee: true,
             reconciled: true,
             message: "Exchange shipping fee verified with bank!",
           };
         }
+
+        return {
+          status: order.status,
+          orderNumber: order.orderNumber,
+          isConfirmed: false,
+          isPending: evaluated.isPending,
+          isCancelled: evaluated.isCancelled,
+          gatewayStatus: evaluated.gatewayStatus,
+          isExchangeFee: true,
+          message: evaluated.isPending
+            ? "Exchange shipping fee is awaiting bank confirmation."
+            : "Exchange shipping fee payment not confirmed yet.",
+        };
       } catch {}
 
       return {
         status: order.status,
         orderNumber: order.orderNumber,
         isConfirmed: false,
+        isPending: true,
+        isCancelled: false,
+        gatewayStatus: "pending",
         isExchangeFee: true,
         message: "Exchange shipping fee payment not confirmed yet.",
       };
@@ -920,8 +1541,13 @@ export class OrderService {
       return {
         status: order.status,
         orderNumber: order.orderNumber,
+        paymentMethod: order.paymentMethod,
         isConfirmed: true,
+        isPending: false,
+        isCancelled: false,
+        gatewayStatus: "confirmed",
         message: "Order is already confirmed and active.",
+        ...guestTokenSuffix,
       };
     }
 
@@ -932,7 +1558,11 @@ export class OrderService {
       return {
         status: order.status,
         orderNumber: order.orderNumber,
+        paymentMethod: order.paymentMethod,
         isConfirmed: false,
+        isPending: false,
+        isCancelled: false,
+        gatewayStatus: "failed",
         failureReason: order.failureReason,
         message: "No online payment transaction found for this order.",
       };
@@ -941,120 +1571,254 @@ export class OrderService {
     try {
       const gateway = PaymentGatewayFactory.create(payment.gateway);
       const liveStatus = await gateway.getPaymentStatus(payment.gatewayOrderId);
+      const evaluated = this.evaluateGatewaySyncResponse(
+        payment.gateway,
+        payment.gatewayOrderId,
+        liveStatus,
+        payment.amount
+      );
+      const gatewayPaymentId = evaluated.gatewayPaymentId || payment.gatewayPaymentId || "";
 
-      let isSuccess = false;
-      let gatewayPaymentId = "";
-
-      if (payment.gateway === "payu") {
-        const transObj = liveStatus?.transaction_details?.[payment.gatewayOrderId];
-        isSuccess = transObj?.status === "success";
-        gatewayPaymentId = transObj?.mihpayid;
-      } else if (payment.gateway === "ccavenue") {
-        isSuccess = liveStatus?.order_status === "Success" || liveStatus?.status === "Success";
-        gatewayPaymentId = liveStatus?.tracking_id;
-      } else if (payment.gateway === "snapmint") {
-        const snapStatus = String(liveStatus?.status || liveStatus?.order_status || "").toLowerCase();
-        isSuccess = snapStatus === "success" || snapStatus === "completed" || snapStatus === "authorized";
-        gatewayPaymentId = liveStatus?.id || liveStatus?.token;
-      } else if (payment.gateway === "upi" || payment.gateway === "gpay") {
-        isSuccess = liveStatus?.status === "SUCCESS" || liveStatus?.isSuccess === true;
-        gatewayPaymentId = liveStatus?.gatewayPaymentId || payment.gatewayPaymentId || "";
-      }
-
-      if (isSuccess) {
+      if (evaluated.isSuccess) {
+        let syncStockFailed = false;
+        let syncPostCommitEmails: Array<[string, string, string]> = [];
         await withTransactionSafe(async (session) => {
-          await OrderRepository.updateStatus(orderIdStr, "confirmed", { paymentId: gatewayPaymentId }, session);
-          await PaymentRepository.atomicStatusTransition(String((payment as any)._id || payment.id), ["created", "pending", "failed"], "captured", { gatewayPaymentId }, session);
-          for (const itm of order.items || []) {
-            await ProductRepository.decrementStock(itm.productId, itm.variantId, itm.quantity, session);
-            await ProductRepository.incrementSalesCount(itm.productId, itm.quantity, session);
-          }
-          if (order.pricing && order.pricing.couponCode) {
-            await CouponService.incrementUsage(order.pricing.couponCode, order.userId, session);
+          syncStockFailed = false;
+          syncPostCommitEmails = [];
+          const paymentIdStr = String((payment as any)._id || payment.id);
+          const transitionedPayment = await PaymentRepository.atomicStatusTransition(
+            paymentIdStr,
+            ["created", "pending", "failed"],
+            "captured",
+            { gatewayPaymentId },
+            session
+          );
+
+          // Only decrement stock and send emails when this request won the atomic transition
+          if (transitionedPayment) {
+            const decrementedItems: any[] = [];
+            let allStockDecremented = true;
+            for (const itm of order.items || []) {
+              const decResult = await ProductRepository.decrementStock(
+                itm.productId,
+                itm.variantId,
+                itm.quantity,
+                session
+              );
+              if (decResult === false) {
+                allStockDecremented = false;
+                break;
+              }
+              decrementedItems.push(itm);
+            }
+
+            if (!allStockDecremented) {
+              for (const itm of decrementedItems) {
+                await ProductRepository.incrementStock(itm.productId, itm.variantId, itm.quantity, session);
+              }
+              await OrderRepository.updateStatus(
+                orderIdStr,
+                "failed",
+                {
+                  paymentId: gatewayPaymentId,
+                  failureReason: "Insufficient stock after payment capture; refund initiated.",
+                },
+                session
+              );
+              syncStockFailed = true;
+              return;
+            }
+
+            await OrderRepository.updateStatus(orderIdStr, "confirmed", { paymentId: gatewayPaymentId }, session);
+
+            for (const itm of order.items || []) {
+              await ProductRepository.incrementSalesCount(itm.productId, itm.quantity, session);
+            }
+            if (order.pricing && order.pricing.couponCode) {
+              await CouponService.incrementUsage(order.pricing.couponCode, order.userId, session);
+            }
+            if (order.userId) {
+              await CartService.clearCart(order.userId, session);
+            }
+            if (order.userId) {
+              const user = await UserRepository.findById(order.userId);
+              if (user?.email) {
+                syncPostCommitEmails.push([user.email, "Order Confirmed", `Your payment of ${gatewayPaymentId || order.orderNumber} was successful.`]);
+              }
+            } else if (order.guestEmail) {
+              syncPostCommitEmails.push([order.guestEmail, "Order Confirmed", `Your payment of ${gatewayPaymentId || order.orderNumber} was successful.`]);
+            }
+          } else {
+            await OrderRepository.updateStatus(orderIdStr, "confirmed", { paymentId: gatewayPaymentId }, session);
           }
         });
+
+        for (const [to, subject, body] of syncPostCommitEmails) {
+          addEmailJob(to, subject, body);
+        }
+
+        if (syncStockFailed) {
+          const refundOutcome = await this.executeStockFailureAutoRefund(
+            order,
+            payment,
+            gatewayPaymentId,
+            "syncPaymentStatus"
+          );
+          return {
+            status: "failed",
+            orderNumber: order.orderNumber,
+            paymentMethod: order.paymentMethod,
+            isConfirmed: false,
+            isPending: false,
+            isCancelled: false,
+            gatewayStatus: "failed",
+            failureReason: refundOutcome.refunded
+              ? "Insufficient stock for one or more items. Automatic refund initiated."
+              : "Insufficient stock after capture; manual refund queued by support.",
+            message: refundOutcome.refunded
+              ? "Payment captured, but stock ran out. Automatic refund has been initiated."
+              : "Payment captured, but stock ran out. Support has been alerted to process your refund urgently.",
+          };
+        }
 
         return {
           status: "confirmed",
           orderNumber: order.orderNumber,
+          paymentMethod: order.paymentMethod,
           isConfirmed: true,
+          isPending: false,
+          isCancelled: false,
+          gatewayStatus: "confirmed",
           reconciled: true,
           message: "Payment successfully verified with bank! Your order is now confirmed.",
+          ...guestTokenSuffix,
         };
-      } else {
+      }
+
+      if (evaluated.isPending) {
         return {
           status: order.status,
           orderNumber: order.orderNumber,
+          paymentMethod: order.paymentMethod,
           isConfirmed: false,
-          failureReason: order.failureReason || "Transaction not confirmed or was cancelled at gateway.",
-          message: "Payment has not been completed or was declined.",
+          isPending: true,
+          isCancelled: false,
+          gatewayStatus: "pending",
+          message: "Payment is awaiting confirmation from your bank. Please wait a moment...",
+          ...guestTokenSuffix,
         };
       }
+
+      return {
+        status: order.status,
+        orderNumber: order.orderNumber,
+        paymentMethod: order.paymentMethod,
+        isConfirmed: false,
+        isPending: false,
+        isCancelled: evaluated.isCancelled,
+        gatewayStatus: evaluated.gatewayStatus,
+        failureReason: evaluated.failureReason || order.failureReason || "Transaction not confirmed or was cancelled at gateway.",
+        message: evaluated.isCancelled
+          ? "Payment was cancelled at the payment gateway."
+          : "Payment has not been completed or was declined.",
+        ...guestTokenSuffix,
+      };
     } catch (err: any) {
       return {
         status: order.status,
         orderNumber: order.orderNumber,
+        paymentMethod: order.paymentMethod,
         isConfirmed: false,
+        isPending: true,
+        isCancelled: false,
+        gatewayStatus: "pending",
         failureReason: order.failureReason,
         message: "Unable to reach gateway for status update at this moment.",
+        ...guestTokenSuffix,
       };
     }
   }
   static async requestRefund(orderId: string, amount?: number, reason?: string) {
-    return await withTransactionSafe(async (session) => {
-      const order = await OrderRepository.findById(orderId, session);
-        if (!order) throw new AppError("Order not found", 404);
+    // 1. Pre-flight read & validation OUTSIDE write transaction so TransientTransactionError retries can never double-refund
+    const initialOrder = await OrderRepository.findById(orderId);
+    if (!initialOrder) throw new AppError("Order not found", 404);
 
-        if (order.status !== "confirmed" && order.status !== "processing" && order.status !== "shipped" && order.status !== "delivered") {
-          throw new AppError(`Cannot refund order in ${order.status} status`, 400);
-        }
+    if (
+      initialOrder.status !== "confirmed" &&
+      initialOrder.status !== "processing" &&
+      initialOrder.status !== "shipped" &&
+      initialOrder.status !== "delivered" &&
+      initialOrder.status !== "failed"
+    ) {
+      throw new AppError(`Cannot refund order in ${initialOrder.status} status`, 400);
+    }
 
-        const payment = await PaymentRepository.findByGatewayOrderId(order.gatewayOrderId || "", session);
-        if (!payment) throw new AppError("Payment record not found", 404);
+    const initialPayment = await PaymentRepository.findByGatewayOrderId(initialOrder.gatewayOrderId || "");
+    if (!initialPayment) throw new AppError("Payment record not found", 404);
 
-        if (payment.status !== "captured" && payment.status !== "partially_refunded") {
-          throw new AppError(`Cannot refund payment in ${payment.status} status`, 400);
-        }
+    if (initialPayment.status !== "captured" && initialPayment.status !== "partially_refunded") {
+      throw new AppError(`Cannot refund payment in ${initialPayment.status} status`, 400);
+    }
 
-        const refundAmount = amount || payment.amount;
-        const totalRefundedSoFar = payment.refunds?.reduce((sum: number, r: any) => sum + r.amount, 0) || 0;
+    const refundAmount = amount !== undefined ? Number(amount) : Number(initialPayment.amount);
+    if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+      throw new AppError("Invalid refund amount", 400);
+    }
+    const totalRefundedSoFar = initialPayment.refunds?.reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0) || 0;
 
-        if (totalRefundedSoFar + refundAmount > payment.amount) {
-          throw new AppError("Refund amount exceeds total payment amount", 400);
-        }
+    if (totalRefundedSoFar + refundAmount > initialPayment.amount + 0.01) {
+      throw new AppError("Refund amount exceeds total payment amount", 400);
+    }
 
-        const gateway = PaymentGatewayFactory.create(payment.gateway);
-        const refundResult = await gateway.initiateRefund(payment as unknown as IPayment, refundAmount);
+    // 2. Call external gateway API ONCE before opening DB write transaction
+    const gateway = PaymentGatewayFactory.create(initialPayment.gateway);
+    const refundResult = await gateway.initiateRefund(initialPayment as unknown as IPayment, refundAmount);
 
-        if (!refundResult.success) {
-          throw new AppError(refundResult.message || "Refund initiation failed", 400);
-        }
+    if (!refundResult.success) {
+      throw new AppError(refundResult.message || "Refund initiation failed", 400);
+    }
 
-        const refundRecord = {
-          refundId: refundResult.refundId || `ref_${Date.now()}`,
-          amount: refundAmount,
-          reason: reason || "Customer request",
-          createdAt: new Date(),
-          status: "processed"
-        };
+    const refundRecord = {
+      refundId: refundResult.refundId || `ref_${Date.now()}`,
+      amount: refundAmount,
+      reason: reason || "Customer request",
+      createdAt: new Date(),
+      status: "processed",
+    };
 
-        await PaymentRepository.addRefund(String((payment as any)._id || payment.id), refundRecord as any, session);
+    const paymentIdStr = String((initialPayment as any)._id || initialPayment.id);
+    const isFullRefund = totalRefundedSoFar + refundAmount + 0.01 >= initialPayment.amount;
+    const newPaymentStatus = isFullRefund ? "refunded" : "partially_refunded";
+    let postCommitEmails: Array<[string, string, string]> = [];
 
-        const isFullRefund = (totalRefundedSoFar + refundAmount) >= payment.amount;
-        const newPaymentStatus = isFullRefund ? "refunded" : "partially_refunded";
+    // 3. Persist financial & inventory mutations atomically inside DB transaction
+    const outcome = await withTransactionSafe(async (session) => {
+      postCommitEmails = [];
+      const order = (await OrderRepository.findById(orderId, session)) || initialOrder;
+      const payment = (await PaymentRepository.findByGatewayOrderId(order.gatewayOrderId || "", session)) || initialPayment;
 
-        await PaymentRepository.atomicStatusTransition(
-          String((payment as any)._id || payment.id), 
-          ["captured", "partially_refunded"], 
-          newPaymentStatus, 
-          {}, 
-          session
-        );
+      await PaymentRepository.addRefund(paymentIdStr, refundRecord as any, session);
 
-        if (isFullRefund) {
+      await PaymentRepository.atomicStatusTransition(
+        paymentIdStr,
+        ["captured", "partially_refunded"],
+        newPaymentStatus,
+        {},
+        session
+      );
+
+      if (isFullRefund) {
+        if (order.status === "failed") {
+          await OrderRepository.updateStatus(
+            orderId,
+            "failed",
+            { failureReason: `Manual refund processed (Ref: ${refundRecord.refundId})` },
+            session
+          );
+        } else {
           await OrderRepository.updateStatus(orderId, "cancelled", { cancelReason: reason || "Refunded" }, session);
-          
-          // Restore stock for all items
+
+          // Restore stock only when inventory had actually been decremented (never inflate stock on failed orders)
           if (order.items && order.items.length > 0) {
             for (const itm of order.items) {
               await ProductRepository.incrementStock(itm.productId, itm.variantId, itm.quantity, session);
@@ -1062,14 +1826,38 @@ export class OrderService {
             }
           }
 
-          // Restore coupon usage if applicable
           if (order.pricing?.couponCode) {
             await CouponService.decrementUsage(order.pricing.couponCode, session);
           }
         }
+      }
 
-        return { success: true, refundId: refundRecord.refundId, status: newPaymentStatus };
-      });
+      const emailTarget = (order as any)?.guestEmail || (order as any)?.customerEmail;
+      if (emailTarget) {
+        postCommitEmails.push([
+          emailTarget,
+          `Refund Initiated — Order #${order.orderNumber || orderId}`,
+          `A ${isFullRefund ? "full" : "partial"} refund of INR ${refundAmount} (Ref: ${refundRecord.refundId}) has been initiated and will reflect in 1-5 business days per RBI TAT.`,
+        ]);
+      } else if (order.userId) {
+        const user = await UserRepository.findById(order.userId);
+        if (user?.email) {
+          postCommitEmails.push([
+            user.email,
+            `Refund Initiated — Order #${order.orderNumber || orderId}`,
+            `A ${isFullRefund ? "full" : "partial"} refund of INR ${refundAmount} (Ref: ${refundRecord.refundId}) has been initiated and will reflect in 1-5 business days per RBI TAT.`,
+          ]);
+        }
+      }
+
+      return { success: true, refundId: refundRecord.refundId, status: newPaymentStatus, gatewayRefunded: Boolean(payment) };
+    });
+
+    for (const [to, subject, body] of postCommitEmails) {
+      addEmailJob(to, subject, body);
+    }
+
+    return { success: true, refundId: outcome.refundId, status: outcome.status };
   }
 
   static async getOrderById(orderId: string) {
@@ -1077,6 +1865,8 @@ export class OrderService {
     if (!order) {
       throw new NotFoundError("Order not found");
     }
+
+    await OrderRepository.populateItemShippingSpecs(order);
 
     if (order.userId) {
       try {
@@ -1397,12 +2187,15 @@ export class OrderService {
   }
 
   static async addNote(orderId: string, author: string, text: string) {
+    const existing = await OrderRepository.findById(orderId);
+    if (!existing) throw new AppError("Order not found", 404);
+    const dbId = String((existing as any)._id || existing.id || orderId);
     const note = {
       text,
       author,
       timestamp: new Date()
     };
-    const order = await OrderRepository.addNote(orderId, note);
+    const order = await OrderRepository.addNote(dbId, note);
     if (!order) throw new AppError("Order not found", 404);
     return order;
   }
@@ -1450,17 +2243,18 @@ export class OrderService {
       }
     }
 
-    const updatedOrder = await OrderRepository.updateStatus(orderId, newStatus);
+    const dbId = String((order as any)._id || order.id || orderId);
+    const updatedOrder = await OrderRepository.updateStatus(dbId, newStatus);
     if (updatedOrder) {
       try {
         const { OrderModel } = await import("./order.model");
-        await OrderModel.findByIdAndUpdate(orderId, { $unset: { invoiceUrl: 1 } });
+        await OrderModel.findByIdAndUpdate(dbId, { $unset: { invoiceUrl: 1 } });
       } catch {}
     }
     try {
       const { adminEventHub } = await import("../../core/events/adminEventHub");
       adminEventHub.publish("ORDER_STATUS_CHANGED", {
-        orderId,
+        orderId: dbId,
         status: newStatus,
       });
     } catch {}
@@ -1473,7 +2267,8 @@ export class OrderService {
     if (!order) {
       throw new AppError("Order not found", 404);
     }
-    await OrderRepository.deleteById(orderId);
+    const dbId = String((order as any)._id || order.id || orderId);
+    await OrderRepository.deleteById(dbId);
     return true;
   }
 
@@ -1674,7 +2469,7 @@ export class OrderService {
     }>
   ) {
     const order = await OrderRepository.findById(orderId);
-    if (!order || order.userId !== userId) {
+    if (!order || !order.userId || String(order.userId) !== String(userId)) {
       throw new AppError("Order not found", 404);
     }
 
@@ -2282,7 +3077,7 @@ export class OrderService {
     exchangeId?: string
   ) {
     const order = await OrderRepository.findById(orderId);
-    if (!order || order.userId !== userId) {
+    if (!order || !order.userId || String(order.userId) !== String(userId)) {
       throw new NotFoundError("Order");
     }
 
@@ -2498,8 +3293,8 @@ export class OrderService {
     if (!order) {
       throw new AppError("Order not found", 404);
     }
-    // Allow admin to skip userId check (if userId is "admin") or normal user check
-    if (userId !== "admin" && order.userId !== userId) {
+    // Allow admin to skip userId check (verified at controller layer) or enforce strict owner check
+    if (userId !== "admin" && (!order.userId || String(order.userId) !== String(userId))) {
       throw new AppError("Unauthorized", 403);
     }
 
@@ -2637,12 +3432,13 @@ export class OrderService {
       timestamp: new Date(),
     };
 
-    const updatedOrder = await OrderRepository.updateWarehouse(orderId, warehouseId, note);
+    const dbId = String((order as any)._id || order.id || orderId);
+    const updatedOrder = await OrderRepository.updateWarehouse(dbId, warehouseId, note);
 
     // Also update any existing forward shipment
     try {
       const { ShipmentModel } = await import("../shipping/shipment.model");
-      await ShipmentModel.updateMany({ orderId: String(orderId) }, { $set: { warehouseId: String(warehouse._id) } });
+      await ShipmentModel.updateMany({ orderId: dbId }, { $set: { warehouseId: String(warehouse._id) } });
     } catch {}
 
     // Regenerate invoice with updated warehouse
@@ -2658,14 +3454,138 @@ export class OrderService {
 
   static async cleanupAbandonedOrders(): Promise<number> {
     try {
-      const count = await OrderRepository.markStaleOrdersAsFailed();
-      if (count > 0) {
-        logger.info(`Cleaned up ${count} abandoned orders stuck in pending_payment`);
+      if (typeof OrderRepository.findStalePendingOrders !== "function") {
+        const count = await OrderRepository.markStaleOrdersAsFailed();
+        if (count > 0) {
+          logger.info(`Cleaned up ${count} abandoned orders stuck in pending_payment`);
+        }
+        return count;
       }
-      return count;
+
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      const staleOrders = await OrderRepository.findStalePendingOrders(thirtyMinutesAgo, 50);
+
+      let expiredCount = 0;
+      let recoveredCount = 0;
+
+      for (const staleOrder of staleOrders) {
+        const orderRef = staleOrder.orderNumber || String((staleOrder as any)._id || staleOrder.id || "");
+        const orderDbId = String((staleOrder as any)._id || staleOrder.id || "");
+        if (!orderDbId) continue;
+
+        let shouldExpire = true;
+        if (staleOrder.paymentMethod && staleOrder.paymentMethod !== "cod") {
+          try {
+            const syncResult = await this.syncPaymentStatus(orderRef);
+            if (syncResult?.isConfirmed) {
+              recoveredCount++;
+              shouldExpire = false;
+            } else if (syncResult?.gatewayStatus === "pending") {
+              const createdAtMs = staleOrder.createdAt ? new Date(staleOrder.createdAt).getTime() : 0;
+              if (createdAtMs && createdAtMs > twoHoursAgo.getTime()) {
+                shouldExpire = false;
+              }
+            }
+          } catch {
+            const createdAtMs = staleOrder.createdAt ? new Date(staleOrder.createdAt).getTime() : 0;
+            if (createdAtMs && createdAtMs > twoHoursAgo.getTime()) {
+              shouldExpire = false;
+            }
+          }
+        }
+
+        if (shouldExpire) {
+          const updated = await OrderRepository.atomicStatusTransition(
+            orderDbId,
+            "pending_payment",
+            "failed",
+            { failureReason: "Checkout abandoned / Payment window expired (30m)" }
+          );
+          if (updated) {
+            expiredCount++;
+          }
+        }
+      }
+
+      if (recoveredCount > 0 || expiredCount > 0) {
+        logger.info(
+          `Stale order reconciliation complete: recovered ${recoveredCount} captured orders, expired ${expiredCount} unpaid orders`
+        );
+      }
+      return expiredCount;
     } catch (error: any) {
       logger.error("Failed to cleanup abandoned orders", { error: error.message });
       return 0;
+    }
+  }
+
+  /**
+   * Daily EOD financial reconciliation across the last 48 hours of failed online orders.
+   * Recovers late bank captures (RBI P2M settlement window) and surfaces captured payments pending manual refund.
+   */
+  static async reconcileDailySettlements(): Promise<{
+    checked: number;
+    lateRecovered: number;
+    pendingManualRefunds: number;
+  }> {
+    const metrics = { checked: 0, lateRecovered: 0, pendingManualRefunds: 0 };
+    try {
+      if (typeof OrderRepository.findRecentFailedGatewayOrders !== "function") {
+        return metrics;
+      }
+
+      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+      const failedOrders = await OrderRepository.findRecentFailedGatewayOrders(fortyEightHoursAgo, 100);
+      metrics.checked = failedOrders.length;
+
+      for (const order of failedOrders) {
+        const orderRef = order.orderNumber || String((order as any)._id || order.id || "");
+        const gatewayOrderId = order.gatewayOrderId || "";
+        if (!orderRef || !gatewayOrderId) continue;
+
+        const payment = await PaymentRepository.findByGatewayOrderId(gatewayOrderId);
+        if (!payment) continue;
+
+        const hasRecordedRefund = Array.isArray(payment.refunds) && payment.refunds.length > 0;
+        if (payment.status === "captured" && !hasRecordedRefund) {
+          metrics.pendingManualRefunds++;
+          logger.error(
+            `CRITICAL EOD RECONCILIATION ALERT: Order #${orderRef} is 'failed' while payment ${payment.gatewayPaymentId || gatewayOrderId} (INR ${payment.amount}) remains 'captured' with no recorded refund.`
+          );
+          try {
+            const { adminEventHub } = await import("../../core/events/adminEventHub");
+            adminEventHub.publish("DAILY_RECONCILIATION_ALERT", {
+              orderNumber: orderRef,
+              gatewayOrderId,
+              amount: payment.amount,
+              message: `Order #${orderRef} has a captured payment (INR ${payment.amount}) in failed status requiring refund attention.`,
+            });
+          } catch {}
+          continue;
+        }
+
+        if (["created", "pending", "failed"].includes(payment.status)) {
+          try {
+            const syncResult = await this.syncPaymentStatus(orderRef);
+            if (syncResult?.isConfirmed) {
+              metrics.lateRecovered++;
+            }
+          } catch {
+            // Non-blocking: continue reconciling remaining orders
+          }
+        }
+      }
+
+      if (metrics.lateRecovered > 0 || metrics.pendingManualRefunds > 0) {
+        logger.info(
+          `Daily EOD settlement reconciliation complete: checked=${metrics.checked}, lateRecovered=${metrics.lateRecovered}, pendingManualRefunds=${metrics.pendingManualRefunds}`
+        );
+      }
+      return metrics;
+    } catch (error: any) {
+      logger.error("Failed to run daily EOD settlement reconciliation", { error: error.message });
+      return metrics;
     }
   }
 }

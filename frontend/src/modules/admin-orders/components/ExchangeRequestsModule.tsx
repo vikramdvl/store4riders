@@ -95,6 +95,7 @@ export const ExchangeRequestsModule = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("exchanges");
   const [rejectModalOrder, setRejectModalOrder] = useState<any | null>(null);
+  const [rejectExchangeId, setRejectExchangeId] = useState<string | undefined>(undefined);
   const [rejectReason, setRejectReason] = useState("");
   const [detailModalOrder, setDetailModalOrder] = useState<any | null>(null);
   const [activeWorkflowModal, setActiveWorkflowModal] = useState<ActiveExchangeActionModal>(null);
@@ -122,12 +123,14 @@ export const ExchangeRequestsModule = () => {
     handleReturnMutation.mutate(
       {
         orderId,
+        ...(rejectExchangeId ? { exchangeId: rejectExchangeId } : {}),
         action: "reject",
         adminNote: rejectReason || "Exchange request rejected per store policy guidelines.",
       },
       {
         onSuccess: () => {
           setRejectModalOrder(null);
+          setRejectExchangeId(undefined);
           setRejectReason("");
           if (detailModalOrder?._id === orderId || detailModalOrder?.id === orderId) {
             setDetailModalOrder(null);
@@ -455,11 +458,17 @@ export const ExchangeRequestsModule = () => {
                       <td className="px-4 py-3.5 align-top text-right">
                         <div className="flex flex-col items-end gap-1.5">
                           <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            {order.status === "return_requested" && (
+                            {exState.stage === "requested" && (
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => setActiveWorkflowModal({ type: "approve", order })}
+                                  onClick={() =>
+                                    setActiveWorkflowModal({
+                                      type: "approve",
+                                      order,
+                                      exchangeId: exState.exchangeId,
+                                    })
+                                  }
                                   className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 text-white rounded text-[11px] font-bold uppercase hover:bg-emerald-700 transition-colors shadow-2xs cursor-pointer"
                                 >
                                   <CheckCircleIcon className="w-3.5 h-3.5" />
@@ -467,7 +476,10 @@ export const ExchangeRequestsModule = () => {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => setRejectModalOrder(order)}
+                                  onClick={() => {
+                                    setRejectModalOrder(order);
+                                    setRejectExchangeId(exState.exchangeId);
+                                  }}
                                   className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-600 text-white rounded text-[11px] font-bold uppercase hover:bg-red-700 transition-colors shadow-2xs cursor-pointer"
                                 >
                                   <XCircleIcon className="w-3.5 h-3.5" />
@@ -481,7 +493,13 @@ export const ExchangeRequestsModule = () => {
                                 {exState.stage === "approved" && (
                                   <button
                                     type="button"
-                                    onClick={() => setActiveWorkflowModal({ type: "pickup", order })}
+                                    onClick={() =>
+                                      setActiveWorkflowModal({
+                                        type: "pickup",
+                                        order,
+                                        exchangeId: exState.exchangeId,
+                                      })
+                                    }
                                     className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 text-white rounded text-[11px] font-bold uppercase hover:bg-blue-700 transition-colors shadow-2xs cursor-pointer"
                                   >
                                     <TruckIcon className="w-3.5 h-3.5" />
@@ -490,7 +508,13 @@ export const ExchangeRequestsModule = () => {
                                 )}
                                 <button
                                   type="button"
-                                  onClick={() => setActiveWorkflowModal({ type: "qc", order })}
+                                  onClick={() =>
+                                    setActiveWorkflowModal({
+                                      type: "qc",
+                                      order,
+                                      exchangeId: exState.exchangeId,
+                                    })
+                                  }
                                   className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 text-white rounded text-[11px] font-bold uppercase hover:bg-indigo-700 transition-colors shadow-2xs cursor-pointer"
                                 >
                                   <ShieldCheckIcon className="w-3.5 h-3.5" />
@@ -506,7 +530,13 @@ export const ExchangeRequestsModule = () => {
                                   {!isFeeSettled && (
                                     <button
                                       type="button"
-                                      onClick={() => setActiveWorkflowModal({ type: "fee", order })}
+                                      onClick={() =>
+                                        setActiveWorkflowModal({
+                                          type: "fee",
+                                          order,
+                                          exchangeId: exState.exchangeId,
+                                        })
+                                      }
                                       className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-600 text-white rounded text-[11px] font-bold uppercase hover:bg-amber-700 transition-colors shadow-2xs cursor-pointer"
                                     >
                                       <CurrencyRupeeIcon className="w-3.5 h-3.5" />
@@ -517,7 +547,13 @@ export const ExchangeRequestsModule = () => {
                                     <>
                                       <button
                                         type="button"
-                                        onClick={() => setActiveWorkflowModal({ type: "dispatch", order })}
+                                        onClick={() =>
+                                          setActiveWorkflowModal({
+                                            type: "dispatch",
+                                            order,
+                                            exchangeId: exState.exchangeId,
+                                          })
+                                        }
                                         className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 text-white rounded text-[11px] font-bold uppercase hover:bg-emerald-700 transition-colors shadow-2xs cursor-pointer"
                                       >
                                         <PaperAirplaneIcon className="w-3.5 h-3.5" />
@@ -525,7 +561,13 @@ export const ExchangeRequestsModule = () => {
                                       </button>
                                       <button
                                         type="button"
-                                        onClick={() => setActiveWorkflowModal({ type: "fee", order })}
+                                        onClick={() =>
+                                          setActiveWorkflowModal({
+                                            type: "fee",
+                                            order,
+                                            exchangeId: exState.exchangeId,
+                                          })
+                                        }
                                         title="Change Fee / COD Mode"
                                         className="p-1.5 border border-neutral-300 text-neutral-700 rounded hover:bg-neutral-100 cursor-pointer"
                                       >
@@ -542,7 +584,7 @@ export const ExchangeRequestsModule = () => {
                                 disabled={completeMutation.isPending}
                                 onClick={() => {
                                   if (window.confirm(`Mark replacement delivered and complete exchange for Order #${order.orderNumber}?`)) {
-                                    completeMutation.mutate(orderId);
+                                    completeMutation.mutate({ orderId, exchangeId: exState.exchangeId });
                                   }
                                 }}
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-neutral-900 text-white rounded text-[11px] font-bold uppercase hover:bg-black transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
@@ -559,7 +601,13 @@ export const ExchangeRequestsModule = () => {
                               {exState.qcStatus === "passed" && exState.feeStatus === "pending" && (
                                 <button
                                   type="button"
-                                  onClick={() => setActiveWorkflowModal({ type: "fee", order })}
+                                  onClick={() =>
+                                    setActiveWorkflowModal({
+                                      type: "fee",
+                                      order,
+                                      exchangeId: exState.exchangeId,
+                                    })
+                                  }
                                   className="text-[10px] font-bold text-amber-800 hover:underline cursor-pointer mr-1"
                                 >
                                   Or Dispatch COD →
@@ -811,18 +859,27 @@ export const ExchangeRequestsModule = () => {
                   </button>
 
                   <div className="flex items-center gap-2 flex-wrap">
-                    {detailModalOrder.status === "return_requested" && (
+                    {exState.stage === "requested" && (
                       <>
                         <button
                           type="button"
-                          onClick={() => setRejectModalOrder(detailModalOrder)}
+                          onClick={() => {
+                            setRejectModalOrder(detailModalOrder);
+                            setRejectExchangeId(exState.exchangeId);
+                          }}
                           className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold uppercase cursor-pointer"
                         >
                           Reject Exchange
                         </button>
                         <button
                           type="button"
-                          onClick={() => setActiveWorkflowModal({ type: "approve", order: detailModalOrder })}
+                          onClick={() =>
+                            setActiveWorkflowModal({
+                              type: "approve",
+                              order: detailModalOrder,
+                              exchangeId: exState.exchangeId,
+                            })
+                          }
                           className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase cursor-pointer"
                         >
                           Approve &amp; Pickup
@@ -834,14 +891,26 @@ export const ExchangeRequestsModule = () => {
                       <>
                         <button
                           type="button"
-                          onClick={() => setActiveWorkflowModal({ type: "pickup", order: detailModalOrder })}
+                          onClick={() =>
+                            setActiveWorkflowModal({
+                              type: "pickup",
+                              order: detailModalOrder,
+                              exchangeId: exState.exchangeId,
+                            })
+                          }
                           className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold uppercase cursor-pointer"
                         >
                           Pickup / Reverse AWB
                         </button>
                         <button
                           type="button"
-                          onClick={() => setActiveWorkflowModal({ type: "qc", order: detailModalOrder })}
+                          onClick={() =>
+                            setActiveWorkflowModal({
+                              type: "qc",
+                              order: detailModalOrder,
+                              exchangeId: exState.exchangeId,
+                            })
+                          }
                           className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold uppercase cursor-pointer"
                         >
                           Perform Warehouse QC
@@ -853,7 +922,13 @@ export const ExchangeRequestsModule = () => {
                       <>
                         <button
                           type="button"
-                          onClick={() => setActiveWorkflowModal({ type: "fee", order: detailModalOrder })}
+                          onClick={() =>
+                            setActiveWorkflowModal({
+                              type: "fee",
+                              order: detailModalOrder,
+                              exchangeId: exState.exchangeId,
+                            })
+                          }
                           className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold uppercase cursor-pointer"
                         >
                           {isFeeSettled ? "Fee / COD Options" : `Collect Fee (₹${exState.feeAmount})`}
@@ -861,7 +936,13 @@ export const ExchangeRequestsModule = () => {
                         {isFeeSettled && (
                           <button
                             type="button"
-                            onClick={() => setActiveWorkflowModal({ type: "dispatch", order: detailModalOrder })}
+                            onClick={() =>
+                              setActiveWorkflowModal({
+                                type: "dispatch",
+                                order: detailModalOrder,
+                                exchangeId: exState.exchangeId,
+                              })
+                            }
                             className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase cursor-pointer"
                           >
                             Dispatch Replacement

@@ -102,11 +102,11 @@ export class SettingRepository {
       if (Array.isArray(fc.column1Links) && fc.column1Links.some((l: any) => policyUrls.includes(l.url))) {
         const extractedPolicies = fc.column1Links.filter((l: any) => policyUrls.includes(l.url));
         fc.column1Links = fc.column1Links.filter((l: any) => !policyUrls.includes(l.url));
-        if (!fc.column3Links || fc.column3Links.length === 0) {
+        if (!Array.isArray(fc.column3Links) || fc.column3Links.length === 0) {
           fc.column3Links = extractedPolicies;
         }
         footerChanged = true;
-      } else if (!fc.column3Links || fc.column3Links.length === 0) {
+      } else if (!Array.isArray(fc.column3Links)) {
         fc.column3Links = [
           { label: "Conditions of Sale & Use", url: "/store4riders-conditions-of-use-and-sale", openInNewTab: false },
           { label: "Privacy and Cookie Policy", url: "/privacy-policy-cookie-restriction-mode", openInNewTab: false },
@@ -142,11 +142,11 @@ export class SettingRepository {
       if (Array.isArray(fc.column2Links) && fc.column2Links.some((l: any) => aboutUrls.includes(l.url))) {
         const extractedAbout = fc.column2Links.filter((l: any) => aboutUrls.includes(l.url));
         fc.column2Links = fc.column2Links.filter((l: any) => !aboutUrls.includes(l.url));
-        if (!fc.column4Links || fc.column4Links.length === 0) {
+        if (!Array.isArray(fc.column4Links) || fc.column4Links.length === 0) {
           fc.column4Links = extractedAbout;
         }
         footerChanged = true;
-      } else if (!fc.column4Links || fc.column4Links.length === 0) {
+      } else if (!Array.isArray(fc.column4Links)) {
         fc.column4Links = [
           { label: "About us", url: "/about-us-store4riders", openInNewTab: false },
           { label: "Contact Us", url: "/contact-store4riders", openInNewTab: false },

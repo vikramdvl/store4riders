@@ -89,6 +89,8 @@ const COMBINED_DIMENSION_ALIASES = [
   "box_dimensions",
   "l_w_h",
   "lxbxh",
+  "lbh",
+  "l_b_h",
   "size_dimensions",
   "sizedimensions",
   "product_dimensions",
@@ -146,13 +148,13 @@ export function parseCombinedDimensionsString(rawStr: string): IParsedDimensions
   const str = rawStr.trim();
   if (!str) return null;
 
-  // Detect unit in string if present
+  // Detect unit in string if present (supports spaced & tight suffixes like "12x8x4in")
   let unit: "cm" | "in" | "mm" = "cm";
-  if (/(\binch|\binches|\bin\b|")/i.test(str)) {
+  if (/(?:\binch|\binches|\bin\b|[0-9]\s*in\b|")/i.test(str)) {
     unit = "in";
-  } else if (/(\bmm\b|\bmillimeter)/i.test(str)) {
+  } else if (/(?:\bmm\b|[0-9]\s*mm\b|\bmillimeter)/i.test(str)) {
     unit = "mm";
-  } else if (/(\bcm\b|\bcentimeter)/i.test(str)) {
+  } else if (/(?:\bcm\b|[0-9]\s*cm\b|\bcentimeter)/i.test(str)) {
     unit = "cm";
   }
 
@@ -163,7 +165,7 @@ export function parseCombinedDimensionsString(rawStr: string): IParsedDimensions
     const l = parseFloat(labeledMatch[1]);
     const b = parseFloat(labeledMatch[2]);
     const h = parseFloat(labeledMatch[3]);
-    if (!isNaN(l) && !isNaN(b) && !isNaN(h)) {
+    if (!isNaN(l) && l > 0 && !isNaN(b) && b > 0 && !isNaN(h) && h > 0) {
       return {
         length: convertToCm(l, unit),
         breadth: convertToCm(b, unit),
@@ -180,7 +182,7 @@ export function parseCombinedDimensionsString(rawStr: string): IParsedDimensions
     const l = parseFloat(xMatch[1]);
     const b = parseFloat(xMatch[2]);
     const h = parseFloat(xMatch[3]);
-    if (!isNaN(l) && !isNaN(b) && !isNaN(h)) {
+    if (!isNaN(l) && l > 0 && !isNaN(b) && b > 0 && !isNaN(h) && h > 0) {
       return {
         length: convertToCm(l, unit),
         breadth: convertToCm(b, unit),
@@ -333,7 +335,11 @@ export function extractProductWeight(
     return { weightUnit: "kg" };
   }
 
-  const strWeight = String(rawWeight).trim().toLowerCase();
+  const trimmedStrWeight = String(rawWeight).trim();
+  if (/^-/.test(trimmedStrWeight)) {
+    return { weightUnit: "kg" };
+  }
+  const strWeight = trimmedStrWeight.toLowerCase();
   const rawUnit =
     findValueByAliases(row, WEIGHT_UNIT_ALIASES) ??
     findValueByAliases(mergedAttrs, WEIGHT_UNIT_ALIASES);
@@ -369,8 +375,8 @@ export function extractProductWeight(
     weightInKg = numericPart / 1000;
   } else if (detectedUnit === "L") {
     weightInKg = numericPart; // 1 Litre approx 1 Kg
-  } else if (detectedUnit === "kg" && numericPart >= 50 && numericPart <= 50000 && !strWeight.includes("kg")) {
-    // If entered e.g. 500 or 800 without explicit unit in a weight column, in e-commerce riders gear it's likely grams!
+  } else if (!rawUnit && detectedUnit === "kg" && numericPart >= 50 && numericPart <= 50000 && !strWeight.includes("kg")) {
+    // If entered e.g. 500 or 800 without explicit unit column/suffix in a weight column, it's likely grams
     weightInKg = numericPart / 1000;
   }
 
@@ -419,38 +425,45 @@ export function extractProductDimensions(
     findValueByAliases(mergedAttrs, UNIT_ALIASES);
   const detectedUnit = normalizeDimensionUnit(rawUnit);
 
+  const parseDimAxis = (rawVal: any): number | undefined => {
+    if (rawVal === undefined || rawVal === null) return undefined;
+    const str = String(rawVal).trim();
+    if (!str || /^-/.test(str)) return undefined;
+    const num = parseFloat(str.replace(/[^0-9.]/g, ""));
+    if (isNaN(num) || num <= 0) return undefined;
+    let axisUnit: "cm" | "in" | "mm" = detectedUnit;
+    if (!rawUnit) {
+      if (/(?:\binch|\binches|\bin\b|[0-9]\s*in\b|")/i.test(str)) axisUnit = "in";
+      else if (/(?:\bmm\b|[0-9]\s*mm\b|\bmillimeter)/i.test(str)) axisUnit = "mm";
+      else if (/(?:\bcm\b|[0-9]\s*cm\b|\bcentimeter)/i.test(str)) axisUnit = "cm";
+    }
+    return convertToCm(num, axisUnit);
+  };
+
   // 2. Check dedicated separate columns in row, then in mergedAttrs
   const rawL = findValueByAliases(row, LENGTH_ALIASES) ?? findValueByAliases(mergedAttrs, LENGTH_ALIASES);
   const rawB = findValueByAliases(row, BREADTH_ALIASES) ?? findValueByAliases(mergedAttrs, BREADTH_ALIASES);
   const rawH = findValueByAliases(row, HEIGHT_ALIASES) ?? findValueByAliases(mergedAttrs, HEIGHT_ALIASES);
 
-  const numL = rawL !== undefined ? parseFloat(String(rawL).replace(/[^0-9.]/g, "")) : undefined;
-  const numB = rawB !== undefined ? parseFloat(String(rawB).replace(/[^0-9.]/g, "")) : undefined;
-  const numH = rawH !== undefined ? parseFloat(String(rawH).replace(/[^0-9.]/g, "")) : undefined;
+  const cmL = parseDimAxis(rawL);
+  const cmB = parseDimAxis(rawB);
+  const cmH = parseDimAxis(rawH);
 
-  if (
-    numL !== undefined && !isNaN(numL) && numL > 0 &&
-    numB !== undefined && !isNaN(numB) && numB > 0 &&
-    numH !== undefined && !isNaN(numH) && numH > 0
-  ) {
+  if (cmL !== undefined && cmB !== undefined && cmH !== undefined) {
     return {
-      length: convertToCm(numL, detectedUnit),
-      breadth: convertToCm(numB, detectedUnit),
-      height: convertToCm(numH, detectedUnit),
+      length: cmL,
+      breadth: cmB,
+      height: cmH,
       dimensionUnit: "cm",
     };
   }
 
   // If only some separate columns are present
-  if (
-    (numL !== undefined && !isNaN(numL) && numL > 0) ||
-    (numB !== undefined && !isNaN(numB) && numB > 0) ||
-    (numH !== undefined && !isNaN(numH) && numH > 0)
-  ) {
+  if (cmL !== undefined || cmB !== undefined || cmH !== undefined) {
     return {
-      length: numL !== undefined && !isNaN(numL) ? convertToCm(numL, detectedUnit) : undefined,
-      breadth: numB !== undefined && !isNaN(numB) ? convertToCm(numB, detectedUnit) : undefined,
-      height: numH !== undefined && !isNaN(numH) ? convertToCm(numH, detectedUnit) : undefined,
+      length: cmL,
+      breadth: cmB,
+      height: cmH,
       dimensionUnit: "cm",
     };
   }

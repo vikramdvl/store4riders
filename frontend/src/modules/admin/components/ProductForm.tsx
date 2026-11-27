@@ -344,7 +344,7 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
       }
       setHsnCode(existingProduct.hsnCode || "6506");
       setWeight(existingProduct.weight ?? "");
-      setWeightUnit(((existingProduct as any).weightUnit as "kg" | "g" | "ml" | "L") || "kg");
+      setWeightUnit(((existingProduct as any).weightUnit as "kg" | "g" | "ml" | "L") || (existingAttrs.weight_unit as any) || "kg");
       setLength((existingProduct as any).length ?? "");
       setBreadth((existingProduct as any).breadth ?? "");
       setHeight((existingProduct as any).height ?? "");
@@ -470,6 +470,11 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
               imageUrl: primaryVariantImg,
               altText: primaryVariantAlt,
               weight: v.weight ?? "",
+              weightUnit: v.weightUnit || undefined,
+              length: v.length ?? "",
+              breadth: v.breadth ?? "",
+              height: v.height ?? "",
+              dimensionUnit: v.dimensionUnit || undefined,
               status: v.status || "enabled",
               visibility: v.visibility || "Catalog, Search",
               images: (v.images && v.images.length > 0)
@@ -1145,9 +1150,11 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
           imageUrl: vUrl,
           altText: vAlt,
           weight: v.weight !== "" && v.weight !== undefined ? Number(v.weight) : undefined,
+          weightUnit: v.weightUnit || undefined,
           length: v.length !== "" && v.length !== undefined ? Number(v.length) : undefined,
           breadth: v.breadth !== "" && v.breadth !== undefined ? Number(v.breadth) : undefined,
           height: v.height !== "" && v.height !== undefined ? Number(v.height) : undefined,
+          dimensionUnit: v.dimensionUnit || undefined,
           status: v.status || "enabled",
           visibility: v.visibility || "Catalog, Search",
           images: vImages,

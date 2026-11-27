@@ -25,7 +25,9 @@ export class PaymentController {
   static async getPaymentStatus(req: NextRequest, { params }: { params: { id: string } }) {
     const paymentId = params.id;
     try {
-      const status = await PaymentService.getPaymentStatus(paymentId);
+      const { extractUserFromAuth } = await import("../../core/middlewares/auth");
+      const userId = extractUserFromAuth(req);
+      const status = await PaymentService.getPaymentStatus(paymentId, userId);
       return ApiResponse.success(status, "Payment status fetched");
     } catch (err: any) {
       return ApiResponse.error(err.message, err.statusCode || 500);

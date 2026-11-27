@@ -35,10 +35,18 @@ if (REDIS_URL) {
       retryStrategy: (times) => Math.min(times * 1000, 5000), // Progressive reconnect attempt
     });
 
-    redisClient.on("connect", () => {
+    redisClient.on("ready", () => {
       isRedisConnected = true;
       (globalThis as any).__hasLoggedRedisOffline = false;
       logger.info("Connected to Redis Cache Engine");
+    });
+
+    redisClient.on("close", () => {
+      isRedisConnected = false;
+    });
+
+    redisClient.on("end", () => {
+      isRedisConnected = false;
     });
 
     redisClient.on("error", (err) => {
@@ -59,44 +67,42 @@ if (REDIS_URL) {
  * Sets a value in cache (Redis if available, otherwise memory).
  */
 export const setCache = async (key: string, value: any, ttlSeconds: number = 3600) => {
-  // Always update memory cache for instant local speed
-  setMemoryCache(key, value, ttlSeconds);
-
   if (redisClient && isRedisConnected) {
     try {
       await redisClient.set(key, JSON.stringify(value), "EX", ttlSeconds);
+      return;
     } catch {
-      // Ignore background redis error
+      isRedisConnected = false;
+      // Fall back to in-memory cache only if Redis command fails
     }
   }
+  setMemoryCache(key, value, ttlSeconds);
 };
 
 /**
- * Gets a value from cache (Instant 0.1ms memory check first, then Redis).
+ * Gets a value from cache (Redis first when connected so multi-process invalidations are instant;
+ * in-memory fallback when Redis is unavailable).
  */
-export const getCache = async (key: string): Promise<any | null> => {
-  // 1. Fast Memory Cache lookup (0.1ms)
+export const getCache = async <T = any>(key: string): Promise<T | null> => {
+  if (redisClient && isRedisConnected) {
+    try {
+      const data = await redisClient.get(key);
+      if (data) {
+        return JSON.parse(data);
+      }
+      return null;
+    } catch {
+      isRedisConnected = false;
+      // Fall back to in-memory cache if Redis command fails
+    }
+  }
+
   const mem = memoryCache.get(key);
   if (mem) {
     if (Date.now() < mem.expiry) {
       return mem.value;
     }
     memoryCache.delete(key);
-  }
-
-  // 2. Redis lookup
-  if (redisClient && isRedisConnected) {
-    try {
-      const data = await redisClient.get(key);
-      if (data) {
-        const parsed = JSON.parse(data);
-        // Save to memory for subsequent instant lookups
-        setMemoryCache(key, parsed, 60);
-        return parsed;
-      }
-    } catch {
-      return null;
-    }
   }
 
   return null;
@@ -114,6 +120,87 @@ export const deleteCache = async (key: string) => {
       // Ignore
     }
   }
+};
+
+/**
+ * Atomically sets a cache key only if it does not already exist (NX).
+ * Returns true if the lock/key was acquired, false if it already existed.
+ */
+export const setCacheIfAbsent = async (key: string, value: any, ttlSeconds: number = 60): Promise<boolean> => {
+  if (redisClient && isRedisConnected) {
+    try {
+      const result = await redisClient.set(key, JSON.stringify(value), "EX", ttlSeconds, "NX");
+      return result === "OK";
+    } catch {
+      isRedisConnected = false;
+      // Fall back to in-memory store if Redis command fails
+    }
+  }
+
+  const existing = memoryCache.get(key);
+  if (existing && Date.now() < existing.expiry) {
+    return false;
+  }
+  setMemoryCache(key, value, ttlSeconds);
+  return true;
+};
+
+/**
+ * Atomically increments a counter in cache and ensures a TTL is applied.
+ */
+export const incrementCacheCounter = async (key: string, ttlSeconds: number): Promise<number> => {
+  if (redisClient && isRedisConnected) {
+    try {
+      const next = await redisClient.incr(key);
+      if (next === 1) {
+        await redisClient.expire(key, ttlSeconds);
+      } else {
+        const ttl = await redisClient.ttl(key);
+        if (ttl < 0) {
+          await redisClient.expire(key, ttlSeconds);
+        }
+      }
+      return next;
+    } catch {
+      isRedisConnected = false;
+      // Fall back to in-memory store if Redis command fails
+    }
+  }
+
+  const existing = memoryCache.get(key);
+  if (existing && Date.now() < existing.expiry) {
+    const next = Number(existing.value || 0) + 1;
+    existing.value = next;
+    return next;
+  }
+  setMemoryCache(key, 1, ttlSeconds);
+  return 1;
+};
+
+/**
+ * Atomically reads and deletes a cache key so it can only be consumed once.
+ */
+export const consumeCacheOnce = async <T = any>(key: string): Promise<T | null> => {
+  if (redisClient && isRedisConnected) {
+    try {
+      const results = await redisClient.multi().get(key).del(key).exec();
+      const raw = results?.[0]?.[1];
+      if (typeof raw === "string") {
+        return JSON.parse(raw) as T;
+      }
+      return null;
+    } catch {
+      isRedisConnected = false;
+      // Fall back to in-memory cache if Redis command fails
+    }
+  }
+
+  const mem = memoryCache.get(key);
+  memoryCache.delete(key);
+  if (mem && Date.now() < mem.expiry) {
+    return mem.value as T;
+  }
+  return null;
 };
 
 export const clearProductCaches = async (preserveProductDetails: boolean = false) => {

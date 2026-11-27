@@ -58,10 +58,11 @@ export function useCreateCoupon() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-coupons"] });
+      queryClient.invalidateQueries({ queryKey: ["public-coupons"] });
       toast.success("Coupon created successfully");
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || "Failed to create coupon");
+      toast.error(error.response?.data?.error || error.response?.data?.message || "Failed to create coupon");
     },
   });
 }
@@ -73,12 +74,14 @@ export function useUpdateCoupon() {
       const response = await apiClient.put(`/coupons/${id}`, data);
       return response.data.data as ICoupon;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["admin-coupons"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-coupon", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["public-coupons"] });
       toast.success("Coupon updated successfully");
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || "Failed to update coupon");
+      toast.error(error.response?.data?.error || error.response?.data?.message || "Failed to update coupon");
     },
   });
 }
@@ -92,10 +95,11 @@ export function useDeleteCoupon() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-coupons"] });
+      queryClient.invalidateQueries({ queryKey: ["public-coupons"] });
       toast.success("Coupon deleted successfully");
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || "Failed to delete coupon");
+      toast.error(error.response?.data?.error || error.response?.data?.message || "Failed to delete coupon");
     },
   });
 }

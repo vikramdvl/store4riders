@@ -22,7 +22,7 @@ export function useAdminShipments(params: GetShipmentsParams = {}) {
       if (params.search) searchParams.set("search", params.search);
       
       const response = await apiClient.get(`/admin/shipments?${searchParams.toString()}`);
-      return response.data;
+      return response.data.data;
     },
   });
 }

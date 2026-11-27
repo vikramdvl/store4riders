@@ -139,30 +139,21 @@ export class AuditLogService {
       const lookupId = input.actorUserId || resolvedActor.userId;
 
       if (lookupId && (!resolvedActor.email || !resolvedActor.role)) {
-        if (lookupId === "admin-bypass-id") {
-          resolvedActor = {
-            userId: lookupId,
-            email: resolvedActor.email || "system@store4riders.com",
-            name: resolvedActor.name || "System Super Admin",
-            role: resolvedActor.role || "super_admin",
-          };
-        } else {
-          try {
-            const user = await UserRepository.findById(lookupId);
-            if (user) {
-              resolvedActor = {
-                userId: lookupId,
-                email: resolvedActor.email || user.email,
-                name:
-                  resolvedActor.name ||
-                  `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
-                  user.email,
-                role: resolvedActor.role || user.role || "customer",
-              };
-            }
-          } catch {
-            // Proceed with partial actor info if user lookup fails
+        try {
+          const user = await UserRepository.findById(lookupId);
+          if (user) {
+            resolvedActor = {
+              userId: lookupId,
+              email: resolvedActor.email || user.email,
+              name:
+                resolvedActor.name ||
+                `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+                user.email,
+              role: resolvedActor.role || user.role || "customer",
+            };
           }
+        } catch {
+          // Proceed with partial actor info if user lookup fails
         }
       }
 

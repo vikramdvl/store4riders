@@ -8,6 +8,25 @@ import { extractUserFromAuth } from "../../core/middlewares/auth";
 import { checkAdmin } from "../../core/middlewares/admin";
 import { UserService } from "../user/user.service";
 
+/**
+ * @swagger
+ * /api/v1/products/export:
+ *   get:
+ *     summary: Export full or brand-filtered product catalog as CSV including weight and LxBxH dimensions (Admin)
+ *     tags: [Products]
+ *     parameters:
+ *       - in: query
+ *         name: brand
+ *         schema: { type: string }
+ *         description: Optional brand name or "all"
+ *     responses:
+ *       200:
+ *         description: CSV file download
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ */
 export async function productRouter(req: NextRequest, routePath: string[]): Promise<NextResponse | null> {
   const method = req.method;
   const pathLen = routePath.length;

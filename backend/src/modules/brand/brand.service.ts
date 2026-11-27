@@ -56,47 +56,56 @@ export class BrandService {
     );
   }
 
+  private static resolveMenuConfig(brand: Partial<IBrand>, meta?: BrandMetadataRecord) {
+    const slugClean = (brand.slug || "").toLowerCase().trim();
+    const hasExplicitMenuConfig = brand.showInMenu !== undefined && brand.showInMenu !== null;
+    const showInMenu = hasExplicitMenuConfig
+      ? brand.showInMenu === true || (brand.showInMenu as any) === "true" || (brand.showInMenu as any) === 1
+      : DEFAULT_NAV_BRAND_GROUPS[slugClean] !== undefined;
+
+    const explicitGroups = Array.isArray(brand.menuGroups)
+      ? brand.menuGroups.filter((g) => typeof g === "string" && g.trim().length > 0)
+      : [];
+    const defaultGroup = DEFAULT_NAV_BRAND_GROUPS[slugClean] || meta?.menuGroup || "";
+    const navGroup = hasExplicitMenuConfig
+      ? explicitGroups[0] || brand.menuGroup || ""
+      : explicitGroups[0] || brand.menuGroup || defaultGroup;
+    const menuGroups = explicitGroups.length > 0 ? explicitGroups : navGroup ? [navGroup] : [];
+
+    return { showInMenu, navGroup, menuGroups };
+  }
+
   static async getAllBrands(includeInactive: boolean = false): Promise<IBrand[]> {
     const cacheKey = `brands_all_v5_${Boolean(includeInactive)}`;
     const cached = await getCache(cacheKey);
     if (cached) return cached as IBrand[];
 
-    // 1. Fetch existing brands from database (all, to track both active & inactive)
-    const dbBrands = await BrandRepository.findAll(true);
+    // 1. Fetch ALL DB brands including deleted tombstones so deleted static/product brands never resurrect
+    const allDbRecords = await BrandRepository.findAll(true, true);
 
     const existingSlugs = new Set<string>();
     const existingNames = new Set<string>();
+    const enriched: IBrand[] = [];
 
-    // 2. Normalize and enrich DB brands
-    const enriched: IBrand[] = dbBrands.map((b) => {
+    // 2. Normalize and enrich active/inactive DB brands, skipping deleted tombstones from output
+    for (const b of allDbRecords) {
       const slugClean = (b.slug || "").toLowerCase().trim();
       const nameClean = (b.name || "").toLowerCase().trim();
-      existingSlugs.add(slugClean);
-      existingNames.add(nameClean);
+      if (slugClean) existingSlugs.add(slugClean);
+      if (nameClean) existingNames.add(nameClean);
       if (b.aliases && Array.isArray(b.aliases)) {
         b.aliases.forEach((a) => existingSlugs.add(a.toLowerCase().trim()));
       }
 
-      const meta = this.findStaticMetadata(b.slug) || (b.name ? this.findStaticMetadata(b.name) : undefined);
-
-      // Determine strict showInMenu boolean
-      let showInMenu: boolean;
-      if (b.showInMenu !== undefined && b.showInMenu !== null) {
-        showInMenu = b.showInMenu === true || (b.showInMenu as any) === "true" || (b.showInMenu as any) === 1;
-      } else {
-        showInMenu = DEFAULT_NAV_BRAND_GROUPS[slugClean] !== undefined;
+      if (b.isDeleted) {
+        continue;
       }
 
-      const navGroup = DEFAULT_NAV_BRAND_GROUPS[slugClean] || meta?.menuGroup || b.menuGroup || "";
-      const menuGroups = b.menuGroups && b.menuGroups.length > 0
-        ? b.menuGroups
-        : navGroup
-        ? [navGroup]
-        : [];
-
+      const meta = this.findStaticMetadata(b.slug) || (b.name ? this.findStaticMetadata(b.name) : undefined);
+      const { showInMenu, navGroup, menuGroups } = this.resolveMenuConfig(b, meta);
       const resolvedLogo = b.logo || meta?.logo;
 
-      return {
+      enriched.push({
         ...b,
         logo: resolvedLogo,
         aliases: Array.from(new Set([...(b.aliases || []), ...(meta?.aliases || [])])),
@@ -108,8 +117,8 @@ export class BrandService {
         metaTitle: b.metaTitle || meta?.metaTitle,
         metaDescription: b.metaDescription || meta?.metaDescription,
         metaKeywords: b.metaKeywords || meta?.metaKeywords,
-      };
-    });
+      });
+    }
 
     // 3. Find missing catalog brands from BRANDS_METADATA
     const missingToSeed: Partial<IBrand>[] = [];
@@ -164,60 +173,62 @@ export class BrandService {
       }
     }
 
-    // 4. Also check for distinct brands in products catalog
+    // 4. Also check for distinct brands in products catalog (skip when DB is disconnected in unit tests)
     try {
-      const { ProductModel } = await import("../product/product.model");
-      const distinctBrands: string[] = await ProductModel.distinct("brand").exec();
-      if (Array.isArray(distinctBrands)) {
-        for (const brandName of distinctBrands) {
-          if (!brandName || typeof brandName !== "string") continue;
-          const trimmedName = brandName.trim();
-          if (!trimmedName) continue;
-          const slugCandidate = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-          if (
-            !existingNames.has(trimmedName.toLowerCase()) &&
-            !existingSlugs.has(slugCandidate)
-          ) {
-            const meta = this.findStaticMetadata(slugCandidate) || this.findStaticMetadata(trimmedName);
-            const inMenu = DEFAULT_NAV_BRAND_GROUPS[slugCandidate] !== undefined;
-            const navGroup = DEFAULT_NAV_BRAND_GROUPS[slugCandidate] || meta?.menuGroup || "";
-            const item: IBrand = {
-              _id: "brand-" + slugCandidate,
-              name: meta?.name || trimmedName,
-              slug: meta?.slug || slugCandidate,
-              aliases: meta?.aliases || [],
-              logo: meta?.logo,
-              description: meta?.description,
-              faqs: meta?.faqs || [],
-              isActive: true,
-              showInMenu: inMenu,
-              menuGroup: navGroup,
-              menuGroups: navGroup ? [navGroup] : [],
-              metaTitle: meta?.metaTitle,
-              metaDescription: meta?.metaDescription,
-              metaKeywords: meta?.metaKeywords,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            };
-            enriched.push(item);
-            existingNames.add(trimmedName.toLowerCase());
-            existingSlugs.add(slugCandidate);
+      if (mongoose.connection.readyState === 1) {
+        const { ProductModel } = await import("../product/product.model");
+        const distinctBrands: string[] = await ProductModel.distinct("brand").exec();
+        if (Array.isArray(distinctBrands)) {
+          for (const brandName of distinctBrands) {
+            if (!brandName || typeof brandName !== "string") continue;
+            const trimmedName = brandName.trim();
+            if (!trimmedName) continue;
+            const slugCandidate = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+            if (
+              !existingNames.has(trimmedName.toLowerCase()) &&
+              !existingSlugs.has(slugCandidate)
+            ) {
+              const meta = this.findStaticMetadata(slugCandidate) || this.findStaticMetadata(trimmedName);
+              const inMenu = DEFAULT_NAV_BRAND_GROUPS[slugCandidate] !== undefined;
+              const navGroup = DEFAULT_NAV_BRAND_GROUPS[slugCandidate] || meta?.menuGroup || "";
+              const item: IBrand = {
+                _id: "brand-" + slugCandidate,
+                name: meta?.name || trimmedName,
+                slug: meta?.slug || slugCandidate,
+                aliases: meta?.aliases || [],
+                logo: meta?.logo,
+                description: meta?.description,
+                faqs: meta?.faqs || [],
+                isActive: true,
+                showInMenu: inMenu,
+                menuGroup: navGroup,
+                menuGroups: navGroup ? [navGroup] : [],
+                metaTitle: meta?.metaTitle,
+                metaDescription: meta?.metaDescription,
+                metaKeywords: meta?.metaKeywords,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              };
+              enriched.push(item);
+              existingNames.add(trimmedName.toLowerCase());
+              existingSlugs.add(slugCandidate);
 
-            missingToSeed.push({
-              name: item.name,
-              slug: item.slug,
-              aliases: item.aliases,
-              logo: item.logo,
-              description: item.description,
-              faqs: item.faqs,
-              isActive: true,
-              showInMenu: inMenu,
-              menuGroup: navGroup,
-              menuGroups: navGroup ? [navGroup] : [],
-              metaTitle: item.metaTitle,
-              metaDescription: item.metaDescription,
-              metaKeywords: item.metaKeywords,
-            });
+              missingToSeed.push({
+                name: item.name,
+                slug: item.slug,
+                aliases: item.aliases,
+                logo: item.logo,
+                description: item.description,
+                faqs: item.faqs,
+                isActive: true,
+                showInMenu: inMenu,
+                menuGroup: navGroup,
+                menuGroups: navGroup ? [navGroup] : [],
+                metaTitle: item.metaTitle,
+                metaDescription: item.metaDescription,
+                metaKeywords: item.metaKeywords,
+              });
+            }
           }
         }
       }
@@ -324,17 +335,11 @@ export class BrandService {
     const meta = this.findStaticMetadata(idOrSlug) || (brand ? this.findStaticMetadata(brand.slug) || this.findStaticMetadata(brand.name) : undefined);
 
     if (brand) {
-      const slugClean = (brand.slug || "").toLowerCase().trim();
-      const inMenu = brand.showInMenu !== undefined && brand.showInMenu !== null
-        ? brand.showInMenu === true || (brand.showInMenu as any) === "true" || (brand.showInMenu as any) === 1
-        : DEFAULT_NAV_BRAND_GROUPS[slugClean] !== undefined;
+      if (brand.isDeleted) {
+        throw new NotFoundError("Brand not found");
+      }
 
-      const navGroup = DEFAULT_NAV_BRAND_GROUPS[slugClean] || meta?.menuGroup || brand.menuGroup || "";
-      const menuGroups = brand.menuGroups && brand.menuGroups.length > 0
-        ? brand.menuGroups
-        : navGroup
-        ? [navGroup]
-        : [];
+      const { showInMenu: inMenu, navGroup, menuGroups } = this.resolveMenuConfig(brand, meta);
 
       const resolved = {
         ...brand,
@@ -386,11 +391,16 @@ export class BrandService {
       const cleanSlug = data.slug.toLowerCase().trim();
       const existing = await Promise.resolve(BrandRepository.findBySlug(cleanSlug)).catch(() => null);
       if (existing) {
+        if (existing.isDeleted) {
+          const restored = await BrandRepository.update(existing._id, { ...data, slug: cleanSlug, isDeleted: false });
+          await clearBrandCaches();
+          return restored;
+        }
         throw new ConflictError(`Brand with slug "${cleanSlug}" already exists ("${existing.name}")`);
       }
       data.slug = cleanSlug;
     }
-    const created = await BrandRepository.create(data);
+    const created = await BrandRepository.create({ ...data, isDeleted: false });
     await clearBrandCaches();
     return created;
   }
@@ -399,7 +409,12 @@ export class BrandService {
     if (data.slug) {
       const cleanSlug = data.slug.toLowerCase().trim();
       const conflict = await Promise.resolve(BrandRepository.findBySlug(cleanSlug)).catch(() => null);
-      if (conflict && String(conflict._id) !== String(id) && `brand-${conflict.slug}` !== String(id)) {
+      if (
+        conflict &&
+        !conflict.isDeleted &&
+        String(conflict._id) !== String(id) &&
+        `brand-${conflict.slug}` !== String(id)
+      ) {
         throw new ConflictError(`Brand with slug "${cleanSlug}" already exists ("${conflict.name}")`);
       }
       data.slug = cleanSlug;
@@ -407,7 +422,8 @@ export class BrandService {
     const previousBrand = data.slug
       ? await Promise.resolve(BrandRepository.findById(id)).catch(() => null)
       : null;
-    let brand = await BrandRepository.update(id, data);
+    const updatePayload = { ...data, isDeleted: false };
+    let brand = await BrandRepository.update(id, updatePayload);
     if (!brand) {
       const cleanSlug = id.replace(/^brand-/, "").toLowerCase().trim();
       const meta = this.findStaticMetadata(cleanSlug);
@@ -426,7 +442,7 @@ export class BrandService {
           metaTitle: meta.metaTitle,
           metaDescription: meta.metaDescription,
           metaKeywords: meta.metaKeywords,
-          ...data,
+          ...updatePayload,
         });
       }
     }
@@ -445,24 +461,60 @@ export class BrandService {
   }
 
   static async deleteBrand(id: string) {
-    let brand = await BrandRepository.delete(id);
-    if (!brand) {
-      const cleanSlug = id.replace(/^brand-/, "").toLowerCase().trim();
-      const bySlug = await BrandRepository.findBySlug(cleanSlug);
-      if (bySlug) {
-        brand = await BrandRepository.delete(bySlug._id);
+    const cleanSlug = id.replace(/^brand-/, "").toLowerCase().trim();
+    const existing =
+      (await Promise.resolve(BrandRepository.findById(id)).catch(() => null)) ||
+      (cleanSlug ? await Promise.resolve(BrandRepository.findBySlug(cleanSlug)).catch(() => null) : null);
+
+    let brand: IBrand | null = null;
+
+    if (existing) {
+      const meta =
+        this.findStaticMetadata(existing.slug) ||
+        (existing.name ? this.findStaticMetadata(existing.name) : undefined);
+
+      let hasCatalogProducts = false;
+      try {
+        if (mongoose.connection.readyState === 1 && existing.name) {
+          const { ProductModel } = await import("../product/product.model");
+          const escapedName = existing.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+          const productExists = await ProductModel.exists({ brand: new RegExp(`^${escapedName}$`, "i") });
+          hasCatalogProducts = Boolean(productExists);
+        }
+      } catch {
+        hasCatalogProducts = false;
+      }
+
+      if (meta || hasCatalogProducts) {
+        // Keep a deleted tombstone in MongoDB so static metadata or product brand strings never resurrect it
+        brand = await BrandRepository.update(existing._id, {
+          isDeleted: true,
+          isActive: false,
+          showInMenu: false,
+          menuGroup: "",
+          menuGroups: [],
+        });
       } else {
+        brand = await BrandRepository.delete(existing._id);
+      }
+    } else {
+      brand = await BrandRepository.delete(id);
+      if (!brand) {
         const meta = this.findStaticMetadata(cleanSlug);
         if (meta) {
           brand = await BrandRepository.create({
             name: meta.name,
             slug: meta.slug,
+            isDeleted: true,
             isActive: false,
             showInMenu: false,
+            menuGroup: "",
+            menuGroups: [],
           });
         }
       }
     }
+
     if (!brand) throw new NotFoundError("Brand not found");
     await clearBrandCaches();
     return brand;

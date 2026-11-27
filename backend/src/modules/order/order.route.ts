@@ -4,7 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
  * @description Defines API endpoints for Orders and maps them to Controller methods.
  */
 import { OrderController } from "./order.controller";
-import { checkOrderRateLimit } from "../../core/middlewares/rateLimiter";
+import { checkOrderRateLimit, checkPaymentSyncRateLimit } from "../../core/middlewares/rateLimiter";
+import { getClientIp } from "../../core/utils/clientIp";
+import { extractAdminFromAuth } from "../../core/middlewares/auth";
 
 /**
  * @swagger
@@ -250,6 +252,36 @@ import { checkOrderRateLimit } from "../../core/middlewares/rateLimiter";
  *     responses:
  *       200:
  *         description: Exchange completed
+ * /api/v1/orders/sync-payment:
+ *   post:
+ *     summary: Reconcile and sync live payment status with the gateway (rate-limited)
+ *     tags: [Orders]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orderId]
+ *             properties:
+ *               orderId: { type: string }
+ *     responses:
+ *       200:
+ *         description: Live payment status checked and reconciled if captured
+ * /api/v1/orders/webhook/{gateway}/s2s:
+ *   post:
+ *     summary: Dedicated Server-to-Server (S2S) payment, refund, and dispute webhook with optional gateway IP allowlist
+ *     tags: [Orders]
+ *     parameters:
+ *       - in: path
+ *         name: gateway
+ *         required: true
+ *         schema: { type: string, enum: [payu, ccavenue, snapmint] }
+ *     responses:
+ *       200:
+ *         description: S2S webhook processed cleanly
+ *       403:
+ *         description: Unauthorized source IP when allowlist configured
  * /api/v1/orders/{id}/exchange/fee-pay:
  *   post:
  *     summary: Initialize online payment session (PayU/CCAvenue/UPI) for exchange 2-way shipping fee (Customer)
@@ -276,7 +308,7 @@ import { checkOrderRateLimit } from "../../core/middlewares/rateLimiter";
 export async function orderRouter(req: NextRequest, routePath: string[]): Promise<NextResponse | null> {
   const method = req.method;
   const pathLen = routePath.length;
-  const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
+  const ip = getClientIp(req);
 
   if (method === "POST" && pathLen === 0) {
     await checkOrderRateLimit(ip);
@@ -288,15 +320,22 @@ export async function orderRouter(req: NextRequest, routePath: string[]): Promis
   }
 
   if (method === "POST" && pathLen === 1 && routePath[0] === "sync-payment") {
+    await checkPaymentSyncRateLimit(ip);
     return await OrderController.syncPaymentStatus(req);
   }
 
   if (method === "POST" && pathLen === 1 && (routePath[0] === "verify" || routePath[0] === "verify-payment")) {
+    await checkPaymentSyncRateLimit(ip);
     return await OrderController.verify(req);
   }
 
   if (method === "GET" && pathLen === 1 && routePath[0] === "me") {
     return await OrderController.myOrders(req);
+  }
+
+  // Enforce Admin Portal scope on all /orders/admin* routes
+  if (pathLen > 0 && routePath[0] === "admin") {
+    extractAdminFromAuth(req);
   }
 
   if (method === "GET" && pathLen === 1 && routePath[0] === "admin") {

@@ -396,6 +396,11 @@ function OrderHistoryInner() {
                         + {additionalItemsCount} more {additionalItemsCount === 1 ? "item" : "items"}
                       </p>
                     )}
+                    {(order.status || "").toLowerCase() === "pending_payment" && (
+                      <p className="text-[11px] font-medium text-amber-800 bg-amber-50/80 border border-amber-200/70 rounded px-2 py-1 mt-1.5">
+                        Awaiting bank confirmation — open Resolve Payment to auto-verify status before paying again.
+                      </p>
+                    )}
                   </div>
 
                   {/* Desktop Right Chevron */}

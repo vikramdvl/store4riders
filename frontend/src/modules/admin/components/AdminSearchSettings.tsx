@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/core/api/client";
 import { toast } from "sonner";
 import Button from "@/components/ui/Button";
@@ -17,6 +18,7 @@ import {
 import { AdminSearchRedirectsManager } from "./AdminSearchRedirectsManager";
 
 export function AdminSearchSettings() {
+  const queryClient = useQueryClient();
   const [subTab, setSubTab] = useState<"redirects" | "popular">("redirects");
   const [tags, setTags] = useState<string[]>([]);
   const [newTagInput, setNewTagInput] = useState("");
@@ -37,7 +39,7 @@ export function AdminSearchSettings() {
         setTags([]);
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to load search settings");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to load search settings");
     } finally {
       setLoading(false);
     }
@@ -78,9 +80,11 @@ export function AdminSearchSettings() {
       await apiClient.put("/admin/settings", {
         popularSearches: tags,
       });
+      await queryClient.invalidateQueries({ queryKey: ["search", "trending"] });
+      await queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
       toast.success("Search discovery settings saved successfully");
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to save search settings");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to save search settings");
     } finally {
       setSaving(false);
     }

@@ -226,15 +226,25 @@ export class ProductRepository {
     const cleanSku = sku.trim();
     if (!cleanSku) return null;
 
+    const { newSku: _ignoredNewSku, ...rawUpdateFields } = data || {};
+    const updatePayload = Object.keys(rawUpdateFields).length > 0 ? { $set: rawUpdateFields } : {};
+
     // 1. Try finding and updating as a parent product
-    let query = ProductModel.findOneAndUpdate({ sku: cleanSku }, data, { new: true });
+    let query =
+      Object.keys(updatePayload).length > 0
+        ? ProductModel.findOneAndUpdate({ sku: cleanSku }, updatePayload, { new: true })
+        : ProductModel.findOne({ sku: cleanSku });
     if (session) query.session(session);
     let product = await query.lean().exec() as unknown as IProduct | null;
     if (product) return product;
 
     // 2. Try case-insensitive parent match
     const escapedSku = cleanSku.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
-    query = ProductModel.findOneAndUpdate({ sku: new RegExp(`^${escapedSku}$`, "i") }, data, { new: true });
+    const regexFilter = { sku: new RegExp(`^${escapedSku}$`, "i") };
+    query =
+      Object.keys(updatePayload).length > 0
+        ? ProductModel.findOneAndUpdate(regexFilter, updatePayload, { new: true })
+        : ProductModel.findOne(regexFilter);
     if (session) query.session(session);
     product = await query.lean().exec() as unknown as IProduct | null;
     if (product) return product;
@@ -252,34 +262,50 @@ export class ProductRepository {
       );
 
       if (variantIdx >= 0) {
+        if (Object.keys(rawUpdateFields).length === 0) {
+          return parent.toObject() as unknown as IProduct;
+        }
+
         const v = parent.variants[variantIdx];
         const newPrice = data.basePrice ?? data.price;
         const newSpecialPrice = data.specialPrice ?? data.special_price;
         const newStock = data.qty ?? data.stock;
 
-        if (newPrice !== undefined && newPrice !== "") {
+        if (newPrice !== undefined && Number.isFinite(Number(newPrice)) && Number(newPrice) > 0) {
           v.price = Number(newPrice);
         }
-        if (newSpecialPrice !== undefined) {
-          v.specialPrice = newSpecialPrice === "" || newSpecialPrice === null ? undefined : Number(newSpecialPrice);
+        if (newSpecialPrice !== undefined && Number.isFinite(Number(newSpecialPrice)) && Number(newSpecialPrice) > 0) {
+          v.specialPrice = Number(newSpecialPrice);
         }
-        if (newStock !== undefined && newStock !== "") {
+        if (newStock !== undefined && newStock !== "" && Number.isFinite(Number(newStock))) {
           v.stock = Number(newStock);
         } else if (data.stockStatus !== undefined && Number(data.stockStatus) === 0) {
           v.stock = 0;
         }
 
-        if (data.weight !== undefined && data.weight !== "") {
+        if (data.weight !== undefined && Number.isFinite(Number(data.weight)) && Number(data.weight) > 0) {
           v.weight = Number(data.weight);
+          if (data.weightUnit) {
+            v.weightUnit = data.weightUnit;
+          }
         }
-        if (data.length !== undefined && data.length !== "") {
-          v.length = Number(data.length);
-        }
-        if (data.breadth !== undefined && data.breadth !== "") {
-          v.breadth = Number(data.breadth);
-        }
-        if (data.height !== undefined && data.height !== "") {
-          v.height = Number(data.height);
+        const hasAnyDimUpdate =
+          (data.length !== undefined && Number.isFinite(Number(data.length)) && Number(data.length) > 0) ||
+          (data.breadth !== undefined && Number.isFinite(Number(data.breadth)) && Number(data.breadth) > 0) ||
+          (data.height !== undefined && Number.isFinite(Number(data.height)) && Number(data.height) > 0);
+        if (hasAnyDimUpdate) {
+          if (data.length !== undefined && Number.isFinite(Number(data.length)) && Number(data.length) > 0) {
+            v.length = Number(data.length);
+          }
+          if (data.breadth !== undefined && Number.isFinite(Number(data.breadth)) && Number(data.breadth) > 0) {
+            v.breadth = Number(data.breadth);
+          }
+          if (data.height !== undefined && Number.isFinite(Number(data.height)) && Number(data.height) > 0) {
+            v.height = Number(data.height);
+          }
+          if (data.dimensionUnit) {
+            v.dimensionUnit = data.dimensionUnit;
+          }
         }
         if (data.hsnCode !== undefined && data.hsnCode !== "") {
           v.hsnCode = String(data.hsnCode).trim();
@@ -436,6 +462,43 @@ export class ProductRepository {
    */
   static async updateRatingStats(productId: string, avgRating: number, reviewCount: number): Promise<void> {
     await ProductModel.updateOne({ _id: productId }, { avgRating, reviewCount }).exec();
+  }
+
+  /**
+   * Fetches existing root products and parent products containing matching variant SKUs
+   * for dry-run CSV migration validation and diff preview.
+   */
+  static async findMigrationPreviewCandidates(skus: string[]): Promise<{
+    existingRoots: any[];
+    existingVariantParents: any[];
+  }> {
+    const cleanSkus = Array.from(
+      new Set(
+        skus
+          .map((s) => s?.trim())
+          .filter((s): s is string => Boolean(s && s.length > 0))
+      )
+    );
+    if (cleanSkus.length === 0) {
+      return { existingRoots: [], existingVariantParents: [] };
+    }
+
+    const existingRoots: any[] = [];
+    const existingVariantParents: any[] = [];
+    const CHUNK_SIZE = 400;
+
+    for (let i = 0; i < cleanSkus.length; i += CHUNK_SIZE) {
+      const chunk = cleanSkus.slice(i, i + CHUNK_SIZE);
+      const regexList = chunk.map((s) => new RegExp(`^${escapeRegex(s)}$`, "i"));
+      const [roots, variantParents] = await Promise.all([
+        ProductModel.find({ sku: { $in: regexList } }).lean().exec(),
+        ProductModel.find({ "variants.sku": { $in: regexList } }).lean().exec(),
+      ]);
+      existingRoots.push(...roots);
+      existingVariantParents.push(...variantParents);
+    }
+
+    return { existingRoots, existingVariantParents };
   }
 
   /**

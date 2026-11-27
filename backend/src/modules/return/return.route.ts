@@ -2,6 +2,9 @@ import { NextRequest } from "next/server";
 import { AppError } from "../../core/errors/AppError";
 import { ReturnController } from "./return.controller";
 import { extractUserFromAuth } from "../../core/middlewares/auth";
+import { checkPermission } from "../../core/middlewares/permission";
+import { PermissionAction } from "../../core/config/permissions";
+import { UserService } from "../user/user.service";
 
 /**
  * @swagger
@@ -12,8 +15,8 @@ import { extractUserFromAuth } from "../../core/middlewares/auth";
 export async function returnRouter(req: NextRequest, routePath: string[]) {
   const method = req.method;
 
-  // Middleware: All return routes require authentication
-  await extractUserFromAuth(req);
+  // Middleware: All return routes require verified JWT authentication
+  const userId = extractUserFromAuth(req);
 
   // ---------------------------------------------------------------------------
   // Customer Routes
@@ -21,18 +24,14 @@ export async function returnRouter(req: NextRequest, routePath: string[]) {
   
   // POST /api/v1/returns
   if (method === "POST" && routePath.length === 0) {
-    return await ReturnController.requestReturn(req);
+    return await ReturnController.requestReturn(req, userId);
   }
 
   // ---------------------------------------------------------------------------
-  // Admin Routes (Requires Admin Role)
+  // Admin Routes (Requires Admin/Staff Permission)
   // ---------------------------------------------------------------------------
-  const isAdmin = req.headers.get("x-user-role") === "admin";
-
   if (routePath[0] === "admin") {
-    if (!isAdmin) {
-      throw new AppError("Forbidden. Admin access required.", 403);
-    }
+    await checkPermission(userId, PermissionAction.MANAGE_RETURNS, UserService.getRole);
 
     // GET /api/v1/returns/admin
     if (method === "GET" && routePath.length === 1) {

@@ -21,8 +21,16 @@ import {
 } from "@heroicons/react/24/outline";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { formatPrice } from "@store4riders/shared-utils";
+import {
+  formatPrice,
+  estimateOrderPackageDimensions,
+  calculateVolumetricWeight,
+  calculateChargeableWeight,
+  type IEstimatedPackageResult,
+  type IPackageSpecInputItem,
+} from "@store4riders/shared-utils";
 import { useAdminOrderById } from "@/core/hooks/useOrderById";
+import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
 import { useWarehouses, useSyncShiprocketWarehouses } from "@/core/hooks/useWarehouses";
 import { usePushToShiprocket, useCreateDirectShipment } from "@/core/hooks/useAdminShipments";
 import { ShippingLabelModal } from "./ShippingLabelModal";
@@ -72,6 +80,7 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
   }, []);
 
   const { data: order, isLoading: isOrderLoading } = useAdminOrderById(orderId);
+  const { data: publicSettings } = usePublicSettings();
   const { data: warehouses = [], isLoading: isWarehousesLoading } = useWarehouses();
   const directShipmentMutation = useCreateDirectShipment();
   const pushToShiprocketMutation = usePushToShiprocket();
@@ -82,6 +91,8 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
   const [packageWeight, setPackageWeight] = useState<string>("1.0");
   const [dimensions, setDimensions] = useState({ length: 15, breadth: 15, height: 10 });
   const [isAutoDimensions, setIsAutoDimensions] = useState<boolean>(false);
+  const [hasUserEditedPackage, setHasUserEditedPackage] = useState<boolean>(false);
+  const [packageEstimate, setPackageEstimate] = useState<IEstimatedPackageResult | null>(null);
   const [autoAssignAwb, setAutoAssignAwb] = useState<boolean>(false);
   const [createdShipment, setCreatedShipment] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -141,55 +152,41 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
     }
   }, [warehouses, order?.warehouseId, selectedWarehouseId]);
 
-  // Pre-calculate weight & package dimensions from order items (handles kg, g, ml, L and L x B x H automatically)
+  // Pre-calculate weight & smart package box dimensions from order items and warehouse presets
   useEffect(() => {
     if (order?.items && order.items.length > 0) {
-      let total = 0;
-      let maxL = 0;
-      let maxB = 0;
-      let totalH = 0;
-      let hasProductDimensions = false;
-
-      for (const item of order.items) {
-        const rawW = Number((item as any).weight || (item as any).product?.weight || 0.5);
-        const u = String((item as any).weightUnit || (item as any).product?.weightUnit || "kg").toLowerCase();
-        let inKg = rawW;
-        if (u === "g" || u === "ml") {
-          inKg = rawW / 1000;
-        } else if (u === "l") {
-          inKg = rawW; // 1 Litre approx 1 Kg
-        }
-        total += (inKg > 0 ? inKg : 0.5) * (item.quantity || 1);
-
-        // Auto-detect dimensions from item's variant or parent product
-        const prod = (item as any).product || {};
+      const specItems: IPackageSpecInputItem[] = order.items.map((item: any) => {
+        const prod = item.product || {};
         const variant = (prod.variants || []).find(
           (v: any) => v.id === item.variantId || v.sku === item.sku
         );
-        const l = Number(variant?.length || prod.length || (item as any).length || 0);
-        const b = Number(variant?.breadth || prod.breadth || (item as any).breadth || (item as any).width || 0);
-        const h = Number(variant?.height || prod.height || (item as any).height || 0);
+        return {
+          sku: item.sku,
+          quantity: item.quantity || 1,
+          weight: Number(item.weight) > 0 ? Number(item.weight) : Number(variant?.weight) > 0 ? Number(variant.weight) : Number(prod.weight) > 0 ? Number(prod.weight) : undefined,
+          weightUnit: item.weightUnit || variant?.weightUnit || prod.weightUnit || "kg",
+          length: Number(item.length) > 0 ? Number(item.length) : Number(variant?.length) > 0 ? Number(variant.length) : Number(prod.length) > 0 ? Number(prod.length) : undefined,
+          breadth: Number(item.breadth || item.width) > 0 ? Number(item.breadth || item.width) : Number(variant?.breadth) > 0 ? Number(variant.breadth) : Number(prod.breadth) > 0 ? Number(prod.breadth) : undefined,
+          height: Number(item.height) > 0 ? Number(item.height) : Number(variant?.height) > 0 ? Number(variant.height) : Number(prod.height) > 0 ? Number(prod.height) : undefined,
+          dimensionUnit: item.dimensionUnit || variant?.dimensionUnit || prod.dimensionUnit || "cm",
+        };
+      });
 
-        if (l > 0 || b > 0 || h > 0) {
-          hasProductDimensions = true;
-          if (l > 0) maxL = Math.max(maxL, l);
-          if (b > 0) maxB = Math.max(maxB, b);
-          if (h > 0) totalH += h * (item.quantity || 1);
-        }
-      }
-      const estWeight = Math.max(0.1, Number(total.toFixed(2)));
-      setPackageWeight(String(estWeight));
+      const estimated = estimateOrderPackageDimensions(specItems, publicSettings?.packagePresets);
+      setPackageEstimate(estimated);
 
-      if (hasProductDimensions) {
-        setIsAutoDimensions(true);
+      if (!hasUserEditedPackage) {
+        const estWeight = Math.max(0.1, estimated.weight);
+        setPackageWeight(String(estWeight));
+        setIsAutoDimensions(estimated.hasProductDimensions);
         setDimensions({
-          length: Math.max(1, Math.round(maxL || 15)),
-          breadth: Math.max(1, Math.round(maxB || 15)),
-          height: Math.max(1, Math.round(totalH || 10)),
+          length: estimated.length,
+          breadth: estimated.breadth,
+          height: estimated.height,
         });
       }
     }
-  }, [order?.items]);
+  }, [order?.items, publicSettings?.packagePresets, hasUserEditedPackage]);
 
   const selectedCourier = COURIER_PARTNERS.find((c) => c.id === selectedCourierId) || COURIER_PARTNERS[0];
 
@@ -197,8 +194,8 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
   const numLength = Number(dimensions.length) || 15;
   const numBreadth = Number(dimensions.breadth) || 15;
   const numHeight = Number(dimensions.height) || 10;
-  const volumetricWeight = Number(((numLength * numBreadth * numHeight) / 5000).toFixed(2));
-  const billableWeight = Number(Math.max(numWeight, volumetricWeight).toFixed(2));
+  const volumetricWeight = Number(calculateVolumetricWeight(numLength, numBreadth, numHeight).toFixed(2));
+  const billableWeight = Number(calculateChargeableWeight(numWeight, volumetricWeight).toFixed(2));
 
   const handlePushToShiprocket = () => {
     setErrorMessage(null);
@@ -611,9 +608,23 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
                                   <span className="font-bold text-slate-900 text-xs truncate block" title={item.name}>
                                     {item.name}
                                   </span>
-                                  <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono mt-0.5">
+                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500 font-mono mt-0.5">
                                     <span>SKU: {item.sku || "N/A"}</span>
                                     {item.variantId && <span>• {item.variantId}</span>}
+                                    {Number(item.weight) > 0 && (
+                                      <span className="text-slate-700 font-semibold">
+                                        • {item.weight} {item.weightUnit || "kg"}
+                                      </span>
+                                    )}
+                                    {Number(item.length) > 0 && Number(item.breadth) > 0 && Number(item.height) > 0 ? (
+                                      <span className="text-emerald-700 font-semibold">
+                                        • {item.length}×{item.breadth}×{item.height} {item.dimensionUnit || "cm"}
+                                      </span>
+                                    ) : (
+                                      <span className="text-amber-700 font-sans font-semibold">
+                                        • L×B×H missing
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -915,16 +926,90 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
                 </div>
 
                 {/* Dead Weight and Package Dimensions */}
-                <div className="flex items-center justify-between pt-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                   <span className="text-[11px] font-bold text-slate-700">Package Weight &amp; Box Dimensions</span>
-                  {isAutoDimensions ? (
+                  {hasUserEditedPackage ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                      <span>✓ Custom / Preset Box Applied ({numLength}×{numBreadth}×{numHeight} cm)</span>
+                    </span>
+                  ) : isAutoDimensions ? (
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                      <span>✓ Pre-filled from Product Catalog</span>
+                      <span>
+                        ✓ Catalog Specs ({packageEstimate?.itemsWithDimensionsCount || 0}/{packageEstimate?.totalDistinctItemsCount || 0} items)
+                        {packageEstimate?.matchedPreset ? ` • Fit: ${packageEstimate.matchedPreset.name}` : ""}
+                      </span>
                     </span>
                   ) : (
-                    <span className="text-[10px] text-slate-400 font-medium">Standard packaging defaults</span>
+                    <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full font-semibold">
+                      Using default box (15×15×10 cm) — verify before dispatch
+                    </span>
                   )}
                 </div>
+
+                {/* 1-Click Master Box Presets */}
+                {publicSettings?.packagePresets && publicSettings.packagePresets.length > 0 && (
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                      Quick Select Warehouse Carton Preset
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {publicSettings.packagePresets.map((preset) => {
+                        const isActive =
+                          Number(dimensions.length) === Number(preset.length) &&
+                          Number(dimensions.breadth) === Number(preset.breadth) &&
+                          Number(dimensions.height) === Number(preset.height);
+                        const isRecommended = packageEstimate?.matchedPreset?.name === preset.name;
+                        return (
+                          <button
+                            key={`${preset.name}-${preset.length}-${preset.breadth}-${preset.height}`}
+                            type="button"
+                            onClick={() => {
+                              setHasUserEditedPackage(true);
+                              setDimensions({
+                                length: Math.max(1, Number(preset.length)),
+                                breadth: Math.max(1, Number(preset.breadth)),
+                                height: Math.max(1, Number(preset.height)),
+                              });
+                            }}
+                            className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                              isActive
+                                ? "bg-brand text-white border-brand shadow-xs"
+                                : "bg-white text-slate-700 border-slate-300 hover:border-brand hover:text-brand"
+                            }`}
+                          >
+                            <span>{preset.name}</span>
+                            <span className={`font-mono text-[10px] ${isActive ? "text-white/90" : "text-slate-500"}`}>
+                              ({preset.length}×{preset.breadth}×{preset.height})
+                            </span>
+                            {isRecommended && !isActive && (
+                              <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1 rounded">
+                                Fit
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {packageEstimate && (packageEstimate.missingWeightSkus.length > 0 || packageEstimate.missingDimensionSkus.length > 0) && (
+                  <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900 space-y-0.5">
+                    {packageEstimate.missingWeightSkus.length > 0 && (
+                      <p>
+                        <strong>Missing catalog weight (0.5 kg fallback used):</strong>{" "}
+                        <span className="font-mono">{packageEstimate.missingWeightSkus.join(", ")}</span>
+                      </p>
+                    )}
+                    {packageEstimate.missingDimensionSkus.length > 0 && (
+                      <p>
+                        <strong>Missing catalog L×B×H:</strong>{" "}
+                        <span className="font-mono">{packageEstimate.missingDimensionSkus.join(", ")}</span> — weigh &amp; measure the final carton before generating AWB.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <div className="space-y-1">
                     <label className="text-[11px] font-bold text-slate-700 block">
@@ -935,7 +1020,10 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
                       step="0.05"
                       min="0.1"
                       value={packageWeight}
-                      onChange={(e) => setPackageWeight(e.target.value)}
+                      onChange={(e) => {
+                        setHasUserEditedPackage(true);
+                        setPackageWeight(e.target.value);
+                      }}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 bg-white focus:outline-none focus:border-brand shadow-xs"
                       placeholder="1.0"
                     />
@@ -949,7 +1037,10 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
                       type="number"
                       min="1"
                       value={dimensions.length}
-                      onChange={(e) => setDimensions({ ...dimensions, length: Math.max(1, Number(e.target.value) || 1) })}
+                      onChange={(e) => {
+                        setHasUserEditedPackage(true);
+                        setDimensions({ ...dimensions, length: Math.max(1, Number(e.target.value) || 1) });
+                      }}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 bg-white focus:outline-none focus:border-brand shadow-xs"
                       placeholder="15"
                     />
@@ -963,7 +1054,10 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
                       type="number"
                       min="1"
                       value={dimensions.breadth}
-                      onChange={(e) => setDimensions({ ...dimensions, breadth: Math.max(1, Number(e.target.value) || 1) })}
+                      onChange={(e) => {
+                        setHasUserEditedPackage(true);
+                        setDimensions({ ...dimensions, breadth: Math.max(1, Number(e.target.value) || 1) });
+                      }}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 bg-white focus:outline-none focus:border-brand shadow-xs"
                       placeholder="15"
                     />
@@ -977,7 +1071,10 @@ export const OrderFulfillmentPanel: React.FC<OrderFulfillmentPanelProps> = ({ or
                       type="number"
                       min="1"
                       value={dimensions.height}
-                      onChange={(e) => setDimensions({ ...dimensions, height: Math.max(1, Number(e.target.value) || 1) })}
+                      onChange={(e) => {
+                        setHasUserEditedPackage(true);
+                        setDimensions({ ...dimensions, height: Math.max(1, Number(e.target.value) || 1) });
+                      }}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 bg-white focus:outline-none focus:border-brand shadow-xs"
                       placeholder="10"
                     />

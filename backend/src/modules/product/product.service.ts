@@ -2,10 +2,18 @@ import { ProductRepository } from "./product.repository";
 import { IProduct } from "@store4riders/shared-types";
 import { NotFoundError, ConflictError } from "../../core/errors/AppError";
 import { indexProduct, removeProductFromIndex } from "../../core/search/meilisearch";
-import { slugify, extractProductDimensions } from "@store4riders/shared-utils";
+import { slugify, extractProductDimensions, extractProductWeight } from "@store4riders/shared-utils";
 import { getCache, setCache, deleteCache, clearProductCaches } from "../../core/cache/redis";
 import { buildSearchSlugs, resolveCanonicalCategorySlugs } from "./product.category-constants";
 import { supportsTransactions } from "../../core/database/transaction";
+import {
+  getCsvColumnValue,
+  parseCsvDate,
+  parseCsvInt,
+  parseCsvNumber,
+  parseCsvStockStatus,
+} from "../../core/utils/csvMigrationHelper";
+import { logger } from "../../core/utils/logger";
 
 const PRODUCT_LIST_TTL = 300; // 5 minutes (invalidated immediately on admin mutations)
 const PRODUCT_DETAIL_TTL = 900; // 15 minutes (invalidated immediately on admin mutations)
@@ -44,8 +52,19 @@ export class ProductService {
     filters: Record<string, unknown>, 
     page: number, 
     limit: number,
-    sort: Record<string, 1 | -1> = { createdAt: -1, _id: -1 }
+    sort: Record<string, 1 | -1> = { createdAt: -1, _id: -1 },
+    options: { bypassCache?: boolean } = {}
   ) {
+    const bypassCache = Boolean(options?.bypassCache);
+    if (bypassCache) {
+      const skip = (page - 1) * limit;
+      const [items, totalCount] = await Promise.all([
+        ProductRepository.findAll(filters, skip, limit, sort),
+        ProductRepository.count(filters),
+      ]);
+      return { items, totalCount };
+    }
+
     // Deterministic serialization helper for cache key that preserves RegExp and nested objects
     const serializeFilter = (obj: any): string => {
       if (!obj || typeof obj !== "object") return String(obj);
@@ -1715,23 +1734,13 @@ export class ProductService {
               const row = rows[i];
               if (!row || typeof row !== "object") continue;
 
-              // Helper for case-insensitive column extraction across Magento & custom CSVs
-              const getCol = (aliases: string[]) => {
-                for (const alias of aliases) {
-                  if (row[alias] !== undefined && row[alias] !== "") return row[alias];
-                  const lower = alias.toLowerCase();
-                  const foundKey = Object.keys(row).find((k) => k.trim().toLowerCase() === lower);
-                  if (foundKey && row[foundKey] !== undefined && row[foundKey] !== "") {
-                    return row[foundKey];
-                  }
-                }
-                return undefined;
-              };
+              // Helper for case-insensitive, BOM-safe column extraction (returns undefined for blanks/whitespace)
+              const getCol = (aliases: string[]) => getCsvColumnValue(row, aliases);
 
               const rawOldSku = getCol(["old_sku", "oldSku", "original_sku", "previous_sku", "rename_from"]);
               const rawSku = getCol(["sku", "SKU", "Sku", "variant_sku", "variantSku", "new_sku", "newSku"]);
 
-              const lookupSku = (rawOldSku || rawSku)?.toString().trim();
+              const lookupSku = (rawOldSku || rawSku)?.trim();
               if (!lookupSku) {
                 errorRows.push({ row: i + 2, reason: "SKU is missing in CSV row" });
                 continue;
@@ -1740,146 +1749,143 @@ export class ProductService {
               const updateData: any = {};
 
               // SKU Renaming: if old_sku was specified and differs from new sku
-              if (rawOldSku && rawSku && String(rawOldSku).trim().toLowerCase() !== String(rawSku).trim().toLowerCase()) {
-                updateData.sku = String(rawSku).trim();
-                updateData.newSku = String(rawSku).trim();
+              if (rawOldSku && rawSku && rawOldSku.trim().toLowerCase() !== rawSku.trim().toLowerCase()) {
+                updateData.sku = rawSku.trim();
+                updateData.newSku = rawSku.trim();
               }
 
               // 1. Basic Information & Content
               const rawName = getCol(["name", "Name", "title", "Title", "product_name"]);
-              if (rawName !== undefined && typeof rawName === "string" && rawName.trim()) {
-                updateData.name = rawName.trim();
+              if (rawName && rawName.toLowerCase() !== "#n/a") {
+                updateData.name = rawName;
               }
 
               const rawDesc = getCol(["description", "Description"]);
-              if (rawDesc !== undefined && typeof rawDesc === "string" && rawDesc.trim()) {
-                updateData.description = rawDesc.trim();
+              if (rawDesc) {
+                updateData.description = rawDesc;
               }
 
               const rawShortDesc = getCol(["short_description", "shortDescription", "ShortDescription"]);
-              if (rawShortDesc !== undefined && typeof rawShortDesc === "string" && rawShortDesc.trim()) {
-                updateData.shortDescription = rawShortDesc.trim();
+              if (rawShortDesc) {
+                updateData.shortDescription = rawShortDesc;
               }
 
               const rawSlug = getCol(["url_key", "slug", "urlKey", "UrlKey"]);
-              if (rawSlug !== undefined && typeof rawSlug === "string" && rawSlug.trim()) {
-                updateData.slug = slugify(rawSlug.trim());
+              if (rawSlug) {
+                updateData.slug = slugify(rawSlug);
               }
 
-              // 2. Pricing & Dates
-              const rawPrice = getCol(["price", "basePrice", "base_price", "Price"]);
-              if (rawPrice !== undefined && rawPrice !== "") {
-                updateData.basePrice = Number(rawPrice);
+              // 2. Pricing & Dates (strict numeric/date validation so garbage values never write NaN or Invalid Date)
+              const parsedPrice = parseCsvNumber(getCol(["price", "basePrice", "base_price", "Price"]));
+              if (parsedPrice !== undefined && parsedPrice > 0) {
+                updateData.basePrice = parsedPrice;
               }
 
-              const rawSpecialPrice = getCol(["special_price", "specialPrice", "SpecialPrice", "specialprice"]);
-              if (rawSpecialPrice !== undefined) {
-                updateData.specialPrice = (rawSpecialPrice === "" || rawSpecialPrice === null) ? undefined : Number(rawSpecialPrice);
+              const parsedSpecialPrice = parseCsvNumber(getCol(["special_price", "specialPrice", "SpecialPrice", "specialprice"]));
+              if (parsedSpecialPrice !== undefined && parsedSpecialPrice > 0) {
+                updateData.specialPrice = parsedSpecialPrice;
               }
 
-              const rawSpecialFrom = getCol(["special_from_date", "specialPriceFromDate", "special_from"]);
-              if (rawSpecialFrom !== undefined) {
-                updateData.specialPriceFromDate = rawSpecialFrom ? parseDateOrNull(rawSpecialFrom) : null;
+              const parsedSpecialFrom = parseCsvDate(getCol(["special_from_date", "specialPriceFromDate", "special_from"]));
+              if (parsedSpecialFrom) {
+                updateData.specialPriceFromDate = parsedSpecialFrom;
               }
 
-              const rawSpecialTo = getCol(["special_to_date", "specialPriceToDate", "special_to"]);
-              if (rawSpecialTo !== undefined) {
-                updateData.specialPriceToDate = rawSpecialTo ? parseDateOrNull(rawSpecialTo) : null;
+              const parsedSpecialTo = parseCsvDate(getCol(["special_to_date", "specialPriceToDate", "special_to"]));
+              if (parsedSpecialTo) {
+                updateData.specialPriceToDate = parsedSpecialTo;
               }
 
               // 3. Inventory, Stock & Shipping
-              const rawQty = getCol(["qty", "stock", "quantity", "Qty", "Stock"]);
-              if (rawQty !== undefined && rawQty !== "") {
-                updateData.qty = Number(rawQty);
+              const parsedQty = parseCsvInt(getCol(["qty", "stock", "quantity", "Qty", "Stock"]));
+              if (parsedQty !== undefined) {
+                updateData.qty = parsedQty;
               }
 
-              const rawStockStatus = getCol(["is_in_stock", "stockStatus", "stock_status", "isInStock"]);
-              if (rawStockStatus !== undefined) {
-                updateData.stockStatus = Number(rawStockStatus) === 0 ? 0 : 1;
-              } else if (rawQty !== undefined) {
-                updateData.stockStatus = Number(rawQty) > 0 ? 1 : 0;
+              const parsedStockStatus = parseCsvStockStatus(getCol(["is_in_stock", "stockStatus", "stock_status", "isInStock"]));
+              if (parsedStockStatus !== undefined) {
+                updateData.stockStatus = parsedStockStatus;
+              } else if (parsedQty !== undefined) {
+                updateData.stockStatus = parsedQty > 0 ? 1 : 0;
               }
 
               const rawBackorders = getCol(["backorders", "allowBackorders", "allow_backorders"]);
-              if (rawBackorders !== undefined && rawBackorders !== "") {
-                updateData.allowBackorders = rawBackorders === "1" || String(rawBackorders).toLowerCase() === "true";
+              if (rawBackorders !== undefined) {
+                updateData.allowBackorders = rawBackorders === "1" || rawBackorders.toLowerCase() === "true";
               }
 
               const rawFreeShipping = getCol(["free_shipping", "isFreeShipping", "is_free_shipping"]);
-              if (rawFreeShipping !== undefined && rawFreeShipping !== "") {
-                updateData.isFreeShipping = rawFreeShipping === "1" || String(rawFreeShipping).toLowerCase() === "true";
+              if (rawFreeShipping !== undefined) {
+                updateData.isFreeShipping = rawFreeShipping === "1" || rawFreeShipping.toLowerCase() === "true";
               }
 
-              // 4. Physical Specs & Logistics (Weight, Dimensions)
-              const rawWeight = getCol(["weight", "Weight"]);
-              if (rawWeight !== undefined && rawWeight !== "") {
-                updateData.weight = Number(rawWeight);
-              }
-
-              const rawWeightUnit = getCol(["weight_unit", "weightUnit", "WeightUnit"]);
-              if (rawWeightUnit !== undefined && typeof rawWeightUnit === "string" && rawWeightUnit.trim()) {
-                updateData.weightUnit = rawWeightUnit.trim();
+              // 4. Physical Specs & Logistics (Weight, Dimensions — only write when present)
+              const parsedWeight = extractProductWeight(row);
+              if (parsedWeight.weight !== undefined && parsedWeight.weight > 0) {
+                updateData.weight = parsedWeight.weight;
+                updateData.weightUnit = parsedWeight.weightUnit || "kg";
               }
 
               // Auto-catch dimensions from separate columns (length/breadth/height, l/w/h, etc.), combined string (30x20x10), or attributes
-              const parsedDims = extractProductDimensions(row, updateData.attributes);
-              if (parsedDims.length !== undefined) updateData.length = parsedDims.length;
-              if (parsedDims.breadth !== undefined) updateData.breadth = parsedDims.breadth;
-              if (parsedDims.height !== undefined) updateData.height = parsedDims.height;
-              if (parsedDims.dimensionUnit) updateData.dimensionUnit = parsedDims.dimensionUnit;
+              const parsedDims = extractProductDimensions(row);
+              const hasParsedDimensions =
+                (parsedDims.length !== undefined && parsedDims.length > 0) ||
+                (parsedDims.breadth !== undefined && parsedDims.breadth > 0) ||
+                (parsedDims.height !== undefined && parsedDims.height > 0);
+              if (hasParsedDimensions) {
+                if (parsedDims.length !== undefined && parsedDims.length > 0) updateData.length = parsedDims.length;
+                if (parsedDims.breadth !== undefined && parsedDims.breadth > 0) updateData.breadth = parsedDims.breadth;
+                if (parsedDims.height !== undefined && parsedDims.height > 0) updateData.height = parsedDims.height;
+                updateData.dimensionUnit = parsedDims.dimensionUnit || "cm";
+              }
 
               const rawGender = getCol(["gender", "Gender"]);
-              if (rawGender !== undefined && typeof rawGender === "string" && rawGender.trim()) {
-                updateData.gender = rawGender.trim();
+              if (rawGender) {
+                updateData.gender = rawGender;
               }
 
               const rawCountry = getCol(["country_of_manufacture", "countryOfManufacture", "country"]);
-              if (rawCountry !== undefined && typeof rawCountry === "string" && rawCountry.trim()) {
-                updateData.countryOfManufacture = rawCountry.trim();
+              if (rawCountry) {
+                updateData.countryOfManufacture = rawCountry;
               }
 
-              const rawHsn = getCol(["hsn_code", "hsnCode", "tax_class_name", "taxClassName"]);
-              if (rawHsn !== undefined && typeof rawHsn === "string" && rawHsn.trim()) {
-                updateData.hsnCode = rawHsn.trim();
+              const rawHsn = getCol(["hsn_code", "hsnCode", "hsncode", "tax_class_name", "taxClassName"]);
+              if (rawHsn) {
+                updateData.hsnCode = rawHsn;
               }
 
               // 5. SEO & Meta Tags
               const rawMetaTitle = getCol(["meta_title", "metaTitle", "MetaTitle"]);
-              if (rawMetaTitle !== undefined && typeof rawMetaTitle === "string" && rawMetaTitle.trim()) {
-                updateData.metaTitle = rawMetaTitle.trim();
+              if (rawMetaTitle) {
+                updateData.metaTitle = rawMetaTitle;
               }
 
               const rawMetaDesc = getCol(["meta_description", "metaDescription", "MetaDescription"]);
-              if (rawMetaDesc !== undefined && typeof rawMetaDesc === "string" && rawMetaDesc.trim()) {
-                updateData.metaDescription = rawMetaDesc.trim();
+              if (rawMetaDesc) {
+                updateData.metaDescription = rawMetaDesc;
               }
 
               const rawMetaKeywords = getCol(["meta_keyword", "meta_keywords", "metaKeywords", "MetaKeywords"]);
-              if (rawMetaKeywords !== undefined && typeof rawMetaKeywords === "string" && rawMetaKeywords.trim()) {
-                updateData.metaKeywords = rawMetaKeywords.trim();
+              if (rawMetaKeywords) {
+                updateData.metaKeywords = rawMetaKeywords;
               }
 
               // 6. Cross-sells, Upsells & Related SKUs
-              const parseSkuList = (val: any): string[] => {
-                if (Array.isArray(val)) return val.map(String).map(s => s.trim()).filter(Boolean);
-                if (typeof val === "string" && val.trim()) {
-                  return val.split(/[,|]/).map(s => s.trim()).filter(Boolean);
-                }
-                return [];
-              };
+              const parseSkuList = (val: string): string[] =>
+                val.split(/[,|]/).map((s) => s.trim()).filter(Boolean);
 
               const rawRelated = getCol(["related_skus", "relatedSkus", "RelatedSkus"]);
-              if (rawRelated !== undefined) {
+              if (rawRelated) {
                 updateData.relatedSkus = parseSkuList(rawRelated);
               }
 
               const rawUpsell = getCol(["upsell_skus", "upsellSkus", "UpsellSkus"]);
-              if (rawUpsell !== undefined) {
+              if (rawUpsell) {
                 updateData.upsellSkus = parseSkuList(rawUpsell);
               }
 
               const rawCrosssell = getCol(["crosssell_skus", "crosssellSkus", "CrosssellSkus"]);
-              if (rawCrosssell !== undefined) {
+              if (rawCrosssell) {
                 updateData.crosssellSkus = parseSkuList(rawCrosssell);
               }
 
@@ -1896,13 +1902,13 @@ export class ProductService {
                 "Size Chart",
                 "Size chart",
               ]);
-              if (rawSizeChart !== undefined && typeof rawSizeChart === "string" && rawSizeChart.trim()) {
-                updateData.sizeChart = rawSizeChart.trim();
-                updateData.size_chart = rawSizeChart.trim();
+              if (rawSizeChart) {
+                updateData.sizeChart = rawSizeChart;
+                updateData.size_chart = rawSizeChart;
               }
 
               const rawColorSwatches = getCol(["color_swatches", "colorSwatches", "ColorSwatches"]);
-              if (rawColorSwatches !== undefined && typeof rawColorSwatches === "string" && rawColorSwatches.trim()) {
+              if (rawColorSwatches) {
                 const parsedSwatches: Record<string, string> = {};
                 rawColorSwatches.split("|").forEach((item: string) => {
                   const eqIdx = item.indexOf("=");
@@ -1923,13 +1929,13 @@ export class ProductService {
               // 8. Status & Visibility
               const rawStatus = getCol(["status", "product_online"]);
               if (rawStatus !== undefined) {
-                updateData.status = (rawStatus === "1" || String(rawStatus).toLowerCase() === "published" || String(rawStatus).toLowerCase() === "enabled") ? "published" : "draft";
+                updateData.status = (rawStatus === "1" || rawStatus.toLowerCase() === "published" || rawStatus.toLowerCase() === "enabled") ? "published" : "draft";
               }
 
               // 9. Brand (auto-link brandId and brandSlug if matched)
               const rawBrand = getCol(["brand", "Brand"]);
-              if (rawBrand !== undefined && typeof rawBrand === "string" && rawBrand.trim()) {
-                const cleanBrand = rawBrand.trim();
+              if (rawBrand) {
+                const cleanBrand = rawBrand;
                 updateData.brand = cleanBrand;
                 try {
                   const { BrandModel } = await import("../brand/brand.model");
@@ -1950,11 +1956,11 @@ export class ProductService {
 
               // 10. Categories & Canonical resolution
               const rawCats = getCol(["categories", "magentoCategories", "category"]);
-              if (rawCats !== undefined && typeof rawCats === "string" && rawCats.trim()) {
-                updateData.magentoCategories = rawCats.trim();
+              if (rawCats) {
+                updateData.magentoCategories = rawCats;
                 const canonicalSlugs = resolveCanonicalCategorySlugs({
                   name: updateData.name || "",
-                  magentoCategories: rawCats.trim(),
+                  magentoCategories: rawCats,
                 });
                 if (canonicalSlugs && canonicalSlugs.length > 0) {
                   updateData.categoryId = canonicalSlugs[0];
@@ -1963,13 +1969,21 @@ export class ProductService {
               }
 
               try {
-                const product = await ProductRepository.updateBySku(String(lookupSku).trim(), updateData, session);
+                let product = await ProductRepository.updateBySku(lookupSku, updateData, session);
+
+                // Fallback: if old_sku column contained a historical reference while current sku exists in DB
+                if (!product && rawOldSku && rawSku && rawOldSku.trim().toLowerCase() !== rawSku.trim().toLowerCase()) {
+                  const { sku: _dropSku, newSku: _dropNewSku, ...updateWithoutRename } = updateData;
+                  product = await ProductRepository.updateBySku(rawSku.trim(), updateWithoutRename, session);
+                }
 
                 if (!product) {
                   errorRows.push({ row: i + 2, reason: `Product or Variant with SKU "${lookupSku}" not found` });
                 } else {
                   successCount++;
-                  indexProduct(product).catch(console.error);
+                  indexProduct(product).catch((err) =>
+                    logger.error(`[BulkCsvUpdate] Meilisearch sync failed for SKU ${lookupSku}:`, err)
+                  );
                   await this.invalidateProductCache(product.slug);
                 }
               } catch (rowErr: any) {
@@ -2045,16 +2059,43 @@ export class ProductService {
       "swatch_image", "swatch_image_label",
       "color_swatches",
       "configurable_variations", "related_skus", "upsell_skus", "crosssell_skus", "size_chart", "gender",
-      "country_of_manufacture", "attribute_set_code", "configurable_variation_labels", "free_shipping",
+      "country_of_manufacture", "attribute_set_code", "configurable_variation_labels", "free_shipping", "ship_cost",
       "backorders", "meta_title", "meta_keyword", "meta_description"
     ];
 
-    // Collect all unique dynamic attribute keys across all products
+    const ignoredExportAttrKeys = new Set([
+      "codazon_custom_tab",
+      "product name",
+      "options_container",
+      "has_options",
+      "required_options",
+      "gift_message_available",
+      "additional_attributes",
+      "url_path",
+      "small_image",
+      "thumbnail",
+      "frameborder",
+      "allowfullscreen",
+      "size_chart_01",
+      "size_chart_02",
+      "size_chart_03",
+    ]);
+
+    const isCleanExportAttrKey = (key: string): boolean => {
+      const k = key.trim().toLowerCase();
+      if (!k || k.length > 35) return false;
+      if (/["'|,<>{}()[\]]/.test(k)) return false;
+      if (ignoredExportAttrKeys.has(k) || k.startsWith("size_chart") || k.startsWith("sizechart")) return false;
+      return true;
+    };
+
+    // Collect all unique clean dynamic attribute keys across all products
     const dynamicAttrKeys = new Set<string>();
     products.forEach((p: any) => {
       if (p.attributes && typeof p.attributes === "object") {
-        Object.keys(p.attributes).forEach((k) => {
-          if (!baseHeaders.includes(k) && k !== "size_chart") {
+        const attrsObj = p.attributes instanceof Map ? Object.fromEntries(p.attributes) : p.attributes;
+        Object.keys(attrsObj).forEach((k) => {
+          if (!baseHeaders.includes(k) && k !== "size_chart" && isCleanExportAttrKey(k)) {
             dynamicAttrKeys.add(k);
           }
         });
@@ -2150,13 +2191,15 @@ export class ProductService {
         p.attributeSetCode || "",
         p.configurableVariationLabels || "",
         p.isFreeShipping ? "1" : "0",
+        (p.attributes instanceof Map ? p.attributes.get("ship_cost") : p.attributes?.ship_cost) || "",
         p.allowBackorders ? "1" : "0",
         p.metaTitle || "",
         p.metaKeywords || "",
         p.metaDescription || "",
       ];
 
-      const parentDynamicRow = dynamicHeaders.map((k) => (p.attributes && p.attributes[k]) || "");
+      const parentAttrsObj = p.attributes instanceof Map ? Object.fromEntries(p.attributes) : (p.attributes || {});
+      const parentDynamicRow = dynamicHeaders.map((k) => parentAttrsObj[k] || "");
       rows.push([...parentBaseRow, ...parentDynamicRow].map(escapeCsv).join(","));
 
       // 2. Export individual child variant rows for complete visibility & bulk editing
@@ -2187,7 +2230,7 @@ export class ProductService {
             (v as any).length || (p as any).length || "",
             (v as any).breadth || (p as any).breadth || "",
             (v as any).height || (p as any).height || "",
-            (p as any).dimensionUnit || "cm",
+            (v as any).dimensionUnit || (p as any).dimensionUnit || "cm",
             (v.stock > 0 || p.allowBackorders) ? "1" : "0",
             v.stock ?? 0,
             "simple", // child product type
@@ -2213,6 +2256,7 @@ export class ProductService {
             p.attributeSetCode || "",
             "", // configurable_variation_labels
             p.isFreeShipping ? "1" : "0",
+            "", // ship_cost (inherited from parent)
             p.allowBackorders ? "1" : "0",
             vName,
             p.metaKeywords || "",
@@ -2222,7 +2266,7 @@ export class ProductService {
           const childDynamicRow = dynamicHeaders.map((k) => {
             if (k === "color") return vColor;
             if (k === "size") return vSize;
-            return (p.attributes && p.attributes[k]) || "";
+            return parentAttrsObj[k] || "";
           });
 
           rows.push([...childBaseRow, ...childDynamicRow].map(escapeCsv).join(","));

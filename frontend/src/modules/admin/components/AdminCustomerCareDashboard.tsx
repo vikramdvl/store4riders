@@ -420,7 +420,7 @@ export function AdminCustomerCareDashboard() {
                   <option value="return_exchange">Exchange</option>
                   <option value="product_sizing">Sizing / Fitment</option>
                   <option value="shipping_delay">Shipping Delay</option>
-                  <option value="general">General</option>
+                  <option value="other">Other / General</option>
                 </select>
               </div>
             </div>
@@ -1026,7 +1026,11 @@ export function AdminCustomerCareDashboard() {
       {/* Contact Issue Detail Modal */}
       {selectedIssue && (
         <ContactIssueDetailModal
-          issue={selectedIssue}
+          issue={
+            issuesData?.items?.find(
+              (item) => (item.id || (item as any)._id) === (selectedIssue.id || (selectedIssue as any)._id)
+            ) || selectedIssue
+          }
           onClose={() => setSelectedIssue(null)}
           onOpenOrder={(orderNum) => {
             setSelectedIssue(null);

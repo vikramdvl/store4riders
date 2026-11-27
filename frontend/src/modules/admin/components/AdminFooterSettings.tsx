@@ -122,21 +122,21 @@ export function AdminFooterSettings() {
         ]);
         const aboutUrls = new Set(["/about-us", "/contact-us"]);
 
-        let c1Links = fetchedFooter.column1Links && fetchedFooter.column1Links.length > 0
+        let c1Links = Array.isArray(fetchedFooter.column1Links)
           ? fetchedFooter.column1Links
           : INITIAL_DEFAULTS.column1Links;
-        let c2Links = fetchedFooter.column2Links && fetchedFooter.column2Links.length > 0
+        let c2Links = Array.isArray(fetchedFooter.column2Links)
           ? fetchedFooter.column2Links
           : INITIAL_DEFAULTS.column2Links;
-        let c3Links = fetchedFooter.column3Links && fetchedFooter.column3Links.length > 0
+        let c3Links = Array.isArray(fetchedFooter.column3Links)
           ? fetchedFooter.column3Links
-          : null;
-        let c4Links = fetchedFooter.column4Links && fetchedFooter.column4Links.length > 0
+          : undefined;
+        let c4Links = Array.isArray(fetchedFooter.column4Links)
           ? fetchedFooter.column4Links
-          : null;
+          : undefined;
 
         // Auto-extract policies from column1 if legacy
-        if (!c3Links && Array.isArray(c1Links)) {
+        if (c3Links === undefined && Array.isArray(c1Links)) {
           const policies = c1Links.filter((l: any) => policyUrls.has(l.url));
           if (policies.length > 0) {
             c3Links = policies;
@@ -144,7 +144,7 @@ export function AdminFooterSettings() {
           }
         }
         // Auto-extract about from column2 if legacy
-        if (!c4Links && Array.isArray(c2Links)) {
+        if (c4Links === undefined && Array.isArray(c2Links)) {
           const about = c2Links.filter((l: any) => aboutUrls.has(l.url));
           if (about.length > 0) {
             c4Links = about;
@@ -160,18 +160,18 @@ export function AdminFooterSettings() {
           contactAddress: fetchedFooter.contactAddress ?? "",
           showSocialLinks: fetchedFooter.showSocialLinks ?? true,
           column1Title: fetchedFooter.column1Title || INITIAL_DEFAULTS.column1Title,
-          column1Links: c1Links && c1Links.length > 0 ? c1Links : INITIAL_DEFAULTS.column1Links,
+          column1Links: c1Links,
           column2Title: fetchedFooter.column2Title || INITIAL_DEFAULTS.column2Title,
-          column2Links: c2Links && c2Links.length > 0 ? c2Links : INITIAL_DEFAULTS.column2Links,
+          column2Links: c2Links,
           column3Title: fetchedFooter.column3Title || INITIAL_DEFAULTS.column3Title,
-          column3Links: c3Links && c3Links.length > 0 ? c3Links : INITIAL_DEFAULTS.column3Links,
+          column3Links: c3Links ?? INITIAL_DEFAULTS.column3Links,
           column4Title: fetchedFooter.column4Title || INITIAL_DEFAULTS.column4Title,
-          column4Links: c4Links && c4Links.length > 0 ? c4Links : INITIAL_DEFAULTS.column4Links,
+          column4Links: c4Links ?? INITIAL_DEFAULTS.column4Links,
           newsletterTitle: fetchedFooter.newsletterTitle || INITIAL_DEFAULTS.newsletterTitle,
           newsletterSubtitle: fetchedFooter.newsletterSubtitle ?? INITIAL_DEFAULTS.newsletterSubtitle,
           newsletterPlaceholder: fetchedFooter.newsletterPlaceholder || INITIAL_DEFAULTS.newsletterPlaceholder,
           copyrightText: fetchedFooter.copyrightText || INITIAL_DEFAULTS.copyrightText,
-          bottomLinks: fetchedFooter.bottomLinks && fetchedFooter.bottomLinks.length > 0
+          bottomLinks: Array.isArray(fetchedFooter.bottomLinks)
             ? fetchedFooter.bottomLinks
             : INITIAL_DEFAULTS.bottomLinks,
         });
@@ -203,7 +203,7 @@ export function AdminFooterSettings() {
       ]);
       toast.success("Footer settings and navigation links saved successfully!");
     } catch (err: any) {
-      toast.error(err.response?.data?.message || err.message || "Failed to save footer settings");
+      toast.error(err.response?.data?.error || err.response?.data?.message || err.message || "Failed to save footer settings");
     } finally {
       setSaving(false);
     }

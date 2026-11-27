@@ -1,6 +1,6 @@
 import { PaymentRepository } from "./payment.repository";
 import { OrderService } from "../order/order.service";
-import { AppError } from "../../core/errors/AppError";
+import { AppError, ForbiddenError } from "../../core/errors/AppError";
 
 export class PaymentService {
   
@@ -19,10 +19,28 @@ export class PaymentService {
     await OrderService.handleWebhook(rawBody, { ...headers, "x-gateway-source": gateway }, gateway);
   }
 
-  static async getPaymentStatus(paymentId: string) {
+  static async getPaymentStatus(paymentId: string, requesterUserId?: string) {
+    if (!requesterUserId) {
+      throw new AppError("Authentication required", 401);
+    }
+
     const payment = await PaymentRepository.findById(paymentId);
     if (!payment) throw new AppError("Payment not found", 404);
-    
+
+    const { OrderRepository } = await import("../order/order.repository");
+    const order =
+      (payment.orderId ? await OrderRepository.findById(payment.orderId) : null) ||
+      (payment.gatewayOrderId ? await OrderRepository.findByGatewayOrderId(payment.gatewayOrderId) : null);
+
+    const isOwner = Boolean(order?.userId && String(order.userId) === String(requesterUserId));
+    if (!isOwner) {
+      const { UserService } = await import("../user/user.service");
+      const role = await UserService.getRole(requesterUserId);
+      if (role === "customer") {
+        throw new ForbiddenError("You do not have permission to view this payment");
+      }
+    }
+
     return {
       id: payment._id,
       status: payment.status,

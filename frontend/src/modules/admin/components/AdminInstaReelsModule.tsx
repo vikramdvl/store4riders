@@ -136,7 +136,8 @@ export function AdminInstaReelsModule() {
         },
         onError: (err: any) => {
           toast.error(
-            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+              err?.response?.data?.message ||
               err?.message ||
               "Failed to save changes"
           );

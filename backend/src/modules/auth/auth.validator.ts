@@ -1,5 +1,21 @@
 import { NextRequest } from "next/server";
-import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } from "@store4riders/shared-validation";
+import {
+  sendRegisterOtpSchema,
+  checkEmailSchema,
+  registerSchema,
+  loginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+} from "@store4riders/shared-validation";
+import { ValidationError } from "../../core/errors/AppError";
+
+async function parseJsonBody(req: NextRequest): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch {
+    throw new ValidationError("Invalid JSON payload");
+  }
+}
 
 /**
  * AuthValidator
@@ -10,6 +26,22 @@ import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema 
 export class AuthValidator {
   
   /**
+   * Validates the send registration OTP payload.
+   */
+  static async validateSendRegisterOtp(req: NextRequest) {
+    const body = await parseJsonBody(req);
+    return sendRegisterOtpSchema.parse(body);
+  }
+
+  /**
+   * Validates the check email payload.
+   */
+  static async validateCheckEmail(req: NextRequest) {
+    const body = await parseJsonBody(req);
+    return checkEmailSchema.parse(body);
+  }
+
+  /**
    * Validates the registration payload.
    * 
    * @param {NextRequest} req - The incoming HTTP request.
@@ -17,7 +49,7 @@ export class AuthValidator {
    * @throws Will throw if data is invalid.
    */
   static async validateRegister(req: NextRequest) {
-    const body = await req.json();
+    const body = await parseJsonBody(req);
     return registerSchema.parse(body);
   }
 
@@ -29,17 +61,17 @@ export class AuthValidator {
    * @throws Will throw if data is invalid.
    */
   static async validateLogin(req: NextRequest) {
-    const body = await req.json();
+    const body = await parseJsonBody(req);
     return loginSchema.parse(body);
   }
 
   static async validateForgotPassword(req: NextRequest) {
-    const body = await req.json();
+    const body = await parseJsonBody(req);
     return forgotPasswordSchema.parse(body);
   }
 
   static async validateResetPassword(req: NextRequest) {
-    const body = await req.json();
+    const body = await parseJsonBody(req);
     return resetPasswordSchema.parse(body);
   }
 }

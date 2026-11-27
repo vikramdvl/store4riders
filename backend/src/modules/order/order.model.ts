@@ -13,6 +13,12 @@ const orderItemSchema = new Schema<IOrderItem>({
   hsnCode: { type: String },
   image: { type: String },
   slug: { type: String },
+  weight: { type: Number },
+  weightUnit: { type: String },
+  length: { type: Number },
+  breadth: { type: Number },
+  height: { type: Number },
+  dimensionUnit: { type: String },
 });
 
 const pricingSchema = new Schema<IOrderPricing>(
@@ -147,7 +153,7 @@ const orderSchema = new Schema<IOrder>(
     gatewayOrderId: { type: String },
     paymentId: { type: String },
     paymentSignature: { type: String },
-    idempotencyKey: { type: String, sparse: true },
+    idempotencyKey: { type: String },
     notes: [
       {
         text: { type: String, required: true },
@@ -163,6 +169,7 @@ const orderSchema = new Schema<IOrder>(
 );
 
 // High-performance operational indexes for Admin Dashboard and Order querying
+orderSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });
 orderSchema.index({ createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ "exchangeDetails.stage": 1 });

@@ -95,6 +95,7 @@ export function useCreateBrand() {
       queryClient.invalidateQueries({ queryKey: ["brands"] });
       queryClient.invalidateQueries({ queryKey: ["brand"] });
       revalidateStorefrontPaths([
+        "/",
         "/brands",
         created?.slug ? `/brands/${created.slug}` : undefined,
       ]);
@@ -117,6 +118,7 @@ export function useUpdateBrand() {
       queryClient.invalidateQueries({ queryKey: ["brands"] });
       queryClient.invalidateQueries({ queryKey: ["brand"] });
       revalidateStorefrontPaths([
+        "/",
         "/brands",
         updated?.slug ? `/brands/${updated.slug}` : undefined,
       ]);
@@ -139,6 +141,7 @@ export function useDeleteBrand() {
       queryClient.invalidateQueries({ queryKey: ["brands"] });
       queryClient.invalidateQueries({ queryKey: ["brand"] });
       revalidateStorefrontPaths([
+        "/",
         "/brands",
         deleted?.slug ? `/brands/${deleted.slug}` : undefined,
       ]);

@@ -49,7 +49,7 @@ export function useUpdateHeroAndSeo() {
       toast.success("Hero & SEO settings saved successfully!");
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.message || err.message || "Failed to update Hero & SEO");
+      toast.error(err.response?.data?.error || err.response?.data?.message || err.message || "Failed to update Hero & SEO");
     },
   });
 }
@@ -67,7 +67,7 @@ export function useUpdateHomepageSections() {
       toast.success("Homepage sections saved successfully!");
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.message || err.message || "Failed to update homepage sections");
+      toast.error(err.response?.data?.error || err.response?.data?.message || err.message || "Failed to update homepage sections");
     },
   });
 }

@@ -4,7 +4,44 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { PaymentMethodType } from "@store4riders/shared-types";
-import { submitGatewayPaymentForm } from "../utils/paymentSubmit";
+import { submitGatewayPaymentForm, savePendingPaymentOrder, loadPendingPaymentOrder } from "../utils/paymentSubmit";
+
+export interface SyncPaymentStatusResponse {
+  status: string;
+  orderNumber: string;
+  paymentMethod?: string;
+  isConfirmed: boolean;
+  isPending?: boolean;
+  isCancelled?: boolean;
+  gatewayStatus?: "confirmed" | "pending" | "cancelled" | "failed";
+  isExchangeFee?: boolean;
+  reconciled?: boolean;
+  failureReason?: string;
+  message: string;
+}
+
+/**
+ * Reconciles live payment status with the backend/gateway using an order number, ID, or gateway txnid.
+ */
+export async function syncOrderPaymentStatus(
+  orderId: string,
+  guestToken?: string
+): Promise<SyncPaymentStatusResponse | null> {
+  const urlGuestToken =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("guestToken") || undefined
+      : undefined;
+  const effectiveGuestToken = guestToken || urlGuestToken || loadPendingPaymentOrder()?.guestOrderToken;
+  const res = await apiClient.post(
+    "/orders/sync-payment",
+    {
+      orderId,
+      ...(effectiveGuestToken ? { guestToken: effectiveGuestToken } : {}),
+    },
+    { timeout: 12000 }
+  );
+  return res.data?.data ?? null;
+}
 
 declare global {
   interface Window {}
@@ -60,7 +97,7 @@ export function useCheckout() {
         businessName: businessName || undefined,
         items: payloadItems,
         idempotencyKey,
-      });
+      }, { timeout: 25000 });
       return { ...response.data, paymentMethod };
     },
     onSuccess: (data) => {
@@ -82,6 +119,12 @@ export function useCheckout() {
 
       // Handle PayU, CCAvenue, Snapmint, and COD partial payment with PayU
       if ((method === "payu" || method === "ccavenue" || method === "snapmint" || (method === "cod" && gatewayOrderId)) && gatewayResponse) {
+        savePendingPaymentOrder({
+          orderNumber: resData.orderNumber || resData.orderId,
+          gatewayOrderId: gatewayOrderId ? String(gatewayOrderId) : undefined,
+          guestOrderToken: resData.guestOrderToken ? String(resData.guestOrderToken) : undefined,
+          paymentMethod: method,
+        });
         submitGatewayPaymentForm(method, gatewayResponse);
         return;
       }

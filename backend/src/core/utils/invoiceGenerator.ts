@@ -95,6 +95,36 @@ export function normalizeIndianState(state: string | undefined): string {
   return aliases[s] || s;
 }
 
+const CONSTANT_INVOICE_SELLER_NAME = "Store4riders.com (Motohive Media Pvt. Ltd.)";
+
+/**
+ * Joins address lines and removes duplicate comma-separated segments (case-insensitive)
+ * so repeated street/landmark clauses from carrier syncs never appear twice on invoices.
+ */
+export function formatInvoiceOriginAddress(line1?: string, line2?: string): string {
+  const combined = [line1, line2]
+    .map((part) => (part || "").trim())
+    .filter(Boolean)
+    .join(", ");
+
+  if (!combined) return "";
+
+  const seen = new Set<string>();
+  const uniqueParts: string[] = [];
+
+  for (const rawPart of combined.split(",")) {
+    const part = rawPart.trim();
+    if (!part) continue;
+    const normalized = part.toLowerCase().replace(/\s+/g, " ");
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      uniqueParts.push(part);
+    }
+  }
+
+  return uniqueParts.join(", ");
+}
+
 export class InvoiceGenerator {
   static async generateInvoiceBuffer(order: IOrder): Promise<Buffer> {
     const { SettingRepository } = await import("../../modules/settings/setting.repository");
@@ -140,11 +170,11 @@ export class InvoiceGenerator {
     }
 
     // Origin dispatch details
-    const storeLegalName = settings.legalBusinessName || "Store4Riders";
-    const warehouseDisplayName = warehouse?.name ? `${storeLegalName} (${warehouse.name})` : storeLegalName;
+    const storeLegalName = CONSTANT_INVOICE_SELLER_NAME;
+    const warehouseDisplayName = CONSTANT_INVOICE_SELLER_NAME;
     const storeAddress = warehouse?.addressLine1
-      ? `${warehouse.addressLine1}${warehouse.addressLine2 ? ", " + warehouse.addressLine2 : ""}`
-      : (settings.storeOriginAddress || "Central Warehouse");
+      ? formatInvoiceOriginAddress(warehouse.addressLine1, warehouse.addressLine2)
+      : formatInvoiceOriginAddress(settings.storeOriginAddress || "Central Warehouse");
     const storeCity = warehouse?.city || settings.storeOriginCity || "Pune";
     const storeState = (warehouse?.state || settings.storeOriginState || "Maharashtra").trim();
     const storePin = warehouse?.pincode || settings.storeOriginPincode || "411001";
@@ -646,14 +676,16 @@ export class InvoiceGenerator {
 
         // Right Side: Digital / Computer-Generated Invoice Notice (NO PHYSICAL SIGNATURE NEEDED)
         const rightColX = startX + termsWidth + 8;
-        doc.fontSize(8).font("Helvetica-Bold").fillColor(textColor).text(`For ${storeLegalName.toUpperCase()}:`, rightColX, currentY + 6);
+        doc.fontSize(7.5).font("Helvetica-Bold").fillColor(textColor).text(`For ${storeLegalName}:`, rightColX, currentY + 6, { width: 170 });
+        const sigHeadingBottomY = doc.y;
 
-        doc.fontSize(7.5).font("Helvetica-Bold").fillColor(brandRed).text("[ Digitally Authorized System Invoice ]", rightColX, currentY + 28);
+        doc.fontSize(7.5).font("Helvetica-Bold").fillColor(brandRed).text("[ Digitally Authorized System Invoice ]", rightColX, Math.max(sigHeadingBottomY + 4, currentY + 28), { width: 170 });
+        const authNoticeBottomY = doc.y;
 
         doc.fontSize(6.5).font("Helvetica-Oblique").fillColor(mutedTextColor).text(
           "This is a computer-generated tax invoice. In accordance with the Information Technology Act, 2000 and Indian GST invoice rules, no physical signature is required.",
           rightColX,
-          currentY + 42,
+          Math.max(authNoticeBottomY + 3, currentY + 42),
           { width: 170, lineGap: 1.5 }
         );
 

@@ -268,7 +268,12 @@ export class GooglePayUpiGateway implements PaymentGateway {
     // NPCI 12-digit UTR validation if formatted as UTR
     if (/^\d{12}$/.test(effectivePaymentId)) {
       // Replay attack check: Ensure UTR hasn't already been used in another captured payment
-      const existingPayment = await PaymentRepository.findByGatewayOrderId(effectivePaymentId);
+      const existingByOrder = await PaymentRepository.findByGatewayOrderId(effectivePaymentId);
+      const existingByPayment =
+        typeof PaymentRepository.findByGatewayPaymentId === "function"
+          ? await PaymentRepository.findByGatewayPaymentId(effectivePaymentId)
+          : null;
+      const existingPayment = existingByOrder || existingByPayment;
       if (existingPayment && String((existingPayment as any)._id) !== String((payment as any)._id)) {
         logger.warn(`Duplicate UTR replay attempt: ${effectivePaymentId}`);
         return { success: false, message: "This UPI Reference (UTR) has already been processed" };

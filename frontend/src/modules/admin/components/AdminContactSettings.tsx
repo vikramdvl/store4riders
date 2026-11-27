@@ -121,7 +121,7 @@ export function AdminContactSettings() {
       ]);
       toast.success("Store contact & SEO settings saved successfully!");
     } catch (err: any) {
-      toast.error(err.response?.data?.message || err.message || "Failed to update settings");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || err.message || "Failed to update settings");
     } finally {
       setSaving(false);
     }

@@ -10,16 +10,28 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+    const action = searchParams.get("action");
+    if (action === "account") {
+      searchParams.delete("action");
+    }
     const queryString = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
     const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || "http://localhost:4000/api";
     const baseUrl = rawBaseUrl.endsWith("/") ? rawBaseUrl.slice(0, -1) : rawBaseUrl;
+    const endpoint = action === "account" ? "/reviews/store/account" : "/reviews/store";
     const fetchUrl = baseUrl.includes("/v1")
-      ? `${baseUrl}/reviews/store${queryString}`
-      : `${baseUrl}/v1/reviews/store${queryString}`;
+      ? `${baseUrl}${endpoint}${queryString}`
+      : `${baseUrl}/v1${endpoint}${queryString}`;
+
+    const authHeader = req.headers.get("authorization");
+    const cookieHeader = req.headers.get("cookie");
+    const headers: Record<string, string> = {};
+    if (authHeader) headers["authorization"] = authHeader;
+    if (cookieHeader) headers["cookie"] = cookieHeader;
 
     const response = await fetch(fetchUrl, {
       cache: "no-store",
+      headers,
       signal: AbortSignal.timeout(10000),
     });
 

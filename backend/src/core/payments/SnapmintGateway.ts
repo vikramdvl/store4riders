@@ -102,7 +102,7 @@ export class SnapmintGateway implements PaymentGateway {
       last_name: lastName,
       full_name: `${firstName} ${lastName}`.trim(),
       email: email || undefined,
-      ip: "0.0.0.0",
+      ip: (order as any).clientIp || "0.0.0.0",
       deviceType: "online",
       merchantConfirmationUrl: `${cleanApiBase}/api/v1/orders/webhook/snapmint/success`,
       merchantFailureUrl: `${cleanApiBase}/api/v1/orders/webhook/snapmint/failure`,
@@ -256,25 +256,96 @@ export class SnapmintGateway implements PaymentGateway {
     }
 
     const statusVal = parsed.order_status || parsed.status || parsed.payment_status || "";
-    const rawStatus = String(statusVal).toLowerCase();
-    const rawMessage = String(message || "").toLowerCase();
+    const rawStatus = String(statusVal).trim().toLowerCase();
+    const rawMessage = String(message || "").trim().toLowerCase();
+
+    const isRefund =
+      rawStatus === "refunded" ||
+      rawStatus === "refund" ||
+      rawStatus === "partially_refunded" ||
+      rawMessage.includes("refund");
+
+    const isDisputed =
+      !isRefund &&
+      (rawStatus.includes("chargeback") || rawStatus.includes("dispute"));
 
     const isSuccessful =
-      rawStatus === "success" ||
-      rawStatus === "completed" ||
-      rawStatus === "authorized" ||
-      rawMessage === "success" ||
-      rawMessage === "authorized";
+      !isRefund &&
+      !isDisputed &&
+      (rawStatus === "success" ||
+        rawStatus === "completed" ||
+        rawStatus === "authorized" ||
+        rawStatus === "captured" ||
+        rawMessage === "success" ||
+        rawMessage === "authorized");
+
+    const isPending =
+      !isRefund &&
+      !isDisputed &&
+      !isSuccessful &&
+      (!rawStatus ||
+        rawStatus === "pending" ||
+        rawStatus === "initiated" ||
+        rawStatus === "in_progress" ||
+        rawStatus === "in progress" ||
+        rawStatus === "processing" ||
+        rawStatus === "awaited" ||
+        rawMessage.includes("pending") ||
+        rawMessage.includes("in progress"));
+
+    const isCancelled =
+      !isRefund &&
+      !isDisputed &&
+      !isSuccessful &&
+      !isPending &&
+      (rawStatus === "cancelled" ||
+        rawStatus === "canceled" ||
+        rawStatus === "aborted" ||
+        rawMessage.includes("cancel") ||
+        rawMessage.includes("abort"));
+
+    const eventName = isRefund
+      ? "refund.processed"
+      : isDisputed
+      ? "payment.disputed"
+      : isSuccessful
+      ? "payment.captured"
+      : isPending
+      ? "payment.pending"
+      : "payment.failed";
+
+    const deterministicHash = crypto
+      .createHash("sha256")
+      .update(`snap:${resolvedOrderId}:${eventName}:${rawStatus}:${amount ?? ""}`)
+      .digest("hex")
+      .slice(0, 20);
+    // Namespace non-captured event IDs so an early pending/failed notification never blocks a later capture
+    const baseEventId = resolvedPaymentId || (resolvedOrderId ? `snap_${resolvedOrderId}_${deterministicHash}` : `snap_${deterministicHash}`);
+    const eventId =
+      eventName === "payment.captured"
+        ? baseEventId
+        : isRefund
+        ? `refund:${baseEventId}:${parsed.orderValue ?? parsed.order_value ?? amount ?? ""}`
+        : `${baseEventId}:${eventName}`;
+
+    const rawAmountVal = parsed.orderValue ?? parsed.order_value ?? amount;
+    const parsedAmount =
+      rawAmountVal !== undefined && rawAmountVal !== null && rawAmountVal !== ""
+        ? Number(rawAmountVal)
+        : 0;
 
     return {
-      event: isSuccessful ? "payment.captured" : "payment.failed",
+      event: eventName,
       gatewayOrderId: resolvedOrderId ? String(resolvedOrderId) : `snap_${resolvedPaymentId}`,
-      id: resolvedPaymentId || `snap_${Date.now()}`,
+      id: eventId,
       payload: {
         id: resolvedPaymentId,
-        amount: parsed.orderValue || parsed.order_value || amount ? Number(parsed.orderValue || parsed.order_value || amount) : 0,
-        status: status,
+        refundId: isRefund ? parsed.refund_id || resolvedPaymentId : undefined,
+        disputeId: isDisputed ? parsed.dispute_id || resolvedPaymentId || resolvedOrderId : undefined,
+        amount: parsedAmount,
+        status: status ?? statusVal,
         message: message,
+        isCancelled,
       },
     };
   }

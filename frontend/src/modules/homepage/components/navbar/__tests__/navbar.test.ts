@@ -294,5 +294,47 @@ describe("Navbar & Submenu Navigation Integrity Suite", () => {
         ?.megaMenuItems?.find((g) => g.group === "Types")?.items || [];
       expect(typesHidden.some((i) => i.href === "/motorcycle-helmets/carbon-fibre-helmets")).toBe(false);
     });
+
+    it("excludes deleted, disabled (isActive: false), and hidden (showInMenu: false) brands from Shop By Brand", () => {
+      const dbBrands: any[] = [
+        {
+          _id: "b1",
+          name: "Axor Helmets",
+          slug: "axor-helmets",
+          isActive: true,
+          showInMenu: true,
+          menuGroup: "Helmet Brands",
+          menuGroups: ["Helmet Brands"],
+        },
+        {
+          _id: "b2",
+          name: "SMK Helmets",
+          slug: "smk-helmets",
+          isActive: false,
+          showInMenu: true,
+          menuGroup: "Helmet Brands",
+          menuGroups: ["Helmet Brands"],
+        },
+        {
+          _id: "b3",
+          name: "Maddog",
+          slug: "maddog",
+          isActive: true,
+          showInMenu: false,
+          menuGroup: "",
+          menuGroups: [],
+        },
+        // "parani" is intentionally absent (deleted from DB)
+      ];
+
+      const resolved = resolveStorefrontNavItems(DEFAULT_NAV_ITEMS, dbBrands, []);
+      const brandNav = resolved.find((i) => i.id === "shop-by-brand");
+      const allMenuHrefs = (brandNav?.megaMenuItems || []).flatMap((g) => g.items.map((sub) => sub.href));
+
+      expect(allMenuHrefs).toContain("/brands/axor-helmets");
+      expect(allMenuHrefs).not.toContain("/brands/smk-helmets");
+      expect(allMenuHrefs).not.toContain("/brands/maddog");
+      expect(allMenuHrefs).not.toContain("/brands/parani");
+    });
   });
 });

@@ -19,6 +19,9 @@ const userSchema = new Schema<IUser>(
     phone: { type: String, default: "" },
     role: { type: String, enum: ["super_admin", "admin", "logistic", "customer_care", "product_manager", "order_manager", "marketing_manager", "customer_support", "customer"], default: "customer" },
     isActive: { type: Boolean, default: true },
+    isEmailVerified: { type: Boolean },
+    emailVerifiedAt: { type: Date },
+    tokenVersion: { type: Number, default: 0 },
     addresses: {
       type: [addressSchema],
       default: [],

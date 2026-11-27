@@ -120,7 +120,7 @@ export default async function BrandPage({ params }: BrandPageProps) {
     getBrandInitialProducts(brandSlug),
   ]);
 
-  if (!brand) {
+  if (!brand || brand.isActive === false || (brand as any).isDeleted === true) {
     await redirectIfMatchedOrNotFound(`/brands/${brandSlug}`);
     notFound();
   }

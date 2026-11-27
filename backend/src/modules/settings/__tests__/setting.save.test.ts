@@ -170,4 +170,123 @@ describe("Mongoose SettingRepository save test", () => {
 
     expect(result.taxRate).toBe(12);
   });
+
+  it("preserves colorSwatches on ProductValidator.validateCreate", async () => {
+    const req = new NextRequest("http://localhost:4000/api/v1/products", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "Color Swatch Helmet",
+        sku: "SWATCH-SKU-01",
+        basePrice: 5499,
+        stockStatus: 1,
+        productType: "configurable",
+        colorSwatches: {
+          Red: "https://d2zuvpvc0pfkya.cloudfront.net/red.webp",
+          Black: "https://d2zuvpvc0pfkya.cloudfront.net/black.webp",
+        },
+      }),
+    });
+
+    const validated = await ProductValidator.validateCreate(req);
+    expect(validated.colorSwatches).toEqual({
+      Red: "https://d2zuvpvc0pfkya.cloudfront.net/red.webp",
+      Black: "https://d2zuvpvc0pfkya.cloudfront.net/black.webp",
+    });
+  });
+
+  it("preserves touringGear.items on HomepageValidator.validateUpdateSections", async () => {
+    const req = new NextRequest("http://localhost:4000/api/v1/homepage/sections", {
+      method: "PUT",
+      body: JSON.stringify({
+        sections: {
+          topBanner: { message: "Free shipping above 999", highlightText: "FREE", isEnabled: true, linkUrl: "/products" },
+          featuredCategories: {
+            sectionTitle: "Featured",
+            helmets: { title: "Helmets", imageUrl: "https://example.com/h.webp", linkUrl: "/helmets" },
+            gloves: { title: "Gloves", imageUrl: "https://example.com/g.webp", linkUrl: "/gloves" },
+            jackets: { title: "Jackets", imageUrl: "https://example.com/j.webp", linkUrl: "/jackets" },
+          },
+          browseCategories: { sectionTitle: "Browse", items: [] },
+          touringGear: {
+            sectionTitle: "Touring Gear",
+            seeMoreText: "View All",
+            seeMoreLink: "/touring-gear",
+            items: [
+              {
+                id: "item-1",
+                name: "Saddlebags",
+                priceFormatted: "₹4,999",
+                imageUrl: "https://d2zuvpvc0pfkya.cloudfront.net/bags.webp",
+                productUrl: "/luggage/saddlebags",
+              },
+            ],
+          },
+          socialMedia: { sectionTitle: "Instagram", reelImages: [] },
+          testimonials: { sectionTitle: "Testimonials" },
+        },
+      }),
+    });
+
+    const validated = await HomepageValidator.validateUpdateSections(req);
+    expect(validated.sections.touringGear?.items).toHaveLength(1);
+    expect(validated.sections.touringGear?.items?.[0]?.name).toBe("Saddlebags");
+  });
+
+  it("unsets null optional fields in CouponRepository.update instead of setting null", async () => {
+    const { CouponModel } = await import("../../coupon/coupon.model");
+    const { CouponRepository } = await import("../../coupon/coupon.repository");
+
+    const spy = vi.spyOn(CouponModel, "findByIdAndUpdate").mockReturnValue({
+      lean: vi.fn().mockReturnValue({
+        exec: vi.fn().mockResolvedValue({ _id: "coup_1", code: "SAVE10" }),
+      }),
+    } as any);
+
+    await CouponRepository.update("coup_1", {
+      description: "",
+      maxDiscountCap: null as any,
+      totalUsageLimit: null as any,
+      startDate: null as any,
+    });
+
+    expect(spy).toHaveBeenCalledWith(
+      "coup_1",
+      {
+        $set: { description: "" },
+        $unset: { maxDiscountCap: 1, totalUsageLimit: 1, startDate: 1 },
+      },
+      { new: true }
+    );
+    spy.mockRestore();
+  });
+
+  it("unsets parentId in CategoryRepository.update when cleared back to root level", async () => {
+    const { CategoryModel } = await import("../../category/category.model");
+    const { CategoryRepository } = await import("../../category/category.repository");
+
+    const findSpy = vi.spyOn(CategoryRepository, "findById").mockResolvedValue({
+      _id: "cat_1",
+      slug: "luggage",
+      name: "Luggage",
+      parentId: "cat_parent",
+    } as any);
+    const updateSpy = vi.spyOn(CategoryModel, "findByIdAndUpdate").mockReturnValue({
+      lean: vi.fn().mockReturnValue({
+        exec: vi.fn().mockResolvedValue({ _id: "cat_1", slug: "luggage", name: "Luggage" }),
+      }),
+    } as any);
+
+    await CategoryRepository.update("cat_1", { name: "Luggage", parentId: "" });
+
+    expect(updateSpy).toHaveBeenCalledWith(
+      "cat_1",
+      {
+        $set: { name: "Luggage" },
+        $unset: { parentId: 1 },
+      },
+      { new: true }
+    );
+    findSpy.mockRestore();
+    updateSpy.mockRestore();
+  });
 });

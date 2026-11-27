@@ -13,6 +13,35 @@ function timingSafeCompare(a?: string, b?: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
+const PENDING_UNMAPPED_STATUSES = new Set([
+  "pending",
+  "initiated",
+  "in progress",
+  "in_progress",
+  "auth",
+]);
+
+function parseWebhookBody(rawBody: string): Record<string, string> {
+  const trimmed = (rawBody || "").trim();
+  if (!trimmed) return {};
+  if (trimmed.startsWith("{")) {
+    const parsed = JSON.parse(trimmed);
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed || {})) {
+      if (v !== undefined && v !== null) {
+        out[k] = String(v);
+      }
+    }
+    return out;
+  }
+  const params = new URLSearchParams(rawBody);
+  const out: Record<string, string> = {};
+  params.forEach((value, key) => {
+    out[key] = value;
+  });
+  return out;
+}
+
 export class PayUGateway implements PaymentGateway {
   
   async createOrder(order: IOrder, amount: number): Promise<GatewayOrderResult> {
@@ -28,8 +57,8 @@ export class PayUGateway implements PaymentGateway {
     // "T" (1) + Date.now() (13) + 4 random hex chars = 18 chars total.
     const txnid = `T${Date.now()}${crypto.randomBytes(2).toString("hex")}`;
     const productInfo = "Store4Riders Order";
-    const firstName = (order.shippingAddress?.fullName?.split(" ")[0] || "Customer").trim();
-    const email = ((order as any).userEmail || order.guestEmail || `${firstName.toLowerCase()}@store4riders.com`).trim();
+    const firstName = (order.shippingAddress?.fullName?.split(" ")[0] || "Customer").replace(/\|/g, "").trim() || "Customer";
+    const email = ((order as any).userEmail || order.guestEmail || `${firstName.toLowerCase()}@store4riders.com`).replace(/\|/g, "").trim();
     
     // PayU expects amount formatted with 2 decimal places (e.g. 5002.26)
     const formattedAmount = Number(amount).toFixed(2);
@@ -61,6 +90,7 @@ export class PayUGateway implements PaymentGateway {
       hash,
       surl: `${cleanApiBase}/api/v1/orders/webhook/payu/success`,
       furl: `${cleanApiBase}/api/v1/orders/webhook/payu/failure`,
+      curl: `${cleanApiBase}/api/v1/orders/webhook/payu/cancel`,
       actionUrl,
     };
 
@@ -76,8 +106,8 @@ export class PayUGateway implements PaymentGateway {
   }
 
   async verifyPayment(payment: IPayment, verificationData: any): Promise<VerifyPaymentResult> {
-    const key = verificationData.key || process.env.PAYU_MERCHANT_KEY || ENV.PAYU_MERCHANT_KEY;
-    const salt = process.env.PAYU_SALT || ENV.PAYU_SALT;
+    const key = (verificationData.key || ENV.PAYU_MERCHANT_KEY || process.env.PAYU_MERCHANT_KEY || "").trim();
+    const salt = (ENV.PAYU_SALT || process.env.PAYU_SALT || "").trim();
 
     if (!key || !salt) {
       throw new AppError("PayU credentials are not configured", 500);
@@ -132,28 +162,43 @@ export class PayUGateway implements PaymentGateway {
     }
 
     return {
-      success: status === "success",
+      success: String(status || "").trim().toLowerCase() === "success",
       gatewayPaymentId: verificationData.mihpayid,
     };
   }
 
   async handleWebhook(headers: any, rawBody: string): Promise<any> {
-    const params = new URLSearchParams(rawBody);
-    
-    // PayU sends webhook as form data
-    const status = params.get("status") || "";
-    const txnid = params.get("txnid") || "";
-    const amount = params.get("amount") || "";
-    const productinfo = params.get("productinfo") || "";
-    const firstname = params.get("firstname") || "";
-    const email = params.get("email") || "";
-    const hash = params.get("hash") || "";
-    const mihpayid = params.get("mihpayid") || "";
-    const additionalCharges = params.get("additionalCharges");
-    const key = params.get("key") || process.env.PAYU_MERCHANT_KEY || ENV.PAYU_MERCHANT_KEY;
-    const salt = process.env.PAYU_SALT || ENV.PAYU_SALT;
+    let params: Record<string, string>;
+    try {
+      params = parseWebhookBody(rawBody);
+    } catch {
+      throw new AppError("Malformed PayU webhook payload", 400);
+    }
 
-    if (!hash || !txnid) {
+    // PayU sends webhook as form-urlencoded (or JSON depending on webhook configuration)
+    const status = params.status || "";
+    const actionRaw = params.action || params.type || "";
+    const unmappedStatusRaw = params.unmappedstatus || "";
+    const errorMessage = params.error_Message || params.field9 || params.remark || "";
+    const txnid = (params.txnid || params.txn_id || "").trim();
+    const amount = params.amount || params.cb_amount || "";
+    const productinfo = params.productinfo || "";
+    const firstname = params.firstname || "";
+    const email = params.email || "";
+    const hash = params.hash || "";
+    const mihpayid = (params.mihpayid || params.payu_id || "").trim();
+    const bankArn = (params.bank_arn || "").trim();
+    const additionalCharges = params.additionalCharges;
+    const configuredKey = (ENV.PAYU_MERCHANT_KEY || process.env.PAYU_MERCHANT_KEY || "").trim();
+    const key = configuredKey || (params.key || "").trim();
+    const salt = (ENV.PAYU_SALT || process.env.PAYU_SALT || "").trim();
+    const mode = (ENV.PAYU_MODE || process.env.PAYU_MODE || "test").trim().toLowerCase();
+
+    const isDisputePayload =
+      String(params.event || "").trim().toLowerCase() === "dispute" ||
+      Boolean(params.cb_id);
+
+    if (!txnid || (!isDisputePayload && !hash)) {
       throw new AppError("Invalid PayU webhook payload", 400);
     }
 
@@ -161,68 +206,150 @@ export class PayUGateway implements PaymentGateway {
       throw new AppError("PayU credentials are not configured", 500);
     }
 
-    // PayU reverse hash verification
-    const baseElements = [
-      salt,
-      status,
-      params.get("udf10") || "",
-      params.get("udf9") || "",
-      params.get("udf8") || "",
-      params.get("udf7") || "",
-      params.get("udf6") || "",
-      params.get("udf5") || "",
-      params.get("udf4") || "",
-      params.get("udf3") || "",
-      params.get("udf2") || "",
-      params.get("udf1") || "",
-      email,
-      firstname,
-      productinfo,
-      amount,
-      txnid,
-      key,
-    ];
-
-    const hashString = baseElements.join("|");
-    const generatedHash = crypto.createHash("sha512").update(hashString).digest("hex").toLowerCase();
-    
-    let isValid = timingSafeCompare(generatedHash, hash);
-
-    if (!isValid && additionalCharges) {
-      const hashWithCharges = [additionalCharges, ...baseElements].join("|");
-      const generatedWithCharges = crypto.createHash("sha512").update(hashWithCharges).digest("hex").toLowerCase();
-      isValid = timingSafeCompare(generatedWithCharges, hash);
+    if (mode === "live" && configuredKey && params.key && params.key.trim() !== configuredKey) {
+      logger.warn(`PayU webhook key mismatch: expected configured merchant key, got ${params.key}`);
+      throw new AppError("Invalid PayU webhook signature", 400);
     }
 
-    if (!isValid) {
-      logger.warn(`PayU webhook signature mismatch: generated ${generatedHash} vs received ${hash}`);
-      // In live mode, strictly reject invalid signatures. In test mode, log and allow.
-      if (ENV.PAYU_MODE === "live") {
-        throw new AppError("Invalid PayU webhook signature", 400);
+    if (!isDisputePayload || hash) {
+      // PayU reverse hash verification
+      const baseElements = [
+        salt,
+        status,
+        params.udf10 || "",
+        params.udf9 || "",
+        params.udf8 || "",
+        params.udf7 || "",
+        params.udf6 || "",
+        params.udf5 || "",
+        params.udf4 || "",
+        params.udf3 || "",
+        params.udf2 || "",
+        params.udf1 || "",
+        email,
+        firstname,
+        productinfo,
+        amount,
+        txnid,
+        key,
+      ];
+
+      const hashString = baseElements.join("|");
+      const generatedHash = crypto.createHash("sha512").update(hashString).digest("hex").toLowerCase();
+
+      let isValid = timingSafeCompare(generatedHash, hash);
+
+      if (!isValid && additionalCharges) {
+        const hashWithCharges = [additionalCharges, ...baseElements].join("|");
+        const generatedWithCharges = crypto.createHash("sha512").update(hashWithCharges).digest("hex").toLowerCase();
+        isValid = timingSafeCompare(generatedWithCharges, hash);
+      }
+
+      if (!isValid) {
+        logger.warn(`PayU webhook signature mismatch: generated ${generatedHash} vs received ${hash}`);
+        // In live mode, strictly reject invalid signatures. In test mode, log and allow.
+        if (mode === "live") {
+          throw new AppError("Invalid PayU webhook signature", 400);
+        }
       }
     }
 
-    // Normalize to standard event format used by order.service.ts
-    const eventName = status === "success" ? "payment.captured" : "payment.failed";
-    
+    const headerEventId = headers?.["x-payu-event-id"];
+
+    if (isDisputePayload) {
+      const cbId = String(params.cb_id || txnid);
+      const cbStatus = String(params.cb_status || status || "Open").trim();
+      const dedupId =
+        headerEventId ||
+        `dispute:${cbId}:${cbStatus.toLowerCase().replace(/\s+/g, "_")}`;
+
+      return {
+        event: "payment.disputed",
+        gatewayOrderId: txnid,
+        id: dedupId,
+        payload: {
+          id: mihpayid,
+          disputeId: cbId,
+          disputeStatus: cbStatus,
+          reasonCode: params.reason_code || "",
+          dueDate: params.due_date || "",
+          amount: parseFloat(amount || "0"),
+          status: cbStatus,
+          isCancelled: false,
+        },
+      };
+    }
+
+    const normalizedStatus = status.trim().toLowerCase();
+    const normalizedAction = actionRaw.trim().toLowerCase();
+    const normalizedUnmapped = unmappedStatusRaw.trim().toLowerCase();
+
+    const isRefund =
+      normalizedAction === "refund" ||
+      normalizedStatus === "refund" ||
+      normalizedStatus === "refunded" ||
+      normalizedUnmapped === "refund" ||
+      normalizedUnmapped === "refunded";
+
+    const isPending =
+      !isRefund &&
+      normalizedStatus !== "success" &&
+      (normalizedStatus === "pending" || PENDING_UNMAPPED_STATUSES.has(normalizedUnmapped));
+    const isCancelled =
+      !isRefund &&
+      normalizedStatus !== "success" &&
+      (normalizedUnmapped.includes("cancel") ||
+        errorMessage.toLowerCase().includes("cancel") ||
+        normalizedStatus === "cancel" ||
+        normalizedStatus === "cancelled");
+
+    // Preserve distinct deduplication IDs for pending/failed vs captured so a pending callback never blocks a later capture webhook
+    const eventName = isRefund
+      ? "refund.processed"
+      : normalizedStatus === "success"
+      ? "payment.captured"
+      : isPending
+      ? "payment.pending"
+      : "payment.failed";
+    const deterministicDigest = crypto
+      .createHash("sha256")
+      .update(`payu:${txnid}:${eventName}:${normalizedStatus}:${amount}:${bankArn}`)
+      .digest("hex")
+      .slice(0, 24);
+    const dedupId =
+      headerEventId ||
+      (isRefund
+        ? `refund:${mihpayid || bankArn || deterministicDigest}:${amount}`
+        : mihpayid
+        ? eventName === "payment.captured"
+          ? mihpayid
+          : `${mihpayid}:${eventName}`
+        : `payu_${deterministicDigest}`);
+
     return {
       event: eventName,
       gatewayOrderId: txnid,
-      id: headers["x-payu-event-id"] || mihpayid || `evt_${Date.now()}`,
+      id: dedupId,
       payload: {
         id: mihpayid,
-        amount: parseFloat(amount || "0")
-      }
+        refundId: params.request_id || bankArn || mihpayid,
+        bankArn,
+        amount: parseFloat(amount || "0"),
+        status: normalizedStatus,
+        unmappedStatus: normalizedUnmapped,
+        error_Message: errorMessage,
+        isCancelled,
+      },
     };
   }
 
   async initiateRefund(payment: IPayment, amount?: number): Promise<RefundResult> {
     try {
-      if (!ENV.PAYU_MERCHANT_KEY || !ENV.PAYU_SALT) {
+      const key = (ENV.PAYU_MERCHANT_KEY || process.env.PAYU_MERCHANT_KEY || "").trim();
+      const salt = (ENV.PAYU_SALT || process.env.PAYU_SALT || "").trim();
+      if (!key || !salt) {
         throw new AppError("PayU credentials are not configured", 500);
       }
-      const key = ENV.PAYU_MERCHANT_KEY;
-      const salt = ENV.PAYU_SALT;
       const refundAmount = amount || payment.amount;
       
       const command = "cancel_refund_transaction";
@@ -241,10 +368,11 @@ export class PayUGateway implements PaymentGateway {
       params.append("command", command);
       params.append("hash", hash);
       params.append("var1", var1);
-      params.append("var2", String(refundAmount));
+      params.append("var2", Number(refundAmount).toFixed(2));
       params.append("var3", payment.gatewayOrderId);
 
-      const payuUrl = (ENV.PAYU_MODE === "live")
+      const mode = (ENV.PAYU_MODE || process.env.PAYU_MODE || "test").trim().toLowerCase();
+      const payuUrl = mode === "live"
         ? "https://info.payu.in/merchant/postservice.php?form=2"
         : "https://test.payu.in/merchant/postservice.php?form=2";
 
@@ -277,11 +405,11 @@ export class PayUGateway implements PaymentGateway {
 
   async getPaymentStatus(gatewayOrderId: string): Promise<any> {
     try {
-      if (!ENV.PAYU_MERCHANT_KEY || !ENV.PAYU_SALT) {
+      const key = (ENV.PAYU_MERCHANT_KEY || process.env.PAYU_MERCHANT_KEY || "").trim();
+      const salt = (ENV.PAYU_SALT || process.env.PAYU_SALT || "").trim();
+      if (!key || !salt) {
         throw new AppError("PayU credentials are not configured", 500);
       }
-      const key = ENV.PAYU_MERCHANT_KEY;
-      const salt = ENV.PAYU_SALT;
       const command = "verify_payment";
       const var1 = gatewayOrderId;
 
@@ -294,7 +422,8 @@ export class PayUGateway implements PaymentGateway {
       params.append("hash", hash);
       params.append("var1", var1);
 
-      const payuUrl = (ENV.PAYU_MODE === "live")
+      const mode = (ENV.PAYU_MODE || process.env.PAYU_MODE || "test").trim().toLowerCase();
+      const payuUrl = (mode === "live")
         ? "https://info.payu.in/merchant/postservice.php?form=2"
         : "https://test.payu.in/merchant/postservice.php?form=2";
 

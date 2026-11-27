@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
 import { apiClient } from "@/core/api/client";
+import { loadPendingPaymentOrder } from "@/core/utils/paymentSubmit";
 
 declare global {
   interface Window {
@@ -214,11 +215,13 @@ export const GooglePayWebButton: React.FC<GooglePayWebButtonProps> = ({
       const realPaymentId = cardDetails ? `GPAY-${cardNetwork}-${cardDetails}` : `GPAY-${currentOrderNumber}`;
 
       // Send authentic paymentData payload to server verification
+      const pendingToken = loadPendingPaymentOrder()?.guestOrderToken;
       const verifyRes = await apiClient.post("/orders/verify", {
         gatewayOrderId: currentOrderNumber,
         paymentId: realPaymentId,
         signature: realSignature,
         paymentData,
+        ...(pendingToken ? { guestToken: pendingToken } : {}),
       });
 
       if (verifyRes.data?.success) {

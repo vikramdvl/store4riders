@@ -37,9 +37,24 @@ export class CouponRepository {
   }
 
   static async update(id: string, data: Partial<ICoupon>): Promise<ICoupon | null> {
+    const setFields: Record<string, any> = {};
+    const unsetFields: Record<string, 1> = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      if (value === null) {
+        unsetFields[key] = 1;
+      } else if (value !== undefined) {
+        setFields[key] = value;
+      }
+    }
+
+    const updateQuery: Record<string, any> = {};
+    if (Object.keys(setFields).length > 0) updateQuery.$set = setFields;
+    if (Object.keys(unsetFields).length > 0) updateQuery.$unset = unsetFields;
+
     return CouponModel.findByIdAndUpdate(
       id,
-      { $set: data },
+      updateQuery,
       { new: true }
     ).lean().exec() as unknown as ICoupon | null;
   }

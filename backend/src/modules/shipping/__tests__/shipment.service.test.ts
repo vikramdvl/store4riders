@@ -4,6 +4,7 @@ import { ShipmentModel } from "../shipment.model";
 import { OrderModel } from "../../order/order.model";
 import { ProductModel } from "../../product/product.model";
 import { WarehouseRepository } from "../../warehouse/warehouse.repository";
+import { SettingRepository } from "../../settings/setting.repository";
 import { ShippingProviderFactory } from "../../../core/shipping/ShippingProviderFactory";
 import { AppError, NotFoundError, ValidationError } from "../../../core/errors/AppError";
 
@@ -12,6 +13,7 @@ vi.mock("../models/shipping-tracking-event.model");
 vi.mock("../../order/order.model");
 vi.mock("../../product/product.model");
 vi.mock("../../warehouse/warehouse.repository");
+vi.mock("../../settings/setting.repository");
 vi.mock("../../../core/shipping/ShippingProviderFactory");
 vi.mock("../../../core/cache/redis", () => ({
   redisClient: null,
@@ -416,6 +418,87 @@ describe("ShipmentService - Deep Edge Case & Robustness Suite", () => {
             }),
           ],
           weight: 0.3,
+        })
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // EDGE CASE 9: MULTI-PRODUCT MIXED CART WEIGHT & PRESET BOX DIMENSIONS
+  // ---------------------------------------------------------------------------
+  describe("Edge Case 9: Mixed 4-Product Cart (Variant Weight + Warehouse Presets)", () => {
+    it("resolves variant weights across mixed units and fits into matching warehouse box preset", async () => {
+      const mockOrder = {
+        _id: "order_4_items",
+        orderNumber: "OD-S4R-4ITEMS",
+        paymentMethod: "prepaid",
+        status: "confirmed",
+        pricing: { total: 15000, shipping: 0 },
+        shippingAddress: {
+          fullName: "Rider Four",
+          phone: "9876543210",
+          addressLine1: "45 MG Road",
+          city: "Pune",
+          state: "Maharashtra",
+          pincode: "411001",
+          country: "India",
+        },
+        items: [
+          { productId: "p_helmet", variantId: "v_xl", sku: "AXR-XL", name: "Axor Helmet", quantity: 1, unitPrice: 5000 },
+          { productId: "p_jacket", sku: "RYN-JKT", name: "Rynox Jacket", quantity: 1, unitPrice: 7000 },
+          { productId: "p_lube", sku: "LUBE-400", name: "Chain Lube", quantity: 1, unitPrice: 500 },
+          { productId: "p_light", sku: "LIGHT-1", name: "Fog Light", quantity: 1, unitPrice: 2500 },
+        ],
+        notes: [],
+        save: vi.fn().mockResolvedValue(true),
+      };
+
+      (OrderModel.findById as any).mockResolvedValue(mockOrder);
+      (ShipmentModel.findOne as any).mockResolvedValue(null);
+      (ProductModel.find as any).mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          lean: vi.fn().mockReturnValue({
+            exec: vi.fn().mockResolvedValue([
+              {
+                _id: "p_helmet",
+                weight: 1.4,
+                weightUnit: "kg",
+                length: 35,
+                breadth: 28,
+                height: 28,
+                variants: [{ id: "v_xl", sku: "AXR-XL", weight: 1.6, weightUnit: "kg" }],
+              },
+              { _id: "p_jacket", weight: 1.8, weightUnit: "kg", length: 40, breadth: 32, height: 12 },
+              { _id: "p_lube", weight: 400, weightUnit: "ml", length: 18, breadth: 7, height: 7 },
+              { _id: "p_light", weight: 600, weightUnit: "g", length: 15, breadth: 12, height: 10 },
+            ]),
+          }),
+        }),
+      });
+      (SettingRepository.getSettings as any).mockResolvedValue({
+        packagePresets: [
+          { name: "Small Box", length: 15, breadth: 15, height: 10 },
+          { name: "Large Box", length: 40, breadth: 30, height: 30 },
+          { name: "Jumbo Carton", length: 50, breadth: 40, height: 38 },
+        ],
+      });
+      (WarehouseRepository.findDefault as any).mockResolvedValue({ shiprocketLocationId: "Pune_Hub" });
+
+      const mockProvider = {
+        createShipment: vi.fn().mockResolvedValue({ success: true, shipmentId: "sr_4items" }),
+      };
+      (ShippingProviderFactory.create as any).mockReturnValue(mockProvider);
+      (ShipmentModel as any).mockImplementation(() => ({ save: vi.fn().mockResolvedValue(true) }));
+
+      await ShipmentService.pushOrderToShiprocket("order_4_items");
+
+      // 1.6 (variant!) + 1.8 + 0.4 + 0.6 = 4.4 kg; dimensions come from product catalog specs (40x32x40)
+      expect(mockProvider.createShipment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          weight: 4.4,
+          length: 40,
+          breadth: 32,
+          height: 40,
         })
       );
     });

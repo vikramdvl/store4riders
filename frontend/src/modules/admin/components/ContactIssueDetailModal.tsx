@@ -45,9 +45,11 @@ export const ContactIssueDetailModal: React.FC<ContactIssueDetailModalProps> = (
     toast.success(`${label} copied to clipboard!`);
   };
 
+  const issueId = issue.id || (issue as any)._id;
+
   const handleStatusChange = (status: "open" | "in_progress" | "resolved" | "closed") => {
     updateStatusMutation.mutate({
-      id: issue.id,
+      id: issueId,
       data: { status },
     });
   };
@@ -55,7 +57,7 @@ export const ContactIssueDetailModal: React.FC<ContactIssueDetailModalProps> = (
   const handleAddNote = () => {
     if (!newNote.trim()) return;
     addNoteMutation.mutate(
-      { id: issue.id, text: newNote.trim() },
+      { id: issueId, text: newNote.trim() },
       {
         onSuccess: () => {
           setNewNote("");

@@ -618,15 +618,15 @@ export class HomepageService {
     const existingSocial = currentSections.socialMedia || {};
     const rawExistingReels: IInstagramReel[] = Array.isArray(existingSocial.reels) ? existingSocial.reels : [];
 
-    // Filter out previously auto-imported static feed photos and non-playable embeds:
-    // Strictly preserve custom admin uploads and genuine playable video reels!
+    // Preserve manual embed reels, custom uploads, and genuine playable Instagram video reels
     const existingReels = rawExistingReels.filter((r) => {
+      const isManualEmbed = r.videoType === "embed";
       const isCustomUpload = r.videoType === "upload" && !r.id?.startsWith("17") && !r.id?.startsWith("18");
       const isPlayableVideoReel =
         r.videoType === "upload" &&
         Boolean(r.videoUrl) &&
         (r.videoUrl.includes(".mp4") || r.videoUrl.includes("fbcdn.net"));
-      return isCustomUpload || isPlayableVideoReel;
+      return isManualEmbed || isCustomUpload || isPlayableVideoReel;
     });
 
     let finalReels: IInstagramReel[] = [];

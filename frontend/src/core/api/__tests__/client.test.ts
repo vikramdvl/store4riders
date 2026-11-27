@@ -75,4 +75,85 @@ describe("apiClient - Token Refresh & Session Resilience", () => {
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(useAuthStore.getState().token).toBeNull();
   });
+
+  it("does NOT broadcast global logout when a newly opened public tab fails refresh solely due to missing in-memory/cookie refresh token", async () => {
+    useAuthStore.setState({
+      user: { email: "admin@store4riders.com", role: "super_admin" },
+      token: null,
+      refreshToken: null,
+      isAuthenticated: true,
+      lastTokenRefreshAt: null,
+    });
+
+    vi.spyOn(axios, "post").mockRejectedValueOnce({
+      response: { status: 401, data: { error: "No refresh token" } },
+    });
+
+    await expect(refreshAccessToken()).rejects.toBeDefined();
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+  });
+
+  it("sends x-auth-scope: admin on admin routes, does not leak customer Bearer tokens, and redirects expired admin sessions to Admin Gate", async () => {
+    const originalLocation = window.location;
+    let assignedHref = "";
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...originalLocation,
+        pathname: "/admin/orders",
+        hostname: "store4riders.com",
+        get href() {
+          return assignedHref;
+        },
+        set href(val: string) {
+          assignedHref = val;
+        },
+      },
+    });
+
+    try {
+      // Customer token in memory must NOT be attached as Bearer on admin routes
+      useAuthStore.setState({
+        user: { email: "cust@example.com", role: "customer" },
+        token: "cust_bearer_should_not_leak",
+        refreshToken: "cust_refresh",
+        isAuthenticated: true,
+        lastTokenRefreshAt: Date.now(),
+      });
+
+      let seenAuthHeader: any;
+      let seenScopeHeader: any;
+      apiClient.defaults.adapter = async (config) => {
+        seenAuthHeader = config.headers?.Authorization;
+        seenScopeHeader = config.headers?.["x-auth-scope"];
+        return { data: { success: true }, status: 200, statusText: "OK", headers: {}, config };
+      };
+
+      await apiClient.get("/admin/orders");
+      expect(seenScopeHeader).toBe("admin");
+      expect(seenAuthHeader).toBeUndefined();
+
+      // Expired admin session redirects to admin secret gate, NOT /login
+      useAuthStore.setState({
+        user: { email: "admin@store4riders.com", role: "super_admin" },
+        token: "expired_admin_token",
+        refreshToken: "expired_admin_refresh",
+        isAuthenticated: true,
+        lastTokenRefreshAt: Date.now(),
+      });
+      vi.spyOn(axios, "post").mockRejectedValueOnce({
+        response: { status: 401, data: { error: "Invalid refresh token" } },
+      });
+
+      await expect(refreshAccessToken("admin")).rejects.toBeDefined();
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+      expect(assignedHref).toContain("/admin/rider-staff-gate?expired=true");
+      expect(assignedHref).not.toContain("/login");
+    } finally {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
+  });
 });

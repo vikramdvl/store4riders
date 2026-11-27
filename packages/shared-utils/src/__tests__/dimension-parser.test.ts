@@ -190,5 +190,78 @@ describe("dimension-parser", () => {
       weight: 1.2,
       weightUnit: "kg",
     });
+
+    // 7. Explicit weight_unit="kg" preserves values >= 50 kg without dividing by 1000
+    expect(extractProductWeight({ weight: "55", weight_unit: "kg" })).toEqual({
+      weight: 55,
+      weightUnit: "kg",
+    });
+  });
+
+  it("extracts dimensions from lbh and l_b_h combined columns", () => {
+    expect(extractProductDimensions({ lbh: "36x28x28" })).toEqual({
+      length: 36,
+      breadth: 28,
+      height: 28,
+      dimensionUnit: "cm",
+    });
+    expect(extractProductDimensions({ l_b_h: "40 x 30 x 15 cm" })).toEqual({
+      length: 40,
+      breadth: 30,
+      height: 15,
+      dimensionUnit: "cm",
+    });
+  });
+
+  it("ignores negative typos and supports embedded per-cell units (e.g. 12in)", () => {
+    expect(extractProductWeight({ weight: "-1.5" })).toEqual({
+      weightUnit: "kg",
+    });
+    expect(extractProductDimensions({ length: "-10", breadth: "20", height: "15" })).toEqual({
+      length: undefined,
+      breadth: 20,
+      height: 15,
+      dimensionUnit: "cm",
+    });
+    expect(extractProductDimensions({ length: "12in", breadth: "8 in", height: "4 in" })).toEqual({
+      length: 30.5,
+      breadth: 20.3,
+      height: 10.2,
+      dimensionUnit: "cm",
+    });
+  });
+
+  it("parses compact unit suffixes without spaces in combined strings (12x8x4in, 300x200x100mm) and rejects garbage", () => {
+    expect(parseCombinedDimensionsString("12x8x4in")).toEqual({
+      length: 30.5,
+      breadth: 20.3,
+      height: 10.2,
+      dimensionUnit: "cm",
+    });
+    expect(parseCombinedDimensionsString("300x200x100mm")).toEqual({
+      length: 30,
+      breadth: 20,
+      height: 10,
+      dimensionUnit: "cm",
+    });
+    expect(extractProductDimensions({ box_size: "40X30X20cm" })).toEqual({
+      length: 40,
+      breadth: 30,
+      height: 20,
+      dimensionUnit: "cm",
+    });
+
+    expect(extractProductDimensions({ lbh: "0x0x0", length: "#N/A", breadth: "TBD", height: "-" })).toEqual({
+      dimensionUnit: "cm",
+    });
+    expect(extractProductWeight({ weight: "#N/A" })).toEqual({ weightUnit: "kg" });
+    expect(extractProductWeight({ gross_weight: "250ml" })).toEqual({
+      weight: 0.25,
+      weightUnit: "kg",
+    });
+    expect(parseAttributesString('{"material":"Kevlar","certification":"ECE 22.06"}')).toEqual({
+      material: "Kevlar",
+      certification: "ECE 22.06",
+    });
   });
 });

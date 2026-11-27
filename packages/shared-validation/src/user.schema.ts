@@ -57,17 +57,43 @@ export const addressSchema = z.object({
 const nameRegex = /^[a-zA-Z\s\-']+$/;
 const nameMessage = "Name can only contain letters, spaces, hyphens, and apostrophes";
 
+export const PASSWORD_SYMBOL_REGEX = /[^A-Za-z0-9\s]/;
+
+export const strongPasswordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters long")
+  .max(100, "Password is too long")
+  .regex(/[a-z]/, "Password must contain at least 1 lowercase letter")
+  .regex(/[A-Z]/, "Password must contain at least 1 uppercase letter")
+  .regex(/\d/, "Password must contain at least 1 number")
+  .regex(PASSWORD_SYMBOL_REGEX, "Password must contain at least 1 special character");
+
+export const otpCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{6}$/, "Please enter a valid 6-digit verification code");
+
+export const sendRegisterOtpSchema = z.object({
+  email: z.string().trim().email("Please enter a valid email address").max(255, "Email is too long"),
+});
+
+export const checkEmailSchema = z.object({
+  email: z.string().trim().email("Please enter a valid email address").max(255, "Email is too long"),
+});
+
 export const registerSchema = z.object({
-  email: z.string().email().max(255, "Email is too long"),
-  password: z.string().min(8, "Password must be at least 8 characters long").max(100, "Password is too long"),
+  email: z.string().trim().email().max(255, "Email is too long"),
+  password: strongPasswordSchema,
   firstName: z.string().min(2, "First name must be at least 2 characters").max(50, "First name is too long").regex(nameRegex, nameMessage),
   lastName: z.literal('').or(z.string().max(50, "Last name is too long").regex(nameRegex, nameMessage)).optional(),
   phone: phoneValidation,
+  otp: otpCodeSchema,
 });
 
 export const loginSchema = z.object({
   email: z.string().email().max(255, "Email is too long"),
   password: z.string().min(1, "Password is required").max(100, "Password is too long"),
+  scope: z.enum(["customer", "admin"]).optional(),
 });
 
 export const updateProfileSchema = z.object({
@@ -85,17 +111,6 @@ export const resetPasswordSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters long"),
 });
 
-export const PASSWORD_SYMBOL_REGEX = /[^A-Za-z0-9\s]/;
-
-export const strongPasswordSchema = z
-  .string()
-  .min(8, "Password must be at least 8 characters long")
-  .max(100, "Password is too long")
-  .regex(/[a-z]/, "Password must contain at least 1 lowercase letter")
-  .regex(/[A-Z]/, "Password must contain at least 1 uppercase letter")
-  .regex(/\d/, "Password must contain at least 1 number")
-  .regex(PASSWORD_SYMBOL_REGEX, "Password must contain at least 1 special character");
-
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
   newPassword: strongPasswordSchema,
@@ -110,6 +125,8 @@ export const changePasswordSchema = z.object({
     path: ["newPassword"],
   });
 
+export type SendRegisterOtpInput = z.infer<typeof sendRegisterOtpSchema>;
+export type CheckEmailInput = z.infer<typeof checkEmailSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

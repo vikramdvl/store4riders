@@ -218,5 +218,35 @@ describe("BlogService", () => {
       expect(slugSpy).toHaveBeenCalledWith("helmet-guide", "slug categorySlug tags");
       expect(relatedSpy).toHaveBeenCalledWith("helmet-guide", "choosing-correct-riding-gear", ["helmets"], 3);
     });
+
+    it("should sync denormalized category fields on posts when updating or deleting a category", async () => {
+      vi.spyOn(BlogRepository, "findCategoryById").mockResolvedValue({
+        _id: "cat_1",
+        name: "Helmet Care",
+        slug: "helmet-care",
+      } as any);
+      vi.spyOn(BlogRepository, "findCategoryBySlug").mockResolvedValue(null);
+      vi.spyOn(BlogRepository, "updateCategory").mockResolvedValue({
+        _id: "cat_1",
+        name: "Helmet Maintenance",
+        slug: "helmet-maintenance",
+      } as any);
+      const syncSpy = vi.spyOn(BlogRepository, "syncPostsOnCategoryUpdate").mockResolvedValue(undefined as any);
+      vi.spyOn(BlogRepository, "deleteCategory").mockResolvedValue({
+        _id: "cat_1",
+        name: "Helmet Maintenance",
+        slug: "helmet-maintenance",
+      } as any);
+      const clearSpy = vi.spyOn(BlogRepository, "clearCategoryFromPosts").mockResolvedValue(undefined as any);
+
+      await BlogService.updateCategory("cat_1", {
+        name: "Helmet Maintenance",
+        slug: "helmet-maintenance",
+      });
+      expect(syncSpy).toHaveBeenCalledWith("cat_1", "helmet-care", "Helmet Maintenance", "helmet-maintenance");
+
+      await BlogService.deleteCategory("cat_1");
+      expect(clearSpy).toHaveBeenCalledWith("cat_1", "helmet-maintenance");
+    });
   });
 });

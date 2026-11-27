@@ -74,21 +74,13 @@ export class BlockedIpService {
     }
 
     let blockedBy: IBlockedIpActor = { userId: actorUserId };
-    if (actorUserId === "admin-bypass-id") {
+    const actor = await UserRepository.findById(actorUserId);
+    if (actor) {
       blockedBy = {
         userId: actorUserId,
-        email: "system@store4riders.com",
-        name: "System Super Admin",
+        email: actor.email,
+        name: `${actor.firstName || ""} ${actor.lastName || ""}`.trim() || actor.email,
       };
-    } else {
-      const actor = await UserRepository.findById(actorUserId);
-      if (actor) {
-        blockedBy = {
-          userId: actorUserId,
-          email: actor.email,
-          name: `${actor.firstName || ""} ${actor.lastName || ""}`.trim() || actor.email,
-        };
-      }
     }
 
     const durationHours = input.durationHours ?? 24;

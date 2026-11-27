@@ -4,12 +4,18 @@ import { NextRequest, NextResponse } from "next/server";
  * @description Defines API endpoints for Authentication and maps them to Controller methods.
  */
 import { AuthController } from "./auth.controller";
-import { checkRateLimit, checkAdminAuthRateLimit } from "../../core/middlewares/rateLimiter";
+import {
+  checkRateLimit,
+  checkAdminAuthRateLimit,
+  checkRegisterOtpRateLimit,
+  checkEmailRateLimit,
+} from "../../core/middlewares/rateLimiter";
+import { getClientIp } from "../../core/utils/clientIp";
 
 export async function authRouter(req: NextRequest, routePath: string[]): Promise<NextResponse | null> {
   const method = req.method;
   const pathLen = routePath.length;
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
+  const ip = getClientIp(req);
 
   if (method === "POST" && pathLen === 1) {
     const action = routePath[0];
@@ -22,6 +28,11 @@ export async function authRouter(req: NextRequest, routePath: string[]): Promise
         await checkRateLimit(ip);
       }
       return await AuthController.login(req);
+    }
+
+    if (action === "send-register-otp") {
+      await checkRegisterOtpRateLimit(ip);
+      return await AuthController.sendRegisterOtp(req);
     }
 
     if (action === "register") {
@@ -48,11 +59,13 @@ export async function authRouter(req: NextRequest, routePath: string[]): Promise
     }
 
     if (action === "check-email") {
-      // Intentionally NOT using checkRateLimit (which is 5 attempts / 15 mins) here.
-      // It is already protected by the global GENERAL_API rate limit.
-      // Otherwise, checking email on checkout easily blocks the user from logging in.
+      await checkEmailRateLimit(ip);
       return await AuthController.checkEmail(req);
     }
+  }
+
+  if (method === "GET" && pathLen === 1 && routePath[0] === "me") {
+    return await AuthController.me(req);
   }
 
   return null;

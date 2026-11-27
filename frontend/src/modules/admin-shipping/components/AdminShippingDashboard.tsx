@@ -79,25 +79,25 @@ export const AdminShippingDashboard = () => {
             <div className="bg-white p-3 border border-slate-200 shadow-sm rounded-xl flex flex-col">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pending Fulfillment</span>
               <span className="text-xl sm:text-2xl font-black text-slate-900 mt-1 font-mono">
-                {isLoading ? "..." : stats?.overallPipeline?.pendingPacking ?? 0}
+                {isLoading ? "..." : stats?.overallPipeline?.pendingPackingTotal ?? stats?.overallPipeline?.pendingPacking ?? 0}
               </span>
             </div>
             <div className="bg-white p-3 border border-slate-200 shadow-sm rounded-xl flex flex-col">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">In Transit</span>
               <span className="text-xl sm:text-2xl font-black text-blue-600 mt-1 font-mono">
-                {isLoading ? "..." : stats?.overallPipeline?.inTransit ?? 0}
+                {isLoading ? "..." : stats?.overallPipeline?.inTransitTotal ?? stats?.overallPipeline?.inTransit ?? 0}
               </span>
             </div>
             <div className="bg-white p-3 border border-slate-200 shadow-sm rounded-xl flex flex-col">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Delivered Today</span>
               <span className="text-xl sm:text-2xl font-black text-emerald-600 mt-1 font-mono">
-                {isLoading ? "..." : stats?.overallPipeline?.deliveredToday ?? 0}
+                {isLoading ? "..." : stats?.overallPipeline?.deliveredTodayTotal ?? stats?.overallPipeline?.deliveredToday ?? 0}
               </span>
             </div>
             <div className="bg-white p-3 border border-slate-200 shadow-sm rounded-xl flex flex-col">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">NDR / Exceptions</span>
               <span className="text-xl sm:text-2xl font-black text-rose-600 mt-1 font-mono">
-                {isLoading ? "..." : stats?.overallPipeline?.exceptions ?? 0}
+                {isLoading ? "..." : stats?.overallPipeline?.exceptionsTotal ?? stats?.overallPipeline?.exceptions ?? 0}
               </span>
             </div>
           </div>

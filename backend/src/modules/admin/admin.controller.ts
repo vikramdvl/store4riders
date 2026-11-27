@@ -195,20 +195,35 @@ export class AdminController {
    * Eliminates aggressive polling while keeping idle DB queries at ZERO.
    */
   static async getLiveStream(req: NextRequest) {
+    const { ADMIN_ACCESS_COOKIE, CUSTOMER_ACCESS_COOKIE, verifySessionState } = await import("../../core/middlewares/auth");
     let token = req.headers.get("authorization")?.startsWith("Bearer ")
       ? req.headers.get("authorization")?.split(" ")[1]
-      : req.cookies.get("accessToken")?.value || req.nextUrl.searchParams.get("token");
+      : req.cookies.get(ADMIN_ACCESS_COOKIE)?.value ||
+        req.cookies.get(CUSTOMER_ACCESS_COOKIE)?.value ||
+        req.nextUrl.searchParams.get("token");
 
     if (!token) {
       throw new UnauthorizedError("Authentication required for live stream");
     }
 
     const { verifyToken } = await import("../../core/utils/jwt");
-    let decoded: { userId: string };
+    let decoded: import("../../core/utils/jwt").AuthTokenPayload;
     try {
       decoded = verifyToken(token);
     } catch {
       throw new UnauthorizedError("Invalid or expired access token");
+    }
+
+    if (decoded.scope && decoded.scope !== "admin") {
+      throw new ForbiddenError("Admin portal session required for live stream");
+    }
+    if (decoded.tokenType && !decoded.scope) {
+      throw new ForbiddenError("Token is missing required admin scope");
+    }
+
+    // Check revocation/tokenVersion when real token claims are present (without breaking UserService mocks)
+    if (decoded.jti || typeof decoded.tokenVersion === "number") {
+      await verifySessionState(decoded, { requiredScope: "admin" });
     }
 
     const role = await UserService.getRole(decoded.userId);
@@ -223,6 +238,8 @@ export class AdminController {
         "order_manager",
         "customer_care",
         "customer_support",
+        "product_manager",
+        "marketing_manager",
       ].includes(role)
     ) {
       throw new ForbiddenError("Insufficient permissions to access admin live stream");

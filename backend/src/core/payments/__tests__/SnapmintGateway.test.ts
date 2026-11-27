@@ -248,6 +248,48 @@ describe("SnapmintGateway — Checkout 3.0 S2S Integration", () => {
       const result = await gateway.handleWebhook({}, JSON.stringify(webhookBody));
       expect(result.event).toBe("payment.failed");
       expect(result.gatewayOrderId).toBe("ORD-2026-0001");
+      expect(result.id).toBe("153842263:payment.failed");
+      expect(result.payload.isCancelled).toBe(false);
+    });
+
+    it("should emit payment.pending when Snapmint webhook is in_progress or pending", async () => {
+      const webhookBody = {
+        status: "in_progress",
+        merchantOrderId: "ORD-2026-0001",
+        id: "153842264",
+        message: "Loan under bank review",
+      };
+
+      const result = await gateway.handleWebhook({}, JSON.stringify(webhookBody));
+      expect(result.event).toBe("payment.pending");
+      expect(result.id).toBe("153842264:payment.pending");
+      expect(result.payload.isCancelled).toBe(false);
+    });
+
+    it("should flag isCancelled=true when Snapmint webhook status is cancelled", async () => {
+      const webhookBody = {
+        status: "cancelled",
+        merchantOrderId: "ORD-2026-0001",
+        id: "153842265",
+        message: "Cancelled by customer",
+      };
+
+      const result = await gateway.handleWebhook({}, JSON.stringify(webhookBody));
+      expect(result.event).toBe("payment.failed");
+      expect(result.id).toBe("153842265:payment.failed");
+      expect(result.payload.isCancelled).toBe(true);
+    });
+
+    it("should reject malformed JSON webhook body cleanly", async () => {
+      await expect(gateway.handleWebhook({}, "{broken-json")).rejects.toThrow("Malformed Snapmint webhook payload");
+    });
+
+    it("should preserve NaN when Snapmint webhook amount is non-numeric so tampering guard rejects it", async () => {
+      const result = await gateway.handleWebhook(
+        {},
+        JSON.stringify({ status: "Success", merchantOrderId: "ORD-TAMPER", id: "153899", orderValue: "not-a-number" })
+      );
+      expect(Number.isNaN(result.payload.amount)).toBe(true);
     });
 
     it("should throw AppError when payload is missing order ID and transaction ID", async () => {
@@ -319,6 +361,25 @@ describe("SnapmintGateway — Checkout 3.0 S2S Integration", () => {
       expect(result.message).toBe("Transaction already refunded");
 
       fetchSpy.mockRestore();
+    });
+
+    it("should emit refund.processed for Snapmint refunded webhook and pass real clientIp on createOrder", async () => {
+      const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: "Success", url: "https://pay.snapmint.com/session" }),
+      } as any);
+
+      await gateway.createOrder({ ...mockOrder, clientIp: "103.21.58.10" }, 45000);
+      const sentBody = JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string);
+      expect(sentBody.ip).toBe("103.21.58.10");
+      fetchSpy.mockRestore();
+
+      const refundEvent = await gateway.handleWebhook(
+        {},
+        JSON.stringify({ status: "refunded", merchantOrderId: "ORD-2026-0001", id: "153842269", orderValue: "15000" })
+      );
+      expect(refundEvent.event).toBe("refund.processed");
+      expect(refundEvent.payload.amount).toBe(15000);
     });
   });
 });

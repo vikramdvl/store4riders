@@ -7,6 +7,8 @@ export interface IUserAddress {
   country: string;
   isDefault: boolean;
 }
+export type AuthScope = "customer" | "admin";
+
 export type UserRole = 
   | "super_admin"
   | "admin"
@@ -26,6 +28,9 @@ export interface IUser {
   phone?: string;
   role: UserRole;
   isActive: boolean;
+  isEmailVerified?: boolean;
+  emailVerifiedAt?: Date;
+  tokenVersion?: number;
   addresses: IUserAddress[];
   createdAt: Date;
   updatedAt: Date;

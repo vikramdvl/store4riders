@@ -10,7 +10,10 @@ interface BlockedIpsTabProps {
   isLoading: boolean;
   isBlocking: boolean;
   isUnblocking: boolean;
-  onBlockIp: (payload: { ip: string; reason: string; durationHours: 1 | 24 | 168 | null }) => void;
+  onBlockIp: (
+    payload: { ip: string; reason: string; durationHours: 1 | 24 | 168 | null },
+    options?: { onSuccess?: () => void }
+  ) => void;
   onUnblockIp: (ipOrId: string) => void;
 }
 
@@ -30,14 +33,20 @@ export function BlockedIpsTab({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!ipInput.trim() || !reasonInput.trim()) return;
-    onBlockIp({
-      ip: ipInput.trim(),
-      reason: reasonInput.trim(),
-      durationHours,
-    });
-    setIpInput("");
-    setReasonInput("");
-    setShowAddForm(false);
+    onBlockIp(
+      {
+        ip: ipInput.trim(),
+        reason: reasonInput.trim(),
+        durationHours,
+      },
+      {
+        onSuccess: () => {
+          setIpInput("");
+          setReasonInput("");
+          setShowAddForm(false);
+        },
+      }
+    );
   };
 
   return (

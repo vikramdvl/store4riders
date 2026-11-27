@@ -108,12 +108,18 @@ export interface ILogisticsStatsData {
     carrierBreakdown: Record<string, number>;
   };
   overallPipeline: {
-    pendingPacking: number;
-    packedReadyForPickup: number;
-    inTransit: number;
-    outForDelivery: number;
-    deliveredToday: number;
-    exceptions: number;
+    pendingPacking?: number;
+    pendingPackingTotal?: number;
+    packedReadyForPickup?: number;
+    packedReadyTotal?: number;
+    inTransit?: number;
+    inTransitTotal?: number;
+    outForDelivery?: number;
+    outForDeliveryTotal?: number;
+    deliveredToday?: number;
+    deliveredTodayTotal?: number;
+    exceptions?: number;
+    exceptionsTotal?: number;
   };
   pagination: {
     totalCount: number;

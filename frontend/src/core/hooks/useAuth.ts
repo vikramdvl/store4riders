@@ -1,34 +1,76 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "../api/client";
+import { apiClient, isAdminPortalContext } from "../api/client";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useCartStore } from "@/stores/useCartStore";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
+const sanitizePostLoginRedirect = (rawTarget: string | null, scope: "admin" | "customer"): string => {
+  if (!rawTarget || !rawTarget.startsWith("/") || rawTarget.startsWith("//") || rawTarget.startsWith("/\\")) {
+    return "/";
+  }
+  if (scope !== "admin" && rawTarget.startsWith("/admin")) {
+    return "/";
+  }
+  return rawTarget;
+};
+
 export function useLogin(options?: { disableRedirect?: boolean; scope?: "admin" | "customer" }) {
   const setAuth = useAuthStore((state) => state.setAuth);
   const router = useRouter();
+  const loginScope: "admin" | "customer" = options?.scope || "customer";
 
   return useMutation({
     mutationFn: async (credentials: any) => {
-      const endpoint = options?.scope === "admin" ? "/auth/login?scope=admin" : "/auth/login";
-      const response = await apiClient.post(endpoint, credentials);
+      const endpoint = loginScope === "admin" ? "/auth/login?scope=admin" : "/auth/login";
+      const response = await apiClient.post(
+        endpoint,
+        { ...credentials, scope: loginScope },
+        { headers: { "x-auth-scope": loginScope } }
+      );
       return response.data;
     },
     onSuccess: (data) => {
-      if (data?.data?.user && data?.data?.accessToken) {
-        setAuth(data.data.user, data.data.accessToken, data.data.refreshToken);
+      const loggedInUser = data?.data?.user;
+      const role = loggedInUser?.role || "customer";
+
+      if (loginScope === "customer" && role !== "customer") {
+        toast.error("Staff and admin accounts must sign in through the Admin Portal");
+        return;
+      }
+      if (loginScope === "admin" && role === "customer") {
+        toast.error("Customer accounts cannot access the Admin Portal");
+        return;
+      }
+
+      if (loggedInUser && data?.data?.accessToken) {
+        setAuth(loggedInUser, data.data.accessToken, data.data.refreshToken);
       }
       toast.success("Successfully logged in!");
       
       if (!options?.disableRedirect) {
         const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-        const redirectTarget = searchParams?.get("redirect") || "/";
+        const redirectTarget = sanitizePostLoginRedirect(searchParams?.get("redirect") || null, loginScope);
         router.push(redirectTarget);
       }
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.error || "Invalid email or password");
+    },
+  });
+}
+
+export function useSendRegisterOtp() {
+  return useMutation({
+    mutationFn: async (payload: { email: string }) => {
+      const response = await apiClient.post("/auth/send-register-otp", payload);
+      return response.data;
+    },
+    onSuccess: (_data, variables) => {
+      toast.success(`Verification code sent to ${variables.email}`);
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || "Failed to send verification code");
     },
   });
 }
@@ -105,8 +147,13 @@ export function useLogout() {
   return useMutation({
     mutationFn: async () => {
       try {
+        const scope = isAdminPortalContext() ? "admin" : "customer";
         const refreshToken = useAuthStore.getState().refreshToken;
-        await apiClient.post("/auth/logout", refreshToken ? { refreshToken } : {});
+        await apiClient.post(
+          `/auth/logout?scope=${scope}`,
+          refreshToken ? { refreshToken } : {},
+          { headers: { "x-auth-scope": scope } }
+        );
       } catch (e) {
         // Proceed to clean up locally even if network is offline
       }

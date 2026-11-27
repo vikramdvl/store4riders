@@ -9,49 +9,26 @@ import { ProductModel } from "../../modules/product/product.model";
 import mongoose from "mongoose";
 import { CategoryModel } from "../../modules/category/category.model";
 import { BrandModel } from "../../modules/brand/brand.model";
-import { slugify, extractProductDimensions, extractProductWeight, parseAttributesString } from "@store4riders/shared-utils";
+import { randomUUID } from "crypto";
+import { slugify } from "@store4riders/shared-utils";
+import {
+  buildDirectVariantUpdateSet,
+  buildExistingProductUpdateDoc,
+  createCsvImageUrlFormatter,
+  getCsvColumnValue,
+  mapCsvRowToProductData,
+  parseConfigurableVariationsString,
+  parseCsvNumber,
+} from "../utils/csvMigrationHelper";
 import {
   buildSearchSlugs,
   MAGENTO_PATH_TO_NAVBAR_SLUG,
-  resolveCanonicalCategorySlugs,
 } from "../../modules/product/product.category-constants";
 
 // BullMQ Worker dedicated connection
 const connection = createWorkerRedisConnection("migrationWorker");
 
-const KNOWN_FIELDS = new Set([
-  "name", "description", "short_description", "url_key", "slug", "sku", "price", "special_price",
-  "base_price", "baseprice", "specialprice",
-  "weight", "weight_unit", "length", "breadth", "width", "height", "dimension_unit", "dimensions",
-  "package_length", "package_width", "package_breadth", "package_height", "package_dimensions",
-  "shipping_length", "shipping_width", "shipping_breadth", "shipping_height",
-  "l", "w", "h", "b", "is_in_stock", "stock_status", "product_type", "categories", "base_image", "additional_images",
-  "additional_attributes", "additionalattributes",
-  "configurable_variations", "related_skus", "upsell_skus", "crosssell_skus", "qty", "stock", "quantity",
-  "status", "product_online", "visibility", "tax_class_name", "brand",
-  "meta_title", "meta_keyword", "meta_keywords", "meta_description", "size_chart", "sizechart", "gender",
-  "gender_1", "country_of_manufacture", "country_of_origin", "attribute_set_code", 
-  "attribute_set", "configurable_variation_labels", "backorders", "free_shipping",
-  "special_from_date", "special_to_date", "parent_sku", "parentsku", "old_sku", "oldsku"
-]);
-
-/**
- * Case-insensitive column value extractor across different CSV dialects
- */
-function getCol(row: any, aliases: string[]): string | undefined {
-  if (!row || typeof row !== "object") return undefined;
-  for (const alias of aliases) {
-    if (row[alias] !== undefined && row[alias] !== null && String(row[alias]).trim() !== "") {
-      return String(row[alias]).trim();
-    }
-    const lower = alias.toLowerCase();
-    const foundKey = Object.keys(row).find((k) => k.trim().toLowerCase() === lower);
-    if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null && String(row[foundKey]).trim() !== "") {
-      return String(row[foundKey]).trim();
-    }
-  }
-  return undefined;
-}
+const getCol = getCsvColumnValue;
 
 /**
  * Checks if visibility indicates child variant (not visible individually)
@@ -62,7 +39,7 @@ function isChildVisibility(visibility: string | undefined): boolean {
   return v === "not visible individually" || v === "1";
 }
 
-export const migrationWorker = new Worker("migrationQueue", async (job: Job) => {
+export async function processMigrationJob(job: Pick<Job, "id" | "data" | "updateProgress">) {
   const { filePath, s3Key, adminId } = job.data;
   logger.info(`Processing migration job ${job.id}. S3 Key: ${s3Key || "none"}, Local Path: ${filePath || "none"}`);
 
@@ -85,9 +62,39 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
 
   const configurables = new Map<string, any>();
   const simples = new Map<string, any>();
+  const canonicalConfSkuByLower = new Map<string, string>();
+  const canonicalSimpleSkuByLower = new Map<string, string>();
   const categoriesToCreate = new Set<string>();
   const brandsToCreate = new Set<string>();
   const allParsedRows: any[] = [];
+
+  const upsertUniqueCsvRow = (
+    targetMap: Map<string, any>,
+    lowerLookup: Map<string, string>,
+    canonicalSku: string,
+    incomingRow: Record<string, any>
+  ) => {
+    const lowerKey = canonicalSku.toLowerCase();
+    const prevKey = lowerLookup.get(lowerKey);
+    const prevRow = prevKey ? targetMap.get(prevKey) : undefined;
+    if (prevKey && prevKey !== canonicalSku) {
+      targetMap.delete(prevKey);
+    }
+    lowerLookup.set(lowerKey, canonicalSku);
+
+    if (!prevRow) {
+      targetMap.set(canonicalSku, incomingRow);
+      return;
+    }
+
+    const merged = { ...prevRow };
+    for (const [col, val] of Object.entries(incomingRow)) {
+      if (val !== undefined && val !== null && String(val).trim() !== "") {
+        merged[col] = val;
+      }
+    }
+    targetMap.set(canonicalSku, merged);
+  };
 
   // Pass 1: Stream and Parse the CSV
   await new Promise((resolve, reject) => {
@@ -107,9 +114,9 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
 
         const productType = getCol(row, ["product_type"])?.toLowerCase();
         if (productType === "configurable") {
-          configurables.set(sku, row);
+          upsertUniqueCsvRow(configurables, canonicalConfSkuByLower, sku, row);
         } else {
-          simples.set(sku, row);
+          upsertUniqueCsvRow(simples, canonicalSimpleSkuByLower, sku, row);
         }
         allParsedRows.push(row);
       })
@@ -133,6 +140,7 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
     radiator: "Moto Fusion",
   };
 
+  const brandSlugToIdMap = new Map<string, string>();
   for (let b of brandsToCreate) {
     if (!b) continue;
     const lower = b.trim().toLowerCase();
@@ -142,7 +150,14 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
       continue;
     }
     const slug = slugify(b);
-    await BrandModel.updateOne({ slug }, { $set: { name: b, slug, isActive: true } }, { upsert: true });
+    const bDoc: any = await BrandModel.findOneAndUpdate(
+      { slug },
+      { $set: { name: b, slug, isActive: true } },
+      { upsert: true, new: true }
+    ).lean();
+    if (bDoc?._id) {
+      brandSlugToIdMap.set(slug, String(bDoc._id));
+    }
   }
 
   const isTestSegment = (val: string) =>
@@ -189,40 +204,67 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
     }
   }
 
-  // Pre-Scan: Collect all unique SKUs from the CSV and parent_skus to check DB
+  // Pre-Scan: Collect all unique SKUs from CSV (including old_sku & parent_sku) to check DB
   const parentSkusFromChildren = Array.from(simples.values())
     .map((r: any) => getCol(r, ["parent_sku", "parentsku"]))
     .filter(Boolean) as string[];
+  const oldSkusFromCsv = Array.from(new Set([
+    ...Array.from(configurables.values()),
+    ...Array.from(simples.values()),
+  ].map((r: any) => getCol(r, ["old_sku", "oldsku"])).filter(Boolean) as string[]));
 
   const allCsvSkus = Array.from(new Set([
     ...Array.from(configurables.keys()),
     ...Array.from(simples.keys()),
-    ...parentSkusFromChildren
+    ...parentSkusFromChildren,
+    ...oldSkusFromCsv,
   ]));
 
   logger.info(`Job ${job.id}: Checking MongoDB for ${allCsvSkus.length} unique SKUs...`);
 
-  // 1. Existing root products in MongoDB
+  // 1. Existing root products in MongoDB (exact B-tree $in first, case-insensitive fallback for unmatched SKUs)
   const existingRoots = await ProductModel.find({ sku: { $in: allCsvSkus } })
     .select("sku name basePrice specialPrice images variants status qty stockStatus description categoryId brand slug attributes")
     .lean()
     .exec();
   const rootSkuMap = new Map(existingRoots.map((p: any) => [p.sku, p]));
+  const rootSkuLowerMap = new Map(existingRoots.map((p: any) => [String(p.sku).toLowerCase(), p]));
+
+  const unmatchedRootSkus = allCsvSkus.filter((s) => !rootSkuMap.has(s));
+  if (unmatchedRootSkus.length > 0 && unmatchedRootSkus.length <= 2000) {
+    const ciRegexes = unmatchedRootSkus.map(
+      (s) => new RegExp(`^${s.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&")}$`, "i")
+    );
+    const ciRoots = await ProductModel.find({ sku: { $in: ciRegexes } })
+      .select("sku name basePrice specialPrice images variants status qty stockStatus description categoryId brand slug attributes")
+      .lean()
+      .exec();
+    for (const p of ciRoots as any[]) {
+      rootSkuLowerMap.set(String(p.sku).toLowerCase(), p);
+    }
+  }
+  const getExistingRootBySku = (s: string) => rootSkuMap.get(s) || rootSkuLowerMap.get(s.toLowerCase());
 
   // 2. Existing child variants inside other products in MongoDB
-  const existingVariantParents = await ProductModel.find({ "variants.sku": { $in: allCsvSkus } })
+  const ciAllVariantRegexes =
+    allCsvSkus.length <= 2000
+      ? allCsvSkus.map((s) => new RegExp(`^${s.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&")}$`, "i"))
+      : allCsvSkus;
+  const existingVariantParents = await ProductModel.find({ "variants.sku": { $in: ciAllVariantRegexes } })
     .select("sku name basePrice specialPrice variants stockStatus qty allowBackorders")
     .lean()
     .exec();
 
-  const variantToParentMap = new Map<string, { parentSku: string; parentDoc: any; variantIndex: number }>();
+  const allCsvSkuLowerSet = new Set(allCsvSkus.map((s) => s.toLowerCase()));
+  const variantToParentMap = new Map<string, { parentSku: string; parentDoc: any; variantIndex: number; canonicalVariantSku: string }>();
   existingVariantParents.forEach((parentDoc: any) => {
     (parentDoc.variants || []).forEach((v: any, index: number) => {
-      if (allCsvSkus.includes(v.sku)) {
-        variantToParentMap.set(v.sku, {
+      if (v?.sku && allCsvSkuLowerSet.has(String(v.sku).toLowerCase())) {
+        variantToParentMap.set(String(v.sku).toLowerCase(), {
           parentSku: parentDoc.sku,
           parentDoc,
-          variantIndex: index
+          variantIndex: index,
+          canonicalVariantSku: v.sku,
         });
       }
     });
@@ -230,163 +272,36 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
 
   logger.info(`Job ${job.id}: Pre-scan result - Found ${rootSkuMap.size} existing root products, ${variantToParentMap.size} existing child variants in DB.`);
 
-  // S3 Image URL Formatter
-  const s3BaseUrl = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/catalog/product`;
-  const formatImageUrl = (url: string) => {
-    url = url.trim();
-    if (!url) return null;
-    if (url.startsWith("http://") || url.startsWith("https://")) return url;
-    return url.startsWith("/") ? `${s3BaseUrl}${url}` : `${s3BaseUrl}/${url}`;
-  };
+  // S3 Image URL Formatter (shared helper)
+  const formatImageUrl = createCsvImageUrlFormatter();
 
-  // Helper to map a raw CSV row into standardized product attributes
+  // Case-insensitive lookup map for simples rows
+  const simplesLowerMap = new Map<string, any>();
+  for (const [sSku, sRow] of simples.entries()) {
+    simplesLowerMap.set(sSku.toLowerCase(), sRow);
+  }
+
+  // Helper to map a raw CSV row into standardized product attributes and presence metadata
   const mapRowToProduct = (row: any) => {
-    const attributes: Record<string, string> = {};
-    for (const [key, value] of Object.entries(row)) {
-      if (!KNOWN_FIELDS.has(key) && value && String(value).trim() !== "") {
-        attributes[key] = String(value).trim();
+    const mapped = mapCsvRowToProductData(row, formatImageUrl);
+    if (mapped.brand) {
+      const normalizedBrand = BRAND_MAP[mapped.brand.trim().toLowerCase()] || mapped.brand;
+      const bSlug = slugify(normalizedBrand);
+      const bId = brandSlugToIdMap.get(bSlug);
+      if (bId) {
+        (mapped as any).brandId = bId;
       }
     }
-
-    // Unfold Magento additional_attributes (or JSON attributes) into distinct attributes
-    const rawAdditional = getCol(row, ["additional_attributes", "additionalattributes"]);
-    if (rawAdditional) {
-      const parsedAdd = parseAttributesString(rawAdditional);
-      for (const [k, v] of Object.entries(parsedAdd)) {
-        if (!attributes[k] && v) {
-          attributes[k] = String(v).trim();
-        }
-      }
-    }
-    delete attributes["additional_attributes"];
-    delete attributes["additionalattributes"];
-
-    const images: any[] = [];
-    const baseImage = getCol(row, ["base_image"]);
-    if (baseImage) {
-      const formatted = formatImageUrl(baseImage);
-      if (formatted) images.push({ url: formatted, altText: getCol(row, ["base_image_label"]) || getCol(row, ["name"]) || "" });
-    }
-    const addImages = getCol(row, ["additional_images"]);
-    if (addImages) {
-      const extraUrls = addImages.split(",").map(i => formatImageUrl(i)).filter(Boolean);
-      extraUrls.forEach(url => images.push({ url, altText: getCol(row, ["name"]) || "" }));
-    }
-
-    const rawPrice = parseFloat(getCol(row, ["price", "base_price", "basePrice"]) || "0");
-    const basePrice = !isNaN(rawPrice) && rawPrice > 0 ? rawPrice : 0;
-
-    const rawSpecial = parseFloat(getCol(row, ["special_price", "specialPrice"]) || "");
-    const specialPrice = !isNaN(rawSpecial) && rawSpecial > 0 ? rawSpecial : undefined;
-
-    const parsedWeight = extractProductWeight(row, attributes);
-    const weight = parsedWeight.weight;
-    const weightUnit = parsedWeight.weightUnit || "kg";
-
-    const rawQty = parseInt(getCol(row, ["qty", "stock", "quantity"]) || "0");
-    const qty = !isNaN(rawQty) ? rawQty : 0;
-
-    const rawStockStatus = getCol(row, ["is_in_stock", "stock_status", "stockStatus"]);
-    const stockStatus = rawStockStatus !== undefined ? (parseInt(rawStockStatus) === 0 ? 0 : 1) : (qty > 0 ? 1 : 0);
-
-    const sizeChart = getCol(row, ["size_chart", "sizechart"]) || "";
-    const gender = getCol(row, ["gender", "gender_1"]) || "";
-    const countryOfManufacture = getCol(row, ["country_of_manufacture", "country_of_origin"]) || "";
-    const attributeSetCode = getCol(row, ["attribute_set_code", "attribute_set"]) || "";
-    const configurableVariationLabels = getCol(row, ["configurable_variation_labels"]) || "";
-    const configurableVariations = getCol(row, ["configurable_variations"]) || "";
-    const allowBackorders = getCol(row, ["backorders"]) === "1" || getCol(row, ["backorders"])?.toLowerCase() === "true";
-    const isFreeShipping = getCol(row, ["free_shipping"]) === "1";
-    const parsedDims = extractProductDimensions(row, attributes);
-
-    const relatedSkus = (getCol(row, ["related_skus"]) || "").split(",").map(s => s.trim()).filter(Boolean);
-    const upsellSkus = (getCol(row, ["upsell_skus"]) || "").split(",").map(s => s.trim()).filter(Boolean);
-    const crosssellSkus = (getCol(row, ["crosssell_skus"]) || "").split(",").map(s => s.trim()).filter(Boolean);
-
-    const sku = getCol(row, ["sku"])!;
-    const name = getCol(row, ["name"]) || sku;
-    const slug = getCol(row, ["url_key", "slug"]) || sku.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-
-    const rawStatus = getCol(row, ["status", "product_online"]);
-    const status = (rawStatus === "1" || rawStatus?.toLowerCase() === "enabled" || rawStatus?.toLowerCase() === "published") ? "published" : "draft";
-
-    const visibility = getCol(row, ["visibility"]) || "";
-
-    const categories = getCol(row, ["categories"]) || "";
-    const rawSlugs = (() => {
-      if (!categories) return [];
-      const parts = categories.split(/[/,]/);
-      const mapped = new Set<string>();
-      parts.forEach((p: string) => {
-        let s = p.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-        if (!s || s.includes("root-test") || s.includes("default-category") || s.includes("price") || s.includes("under-")) return;
-        mapped.add(s);
-        if (s.endsWith("s") && !s.endsWith("ss")) {
-          mapped.add(s.slice(0, -1));
-        } else {
-          mapped.add(s + "s");
-        }
-      });
-      return Array.from(mapped);
-    })();
-
-    const canonicalSlugs = resolveCanonicalCategorySlugs({
-      name,
-      magentoCategories: categories,
-      categorySlugs: rawSlugs,
-    });
-
-    const categorySlugs = Array.from(new Set([...rawSlugs, ...canonicalSlugs]));
-
-    return {
-      name,
-      description: getCol(row, ["description"]) || "",
-      shortDescription: getCol(row, ["short_description"]) || "",
-      slug,
-      sku,
-      basePrice,
-      specialPrice,
-      specialPriceFromDate: getCol(row, ["special_from_date"]) ? new Date(getCol(row, ["special_from_date"])!) : undefined,
-      specialPriceToDate: getCol(row, ["special_to_date"]) ? new Date(getCol(row, ["special_to_date"])!) : undefined,
-      weight,
-      weightUnit,
-      length: parsedDims.length,
-      breadth: parsedDims.breadth,
-      height: parsedDims.height,
-      dimensionUnit: parsedDims.dimensionUnit || "cm",
-      stockStatus,
-      qty,
-      allowBackorders,
-      isFreeShipping,
-      productType: getCol(row, ["product_type"]) || "simple",
-      brand: getCol(row, ["brand"]) || attributes["brand"] || undefined,
-      taxClassName: getCol(row, ["tax_class_name"]),
-      status,
-      visibility,
-      magentoCategories: categories,
-      metaTitle: getCol(row, ["meta_title"]) || "",
-      metaKeywords: getCol(row, ["meta_keywords", "meta_keyword"]) || "",
-      metaDescription: getCol(row, ["meta_description"]) || "",
-      sizeChart,
-      size_chart: sizeChart,
-      gender,
-      countryOfManufacture,
-      attributeSetCode,
-      configurableVariationLabels,
-      configurableVariations,
-      categoryId: categorySlugs[0] || undefined,
-      categorySlugs,
-      relatedSkus,
-      upsellSkus,
-      crosssellSkus,
-      images,
-      attributes,
-      variants: [] as any[]
-    };
+    return mapped;
   };
 
   // Pass 2: Identify Child SKUs
   const childSkusInCsv = new Set<string>();
+  const childSkusLowerInCsv = new Set<string>();
+  const addChildSkuFlag = (s: string) => {
+    childSkusInCsv.add(s);
+    childSkusLowerInCsv.add(s.toLowerCase());
+  };
 
   // A. Extract child SKUs from configurable rows
   for (const conf of configurables.values()) {
@@ -400,7 +315,7 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
     } else if (variationsStr) {
       skus = variationsStr.split(",").map((s: string) => s.trim()).filter(Boolean);
     }
-    skus.forEach((s) => childSkusInCsv.add(s));
+    skus.forEach(addChildSkuFlag);
   }
 
   // B. Also add SKUs with child visibility or parent_sku
@@ -408,7 +323,7 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
     const vis = getCol(row, ["visibility"]);
     const parentSku = getCol(row, ["parent_sku", "parentsku"]);
     if (isChildVisibility(vis) || parentSku) {
-      childSkusInCsv.add(sku);
+      addChildSkuFlag(sku);
     }
   }
 
@@ -420,71 +335,26 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
 
   // Process 1: Update Existing Child Variants directly in MongoDB
   for (const [sku, row] of simples.entries()) {
+    const oldSkuVal = getCol(row, ["old_sku", "oldsku"]);
+    const matchedVariantMeta =
+      variantToParentMap.get(sku.toLowerCase()) ||
+      (oldSkuVal ? variantToParentMap.get(oldSkuVal.toLowerCase()) : undefined);
     // If this SKU already belongs to a parent in MongoDB
-    if (variantToParentMap.has(sku)) {
-      childSkusInCsv.add(sku); // Mark as child so it is NOT created as standalone
-      const { parentSku } = variantToParentMap.get(sku)!;
+    if (matchedVariantMeta) {
+      addChildSkuFlag(sku); // Mark as child so it is NOT created as standalone
+      const { parentSku, parentDoc, variantIndex, canonicalVariantSku } = matchedVariantMeta;
       affectedParentSkus.add(parentSku);
 
-      const updateVariantFields: Record<string, any> = {};
-
-      const rawPrice = getCol(row, ["price", "base_price", "basePrice"]);
-      if (rawPrice !== undefined) {
-        const p = parseFloat(rawPrice);
-        if (!isNaN(p) && p > 0) updateVariantFields["variants.$.price"] = p;
-      }
-
-      const rawSpecial = getCol(row, ["special_price", "specialPrice"]);
-      if (rawSpecial !== undefined) {
-        const sp = parseFloat(rawSpecial);
-        if (!isNaN(sp) && sp > 0) updateVariantFields["variants.$.specialPrice"] = sp;
-      }
-
-      const rawQty = getCol(row, ["qty", "stock", "quantity"]);
-      if (rawQty !== undefined) {
-        const q = parseInt(rawQty);
-        if (!isNaN(q)) updateVariantFields["variants.$.stock"] = q;
-      }
-
-      const rawStatus = getCol(row, ["status", "is_in_stock"]);
-      if (rawStatus !== undefined) {
-        updateVariantFields["variants.$.status"] = (rawStatus === "1" || rawStatus.toLowerCase() === "enabled") ? "enabled" : "disabled";
-      }
-
-      // Extract child variant dimensions and weight (supporting separate columns or additional_attributes)
-      const childAttributes: Record<string, string> = {};
-      const rawChildAdditional = getCol(row, ["additional_attributes", "additionalattributes"]);
-      if (rawChildAdditional) {
-        Object.assign(childAttributes, parseAttributesString(rawChildAdditional));
-      }
-
-      const childDims = extractProductDimensions(row, childAttributes);
-      if (childDims.length !== undefined && childDims.length > 0) updateVariantFields["variants.$.length"] = childDims.length;
-      if (childDims.breadth !== undefined && childDims.breadth > 0) updateVariantFields["variants.$.breadth"] = childDims.breadth;
-      if (childDims.height !== undefined && childDims.height > 0) updateVariantFields["variants.$.height"] = childDims.height;
-
-      const childWeightData = extractProductWeight(row, childAttributes);
-      if (childWeightData.weight !== undefined && childWeightData.weight > 0) {
-        updateVariantFields["variants.$.weight"] = childWeightData.weight;
-      }
-
-      const baseImg = getCol(row, ["base_image"]);
-      if (baseImg) {
-        const fUrl = formatImageUrl(baseImg);
-        if (fUrl) updateVariantFields["variants.$.imageUrl"] = fUrl;
-      }
-
-      // Old SKU rename support
-      const oldSku = getCol(row, ["old_sku", "oldsku"]);
-      const newSku = getCol(row, ["new_sku", "sku"]);
-      if (oldSku && newSku && oldSku !== newSku) {
-        updateVariantFields["variants.$.sku"] = newSku;
+      const existingVariant = parentDoc?.variants?.[variantIndex];
+      const updateVariantFields = buildDirectVariantUpdateSet(row, formatImageUrl, existingVariant);
+      if (oldSkuVal && oldSkuVal.toLowerCase() === canonicalVariantSku.toLowerCase() && sku.toLowerCase() !== oldSkuVal.toLowerCase()) {
+        updateVariantFields["variants.$.sku"] = sku;
       }
 
       if (Object.keys(updateVariantFields).length > 0) {
         try {
           await ProductModel.updateOne(
-            { "variants.sku": sku },
+            { "variants.sku": canonicalVariantSku },
             { $set: updateVariantFields }
           );
           updatedVariantsCount++;
@@ -495,30 +365,33 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
     } else {
       // Case B: Brand new child variant specifying parent_sku of an existing MongoDB parent
       const parentSku = getCol(row, ["parent_sku", "parentsku"]);
-      if (parentSku && rootSkuMap.has(parentSku) && !configurables.has(parentSku)) {
-        childSkusInCsv.add(sku);
-        affectedParentSkus.add(parentSku);
+      const parentInDb: any = parentSku ? getExistingRootBySku(parentSku) : undefined;
+      if (parentSku && parentInDb && !configurables.has(parentSku)) {
+        addChildSkuFlag(sku);
+        affectedParentSkus.add(parentInDb.sku);
 
         const childData = mapRowToProduct(row);
-        const parentInDb: any = rootSkuMap.get(parentSku);
         const childPrice = childData.basePrice > 0 ? childData.basePrice : (parentInDb.basePrice || 0);
 
         try {
           await ProductModel.updateOne(
-            { sku: parentSku, "variants.sku": { $ne: sku } },
+            { _id: parentInDb._id, "variants.sku": { $ne: sku } },
             {
               $push: {
                 variants: {
+                  id: randomUUID(),
                   sku: childData.sku,
                   price: childPrice,
                   specialPrice: childData.specialPrice,
-                  stock: childData.qty || childData.stockStatus,
+                  stock: childData._present.hasQty ? childData.qty : childData.stockStatus,
                   attributes: childData.attributes,
                   imageUrl: childData.images[0]?.url,
                   weight: childData.weight,
+                  weightUnit: childData.weightUnit,
                   length: childData.length,
                   breadth: childData.breadth,
                   height: childData.height,
+                  dimensionUnit: childData.dimensionUnit,
                   status: childData.status === "published" ? "enabled" : "disabled",
                   visibility: childData.visibility || "Not Visible Individually",
                   images: childData.images || []
@@ -534,14 +407,19 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
     }
   }
 
-  // Process 2: Map Configurables + their children (from current CSV)
+  // Process 2: Map Configurables + their children (from current CSV or inline configurable_variations)
   const finalParentProducts: any[] = [];
 
   for (const [sku, confRow] of configurables.entries()) {
     const parentProd = mapRowToProduct(confRow);
+    const oldSkuForConf = getCol(confRow, ["old_sku", "oldsku"]);
+    if (oldSkuForConf) (parentProd as any)._oldSku = oldSkuForConf;
     affectedParentSkus.add(sku);
 
     const variationsStr = getCol(confRow, ["configurable_variations"]) || "";
+    const inlineParsedVariants = parseConfigurableVariationsString(variationsStr, parentProd.basePrice, formatImageUrl);
+    const inlineVarBySku = new Map(inlineParsedVariants.map((v) => [String(v.sku).toLowerCase(), v]));
+
     let skus: string[] = [];
     if (variationsStr.includes("sku=")) {
       const matches = variationsStr.match(/sku=([^,|]+)/g);
@@ -561,29 +439,39 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
       }
     }
 
-    // Find children from simples map
+    // Find children from simples map (case-insensitive) or fallback to inline configurable_variations entry
     for (const childSku of Array.from(childSkusForThisParent)) {
-      const childRow = simples.get(childSku);
+      const childRow = simples.get(childSku) || simplesLowerMap.get(childSku.toLowerCase());
       if (childRow) {
         const childData = mapRowToProduct(childRow);
         // Fallback: If child price is 0, inherit parent's price
         const childPrice = childData.basePrice > 0 ? childData.basePrice : parentProd.basePrice;
 
         parentProd.variants.push({
+          id: randomUUID(),
           sku: childData.sku,
           price: childPrice,
           specialPrice: childData.specialPrice,
-          stock: childData.qty || childData.stockStatus,
+          stock: childData._present.hasQty ? childData.qty : childData.stockStatus,
           attributes: childData.attributes,
           imageUrl: childData.images[0]?.url,
+          altText: childData.images[0]?.altText,
           weight: childData.weight,
+          weightUnit: childData.weightUnit,
           length: childData.length,
           breadth: childData.breadth,
           height: childData.height,
+          dimensionUnit: childData.dimensionUnit,
           status: childData.status === "published" ? "enabled" : "disabled",
           visibility: childData.visibility || "Not Visible Individually",
-          images: childData.images || []
+          images: childData.images || [],
+          _present: childData._present,
         });
+      } else {
+        const inlineVar = inlineVarBySku.get(childSku.toLowerCase());
+        if (inlineVar) {
+          parentProd.variants.push(inlineVar);
+        }
       }
     }
 
@@ -601,19 +489,38 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
       }
     }
 
+    const existingRoot =
+      getExistingRootBySku(sku) || (oldSkuForConf ? getExistingRootBySku(oldSkuForConf) : undefined);
+    if (!existingRoot) {
+      if (!parentProd._present.hasName || parentProd.name.trim() === sku) {
+        logger.warn(`Job ${job.id}: Skipping invalid new configurable product with #N/A or blank name (SKU: ${sku})`);
+        skippedGarbageCount++;
+        errors.push({ sku, reason: "Skipped: Invalid product name (#N/A or blank)" });
+        continue;
+      }
+      if (parentProd.basePrice <= 0) {
+        logger.warn(`Job ${job.id}: Skipping invalid new configurable product with zero price (SKU: ${sku})`);
+        skippedGarbageCount++;
+        errors.push({ sku, reason: "Skipped: Zero price on standalone product" });
+        continue;
+      }
+    }
+
     finalParentProducts.push(parentProd);
   }
 
   // Process 3: Map Remaining Independent Simple Products
   for (const [sku, simpRow] of simples.entries()) {
     // If it's a child SKU (in CSV or in DB), DO NOT create standalone product!
-    if (childSkusInCsv.has(sku) || variantToParentMap.has(sku)) {
+    if (childSkusLowerInCsv.has(sku.toLowerCase()) || variantToParentMap.has(sku.toLowerCase())) {
       continue;
     }
 
     const rawName = getCol(simpRow, ["name"]);
-    const rawPrice = parseFloat(getCol(simpRow, ["price", "base_price", "basePrice"]) || "0");
-    const existingRoot = rootSkuMap.get(sku);
+    const rawPrice = parseCsvNumber(getCol(simpRow, ["price", "base_price", "basePrice"])) ?? 0;
+    const oldSkuVal = getCol(simpRow, ["old_sku", "oldsku"]);
+    const existingRoot =
+      getExistingRootBySku(sku) || (oldSkuVal ? getExistingRootBySku(oldSkuVal) : undefined);
 
     // Garbage row rejection for new creations
     if (!existingRoot) {
@@ -631,156 +538,164 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
       }
     }
 
-    finalParentProducts.push(mapRowToProduct(simpRow));
+    const mappedSimple = mapRowToProduct(simpRow);
+    if (oldSkuVal) (mappedSimple as any)._oldSku = oldSkuVal;
+    finalParentProducts.push(mappedSimple);
   }
 
   logger.info(`Job ${job.id}: Mapped ${finalParentProducts.length} root products to upsert, ${updatedVariantsCount} variants directly updated, ${skippedGarbageCount} garbage rows safely rejected.`);
 
-  // Pass 3: MongoDB BulkWrite with Safe Patching
+  // Pass 3: MongoDB BulkWrite with Safe Patching & Creation Safeguards
   const BATCH_SIZE = 500;
   let batchCount = 0;
-  let successCount = 0;
+  let createdProductsCount = 0;
+  let updatedProductsCount = 0;
   let failCount = 0;
 
   for (let i = 0; i < finalParentProducts.length; i += BATCH_SIZE) {
     const batch = finalParentProducts.slice(i, i + BATCH_SIZE);
-    const batchSkus = batch.map(p => p.sku);
+    const batchSkus = Array.from(new Set(
+      batch.flatMap((p) => [p.sku, (p as any)._oldSku].filter(Boolean))
+    ));
 
+    const selectFields = "sku images variants status description shortDescription basePrice specialPrice brand brandId categoryId slug attributes weight weightUnit length breadth height dimensionUnit";
     const existingInDb = await ProductModel.find({ sku: { $in: batchSkus } })
-      .select("sku images variants status description shortDescription basePrice specialPrice brand categoryId slug")
+      .select(selectFields)
       .lean()
       .exec();
-    const existingMap = new Map(existingInDb.map((e: any) => [e.sku, e]));
+    const existingMap = new Map(existingInDb.map((e: any) => [String(e.sku).toLowerCase(), e]));
 
-    const ops = batch.map(p => {
-      const existing = existingMap.get(p.sku);
-
-      if (existing) {
-        // SAFE PATCHING: Only update fields that are explicitly valid in the CSV row
-        const updateDoc: Record<string, any> = {};
-
-        if (p.name && p.name !== "#N/A" && p.name.toLowerCase() !== "#n/a") updateDoc.name = p.name;
-        if (p.description && p.description.trim() !== "") updateDoc.description = p.description;
-        if (p.shortDescription && p.shortDescription.trim() !== "") updateDoc.shortDescription = p.shortDescription;
-        if (p.slug && p.slug.trim() !== "") updateDoc.slug = p.slug;
-        if (p.basePrice && p.basePrice > 0) updateDoc.basePrice = p.basePrice;
-        if (p.specialPrice !== undefined) updateDoc.specialPrice = p.specialPrice;
-        if (p.specialPriceFromDate) updateDoc.specialPriceFromDate = p.specialPriceFromDate;
-        if (p.specialPriceToDate) updateDoc.specialPriceToDate = p.specialPriceToDate;
-        if (p.weight !== undefined) updateDoc.weight = p.weight;
-        if (p.weightUnit) updateDoc.weightUnit = p.weightUnit;
-        if (p.length !== undefined) updateDoc.length = p.length;
-        if (p.breadth !== undefined) updateDoc.breadth = p.breadth;
-        if (p.height !== undefined) updateDoc.height = p.height;
-        if (p.dimensionUnit) updateDoc.dimensionUnit = p.dimensionUnit;
-        if (p.attributes && Object.keys(p.attributes).length > 0) updateDoc.attributes = p.attributes;
-        if (p.qty !== undefined) updateDoc.qty = p.qty;
-        if (p.stockStatus !== undefined) updateDoc.stockStatus = p.stockStatus;
-        if (p.brand) updateDoc.brand = p.brand;
-        if (p.magentoCategories) updateDoc.magentoCategories = p.magentoCategories;
-        if (p.categorySlugs && p.categorySlugs.length > 0) {
-          updateDoc.categorySlugs = p.categorySlugs;
-          updateDoc.categoryId = p.categoryId || p.categorySlugs[0];
-        }
-        if (p.metaTitle) updateDoc.metaTitle = p.metaTitle;
-        if (p.metaDescription) updateDoc.metaDescription = p.metaDescription;
-        if (p.metaKeywords) updateDoc.metaKeywords = p.metaKeywords;
-        if (p.sizeChart) updateDoc.sizeChart = p.sizeChart;
-        if (p.gender) updateDoc.gender = p.gender;
-
-        // 1. Photos Protection: Never overwrite with empty images if DB already has photos
-        if (p.images && p.images.length > 0) {
-          updateDoc.images = p.images;
-        }
-
-        // 2. Variants Merge Protection: Merge existing variants with updated variants
-        // Never wipe existing variants if CSV only has a subset of variants!
-        if (p.variants && p.variants.length > 0) {
-          if (existing.variants && existing.variants.length > 0) {
-            const newVarMap = new Map<string, any>(p.variants.map((v: any) => [v.sku, v]));
-            const mergedVariants: any[] = [];
-
-            // Update existing variants while preserving unmentioned ones
-            for (const oldVar of (existing.variants as any[])) {
-              if (newVarMap.has(oldVar.sku)) {
-                const updatedVar: any = newVarMap.get(oldVar.sku);
-                mergedVariants.push({
-                  ...(oldVar as object),
-                  ...(updatedVar as object),
-                  images: (updatedVar.images && updatedVar.images.length > 0) ? updatedVar.images : oldVar.images,
-                  imageUrl: updatedVar.imageUrl || oldVar.imageUrl,
-                });
-                newVarMap.delete(oldVar.sku);
-              } else {
-                // Keep existing variant untouched!
-                mergedVariants.push(oldVar);
-              }
-            }
-
-            // Append any newly added variants
-            for (const brandNewVar of Array.from(newVarMap.values())) {
-              mergedVariants.push(brandNewVar);
-            }
-
-            updateDoc.variants = mergedVariants;
-          } else {
-            updateDoc.variants = p.variants;
-          }
-        }
-
-        // 3. Status Protection: Never downgrade published product to draft
-        if (existing.status === "published" && p.status === "draft") {
-          updateDoc.status = "published";
-        } else if (p.status) {
-          updateDoc.status = p.status;
-        }
-
-        return {
-          updateOne: {
-            filter: { sku: p.sku },
-            update: { $set: updateDoc },
-            upsert: false // Existing product: strictly update, never duplicate
-          }
-        };
-      } else {
-        // Brand NEW Product Creation: Full document with default safeguards
-        const newDoc: any = { ...p };
-        if (!newDoc.images || newDoc.images.length === 0) delete newDoc.images;
-        if (!newDoc.variants || newDoc.variants.length === 0) delete newDoc.variants;
-
-        return {
-          updateOne: {
-            filter: { sku: p.sku },
-            update: { $set: newDoc },
-            upsert: true
-          }
-        };
+    const missingCaseBatchSkus = batchSkus.filter((s) => !existingMap.has(String(s).toLowerCase()));
+    if (missingCaseBatchSkus.length > 0) {
+      const ciBatchRegexes = missingCaseBatchSkus.map(
+        (s) => new RegExp(`^${String(s).replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&")}$`, "i")
+      );
+      const ciExistingInDb = await ProductModel.find({ sku: { $in: ciBatchRegexes } })
+        .select(selectFields)
+        .lean()
+        .exec();
+      for (const doc of ciExistingInDb as any[]) {
+        existingMap.set(String(doc.sku).toLowerCase(), doc);
       }
-    });
+    }
+
+    // Pre-check slug uniqueness for brand new products in this batch
+    const candidateNewSlugs = batch
+      .filter((p) => !existingMap.get(String(p.sku).toLowerCase()) && !((p as any)._oldSku && existingMap.get(String((p as any)._oldSku).toLowerCase())))
+      .map((p) => p.slug)
+      .filter(Boolean);
+    const existingSlugsSet = new Set<string>();
+    if (candidateNewSlugs.length > 0) {
+      const collidingSlugDocs = await ProductModel.find({ slug: { $in: candidateNewSlugs } })
+        .select("slug")
+        .lean()
+        .exec();
+      collidingSlugDocs.forEach((d: any) => {
+        if (d?.slug) existingSlugsSet.add(String(d.slug).toLowerCase());
+      });
+    }
+
+    const ops = batch
+      .map(p => {
+        const directExisting = existingMap.get(String(p.sku).toLowerCase());
+        const oldSkuExisting = !directExisting && (p as any)._oldSku
+          ? existingMap.get(String((p as any)._oldSku).toLowerCase())
+          : undefined;
+        const existing = directExisting || oldSkuExisting;
+
+        if (existing) {
+          const updateDoc = buildExistingProductUpdateDoc(p, existing);
+          if (oldSkuExisting && !directExisting) {
+            updateDoc.sku = p.sku;
+          }
+          if (p._present.hasBrand && (p as any).brandId) {
+            updateDoc.brandId = (p as any).brandId;
+          }
+          if (Object.keys(updateDoc).length === 0) {
+            return null;
+          }
+          return {
+            updateOne: {
+              filter: { _id: existing._id },
+              update: { $set: updateDoc },
+              upsert: false // Existing product: strictly update, never duplicate
+            }
+          };
+        } else {
+          // Brand NEW Product Creation: Strip metadata and apply Mongoose schema safeguards
+          const { _present, _oldSku, ...newDoc } = p as any;
+          newDoc.description = newDoc.description || newDoc.shortDescription || newDoc.name;
+          newDoc.countryOfManufacture = newDoc.countryOfManufacture || "India";
+
+          let finalSlug = newDoc.slug || slugify(newDoc.name || newDoc.sku);
+          if (existingSlugsSet.has(finalSlug.toLowerCase())) {
+            finalSlug = `${finalSlug}-${slugify(newDoc.sku)}`;
+          }
+          newDoc.slug = finalSlug;
+          existingSlugsSet.add(finalSlug.toLowerCase());
+
+          if (!newDoc.images || newDoc.images.length === 0) delete newDoc.images;
+          if (!newDoc.variants || newDoc.variants.length === 0) {
+            delete newDoc.variants;
+          } else {
+            newDoc.variants = newDoc.variants.map((v: any) => {
+              const { _present: _vp, ...cleanVariant } = v || {};
+              if (!cleanVariant.id) cleanVariant.id = randomUUID();
+              return cleanVariant;
+            });
+          }
+
+          return {
+            updateOne: {
+              filter: { sku: p.sku },
+              update: { $set: newDoc },
+              upsert: true
+            }
+          };
+        }
+      })
+      .filter((op): op is NonNullable<typeof op> => op !== null);
 
     try {
-      const result = await ProductModel.bulkWrite(ops, { ordered: false });
-      successCount += (result.upsertedCount + result.modifiedCount + (result.matchedCount - result.modifiedCount));
+      const result = ops.length > 0
+        ? await ProductModel.bulkWrite(ops, { ordered: false })
+        : { upsertedCount: 0, modifiedCount: 0, matchedCount: 0 };
+      createdProductsCount += result.upsertedCount;
+      updatedProductsCount += (result.modifiedCount + Math.max(0, result.matchedCount - result.modifiedCount));
       batchCount++;
 
-      // Sync batch to Meilisearch
+      // Sync batch to Meilisearch for new published creations or existing published products updated with catalog/stock/price fields
       try {
         const { indexProduct } = await import("../../core/search/meilisearch");
-        const productsToIndex = batch.filter(p => p.status === "published");
-        if (productsToIndex.length > 0) {
-          await Promise.all(productsToIndex.map(p => indexProduct({
-            _id: p.sku,
-            id: p.sku,
-            name: p.name,
-            slug: p.slug,
-            sku: p.sku,
-            basePrice: p.basePrice,
-            specialPrice: p.specialPrice,
-            categorySlugs: p.categorySlugs,
-            brand: p.brand,
-            stockStatus: p.stockStatus,
-            imageUrl: p.images?.[0]?.url || "",
-          } as any)));
+        const indexableSkus = batch
+          .filter((p) => {
+            const existing = existingMap.get(String(p.sku).toLowerCase());
+            if (!existing) {
+              return p.status === "published" && p._present?.hasName && p.basePrice > 0;
+            }
+            return (
+              p._present.hasName ||
+              p._present.hasBasePrice ||
+              p._present.hasSpecialPrice ||
+              p._present.hasQty ||
+              p._present.hasStockStatus ||
+              p._present.hasStatus ||
+              p._present.hasBrand ||
+              p._present.hasCategories
+            );
+          })
+          .map((p) => p.sku);
+
+        if (indexableSkus.length > 0) {
+          const syncedDocs = await ProductModel.find({ sku: { $in: indexableSkus }, status: "published" })
+            .select("name slug sku description categoryId basePrice specialPrice categorySlugs brand status visibility stockStatus qty salesCount createdAt variants tags metaKeywords images attributes")
+            .lean()
+            .exec();
+          if (syncedDocs.length > 0) {
+            await Promise.all(
+              syncedDocs.map((doc: any) => indexProduct(doc))
+            );
+          }
         }
       } catch (searchError: any) {
         logger.error(`[Job ${job.id}] Failed to sync batch ${batchCount} to Meilisearch: ${searchError.message}`);
@@ -839,19 +754,26 @@ export const migrationWorker = new Worker("migrationQueue", async (job: Job) => 
     logger.warn(`[Job ${job.id}] Failed to clear cache: ${err.message}`);
   }
 
-  const finalSuccessTotal = successCount + updatedVariantsCount;
-  logger.info(`[Job ${job.id}] Migration Complete! Total Success: ${finalSuccessTotal} (Products: ${successCount}, Variants: ${updatedVariantsCount}), Failed: ${failCount}, Skipped: ${skippedGarbageCount}`);
+  const finalSuccessTotal = createdProductsCount + updatedProductsCount + updatedVariantsCount;
+  logger.info(
+    `[Job ${job.id}] Migration Complete! Total Success: ${finalSuccessTotal} ` +
+      `(Created: ${createdProductsCount}, Updated: ${updatedProductsCount}, Variants: ${updatedVariantsCount}), ` +
+      `Failed: ${failCount}, Skipped: ${skippedGarbageCount}`
+  );
 
   return {
     success: true,
     successCount: finalSuccessTotal,
-    updatedProductsCount: successCount,
+    createdProductsCount,
+    updatedProductsCount,
     updatedVariantsCount,
     skippedGarbageCount,
     failCount,
     errors
   };
-}, { connection });
+}
+
+export const migrationWorker = new Worker("migrationQueue", processMigrationJob, { connection });
 
 migrationWorker.on("completed", (job: Job) => {
   logger.info(`Migration job ${job.id} has completed successfully!`);

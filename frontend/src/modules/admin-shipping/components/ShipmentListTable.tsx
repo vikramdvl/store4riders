@@ -55,7 +55,7 @@ export const ShipmentListTable = () => {
         refetch();
       },
       onError: (err: any) => {
-        toast.error(err?.message || "Failed to sync courier tracking");
+        toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to sync courier tracking");
       },
     });
   };
@@ -155,8 +155,8 @@ export const ShipmentListTable = () => {
   };
 
   const shipments = data?.items || [];
-  const total = data?.total || 0;
-  const totalPages = Math.ceil(total / limit) || 1;
+  const total = data?.totalCount ?? data?.total ?? 0;
+  const totalPages = data?.totalPages || Math.ceil(total / limit) || 1;
 
   return (
     <div className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden flex flex-col justify-between font-sans">

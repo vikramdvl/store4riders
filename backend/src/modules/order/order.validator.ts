@@ -10,7 +10,7 @@ import {
   exchangeDispatchSchema,
   exchangeRequestItemSchema,
 } from "@store4riders/shared-validation";
-import { extractUserFromAuth } from "../../core/middlewares/auth";
+import { extractUserFromAuth, extractAdminFromAuth } from "../../core/middlewares/auth";
 
 /**
  * OrderValidator
@@ -49,11 +49,42 @@ export class OrderValidator {
     try {
       userId = extractUserFromAuth(req);
     } catch {
-      // Allow guest users without tokens
+      // Allow guest users without tokens (verified via guestOrderToken)
     }
     const body = await req.json();
+    const guestToken =
+      (typeof body?.guestToken === "string" && body.guestToken.trim()) ||
+      req.headers.get("x-guest-order-token") ||
+      undefined;
     const data = verifyPaymentSchema.parse(body);
-    return { userId, data };
+    return { userId, data, ...(guestToken ? { guestToken } : {}) };
+  }
+
+  /**
+   * Validates the payload or query parameters for payment reconciliation sync.
+   *
+   * @param {NextRequest} req - The incoming HTTP request.
+   * @returns {Promise<{userId: string | undefined, orderId: string, guestToken?: string}>} The optional user ID and order reference.
+   */
+  static async validateSyncPayment(req: NextRequest) {
+    const { z } = require("zod");
+    let userId: string | undefined = undefined;
+    try {
+      userId = extractUserFromAuth(req);
+    } catch {
+      // Allow guest checkout reconciliation using order reference + guestOrderToken
+    }
+    const body = await req.json().catch(() => ({}));
+    const rawOrderId = body?.orderId || req.nextUrl?.searchParams?.get("orderId") || "";
+    const rawGuestToken =
+      (typeof body?.guestToken === "string" && body.guestToken.trim()) ||
+      req.nextUrl?.searchParams?.get("guestToken") ||
+      req.headers.get("x-guest-order-token") ||
+      undefined;
+    const parsed = z.object({
+      orderId: z.string().trim().min(1, "Order ID or Order Number is required").max(100),
+    }).parse({ orderId: rawOrderId });
+    return { userId, orderId: parsed.orderId, ...(rawGuestToken ? { guestToken: rawGuestToken } : {}) };
   }
 
   /**
@@ -64,6 +95,13 @@ export class OrderValidator {
    */
   static extractUserId(req: NextRequest) {
     return extractUserFromAuth(req);
+  }
+
+  /**
+   * Extracts an authenticated Admin Portal user's ID.
+   */
+  static extractAdminId(req: NextRequest) {
+    return extractAdminFromAuth(req);
   }
 
   static async validateAdminUpdateStatus(req: NextRequest) {

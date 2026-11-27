@@ -400,9 +400,10 @@ export const OrderItemGalleryModal: React.FC<OrderItemGalleryModalProps> = ({
             <div className="pt-3 border-t border-neutral-200 flex flex-col gap-2">
               {productSlug && (
                 <a
-                  href={`/products/${productSlug}`}
+                  href={`/${productSlug}`}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
                   className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-xl text-xs font-bold uppercase transition-colors shadow-sm"
                 >
                   <ArrowTopRightOnSquareIcon className="w-4 h-4" />
@@ -415,6 +416,7 @@ export const OrderItemGalleryModal: React.FC<OrderItemGalleryModalProps> = ({
                   href={`/admin/products/${productId}/edit`}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
                   className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-white hover:bg-neutral-100 text-neutral-700 border border-neutral-300 rounded-xl text-xs font-bold uppercase transition-colors"
                 >
                   <PencilSquareIcon className="w-4 h-4" />

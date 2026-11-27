@@ -678,7 +678,13 @@ export const AdminCategories = () => {
       faqs: faqs.filter((f) => f.question.trim() && f.answer.trim()),
       specDefinitions: specDefinitions.filter((s) => s.label.trim() && s.key.trim()),
     };
-    if (!payload.parentId || payload.parentId === "" || payload.parentId === "null") delete payload.parentId;
+    if (editingCategory) {
+      if (!payload.parentId || payload.parentId === "null") {
+        payload.parentId = "";
+      }
+    } else if (!payload.parentId || payload.parentId === "" || payload.parentId === "null") {
+      delete payload.parentId;
+    }
     if (!payload.slug || payload.slug.trim() === "") delete payload.slug;
 
     // Safety guard: Never wipe an existing category image/banner if left empty in the form during text/FAQ edits
@@ -1163,7 +1169,13 @@ export const AdminCategories = () => {
         maxWidth="max-w-3xl"
         title={editingCategory ? `Edit Category: ${editingCategory.name}` : parentForNewSubcategory ? `Add Subcategory / Submenu under "${parentForNewSubcategory.name}"` : "Add New Category"}
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+        <form
+          onSubmit={handleSubmit(onSubmit, (formErrors) => {
+            const firstErr = Object.values(formErrors)[0];
+            toast.error((firstErr as any)?.message || "Please check required category fields before saving.");
+          })}
+          className="space-y-4 max-h-[75vh] overflow-y-auto pr-1"
+        >
           {parentForNewSubcategory && !editingCategory && (
             <div className="p-3 bg-indigo-50/90 border border-indigo-200 rounded-xl flex items-center justify-between text-xs text-indigo-900 shadow-2xs">
               <div className="flex items-center gap-2">

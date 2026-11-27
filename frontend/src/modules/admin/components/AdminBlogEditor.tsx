@@ -381,7 +381,12 @@ export function AdminBlogEditor({ id }: AdminBlogEditorProps) {
       };
 
       if (isEditing && id) {
-        await updatePost.mutateAsync({ id, data: payload });
+        await updatePost.mutateAsync({
+          id,
+          data: payload,
+          previousSlug: post?.slug,
+          previousCategorySlug: post?.categorySlug,
+        });
       } else {
         await createPost.mutateAsync(payload);
         router.push("/admin/blog");

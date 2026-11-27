@@ -3,8 +3,14 @@ import { BrandModel } from "./brand.model";
 import { IBrand } from "@store4riders/shared-types";
 
 export class BrandRepository {
-  static async findAll(includeInactive: boolean = false): Promise<IBrand[]> {
-    const filter = includeInactive ? {} : { isActive: { $ne: false } };
+  static async findAll(includeInactive: boolean = false, includeDeleted: boolean = false): Promise<IBrand[]> {
+    const filter: Record<string, any> = {};
+    if (!includeDeleted) {
+      filter.isDeleted = { $ne: true };
+    }
+    if (!includeInactive) {
+      filter.isActive = { $ne: false };
+    }
     return BrandModel.find(filter)
       .collation({ locale: "en", strength: 2 })
       .sort({ name: 1 })
@@ -47,7 +53,7 @@ export class BrandRepository {
     return BrandModel.findOneAndUpdate(
       { $or: [{ slug: cleanSlug }, { slug: id }] },
       data,
-      { new: true, upsert: true }
+      { new: true }
     )
       .lean()
       .exec() as unknown as IBrand | null;

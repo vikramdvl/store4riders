@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { UploadService } from "./upload.service";
 import { UploadValidator } from "./upload.validator";
 import { ApiResponse } from "../../core/response/ApiResponse";
-import { extractUserFromAuth } from "../../core/middlewares/auth";
+import { extractAdminFromAuth } from "../../core/middlewares/auth";
+import { checkPermission } from "../../core/middlewares/permission";
+import { PermissionAction } from "../../core/config/permissions";
+import { UserService } from "../user/user.service";
 
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -35,14 +38,16 @@ const isSafeExternalHost = (hostname: string): boolean => {
  */
 export class UploadController {
   static async getPresignedUrl(req: NextRequest) {
+    const userId = extractAdminFromAuth(req);
+    await checkPermission(userId, PermissionAction.VIEW_DASHBOARD, UserService.getRole);
     const { fileName, fileType } = await UploadValidator.validatePresignedUrl(req);
     const url = await UploadService.generatePresignedUrl(fileName, fileType);
     return ApiResponse.success({ url }, "Presigned URL generated successfully");
   }
 
   static async directUpload(req: NextRequest) {
-    // Strictly require authenticated user/admin to prevent arbitrary S3 bucket flooding
-    extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
+    await checkPermission(userId, PermissionAction.VIEW_DASHBOARD, UserService.getRole);
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -57,6 +62,8 @@ export class UploadController {
   }
 
   static async scrapeUrl(req: NextRequest) {
+    const userId = extractAdminFromAuth(req);
+    await checkPermission(userId, PermissionAction.VIEW_DASHBOARD, UserService.getRole);
     const { url } = await UploadValidator.validateScrapeUrl(req);
     const parsed = new URL(url);
     if (!isSafeExternalHost(parsed.hostname)) {
@@ -68,6 +75,8 @@ export class UploadController {
   }
 
   static async importFromUrl(req: NextRequest) {
+    const userId = extractAdminFromAuth(req);
+    await checkPermission(userId, PermissionAction.VIEW_DASHBOARD, UserService.getRole);
     const { items, maxDimension, quality } = await UploadValidator.validateImportFromUrl(req);
     
     // Validate each URL is safe external host
@@ -93,7 +102,8 @@ export class UploadController {
    * Hardened against SSRF attacks.
    */
   static async proxyPreview(req: NextRequest): Promise<NextResponse> {
-    extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
+    await checkPermission(userId, PermissionAction.VIEW_DASHBOARD, UserService.getRole);
 
     const targetUrl = req.nextUrl.searchParams.get("url");
     if (!targetUrl) {

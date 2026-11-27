@@ -30,14 +30,17 @@ const nextConfig = {
   // The route handler's applyCors() is the primary mechanism — this ensures
   // browsers never see a response without CORS headers even during unhandled crashes.
   async headers() {
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:3000")
+      .split(",")[0]
+      .trim()
+      .replace(/\/+$/, "");
     return [
       {
         source: "/api/:path*",
         headers: [
           { key: "Access-Control-Allow-Origin", value: frontendUrl },
           { key: "Access-Control-Allow-Methods", value: "GET, POST, PUT, PATCH, DELETE, OPTIONS" },
-          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, x-request-id, idempotency-key, Idempotency-Key, Accept, Cache-Control, X-Requested-With, Pragma" },
+          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, x-auth-scope, X-Auth-Scope, x-request-id, idempotency-key, Idempotency-Key, Accept, Cache-Control, X-Requested-With, Pragma" },
           { key: "Access-Control-Allow-Credentials", value: "true" },
           { key: "Access-Control-Max-Age", value: "86400" },
         ],

@@ -39,12 +39,12 @@ export function AdminLogin() {
     // Override the useLogin hook's default redirect behavior by handling it here
     loginMutation.mutate(data, {
       onSuccess: (res) => {
-        // useLogin automatically calls setAuth
         if (res?.data?.user?.role && res.data.user.role !== "customer") {
-          router.push("/admin");
+          router.replace("/admin");
         } else {
-          // If a regular customer tries to use the admin login
-          router.push("/");
+          // Reject customer login attempts on the Admin Portal
+          useAuthStore.getState().logout();
+          router.replace("/");
         }
       }
     });

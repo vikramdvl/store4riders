@@ -2,9 +2,11 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/core/api/client";
 import { useBrands } from "@/core/hooks/useBrands";
 import { downloadBrandProductCsv } from "@/core/utils/exportCsv";
+import { revalidateStorefrontPaths } from "@/core/utils/revalidateStorefront";
 import {
   ArrowUpTrayIcon,
   ArrowDownTrayIcon,
@@ -14,18 +16,42 @@ import {
   CheckCircleIcon,
   XCircleIcon,
 } from "@heroicons/react/24/solid";
+import {
+  CsvMigrationPreviewReport,
+  CsvValidationPreviewModal,
+} from "./CsvValidationPreviewModal";
+
+interface MigrationCompletionResult {
+  successCount?: number;
+  createdProductsCount?: number;
+  updatedProductsCount?: number;
+  updatedVariantsCount?: number;
+  skippedGarbageCount?: number;
+  failCount?: number;
+  errors?: Array<{ batch?: number; sku?: string; error: string }>;
+}
 
 export function ProductMigration() {
+  const queryClient = useQueryClient();
   const { data: brands = [] } = useBrands();
   const [selectedExportBrand, setSelectedExportBrand] = useState("all");
   const [file, setFile] = useState<File | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewReport, setPreviewReport] = useState<CsvMigrationPreviewReport | null>(null);
+  const [pendingS3Key, setPendingS3Key] = useState<string | null>(null);
+  const [completionResult, setCompletionResult] = useState<MigrationCompletionResult | null>(null);
   const [status, setStatus] = useState<{ type: "idle" | "success" | "error"; message: string }>({ type: "idle", message: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setFile(e.target.files[0]);
+      setPreviewReport(null);
+      setIsPreviewOpen(false);
+      setPendingS3Key(null);
+      setCompletionResult(null);
       setStatus({ type: "idle", message: "" });
     }
   };
@@ -51,9 +77,18 @@ export function ProductMigration() {
             setJobId(null);
             setIsUploading(false);
             setStage("idle");
+            const resData: MigrationCompletionResult = data.result || {};
+            setCompletionResult(resData);
+            queryClient.invalidateQueries({ queryKey: ["products"] });
+            queryClient.invalidateQueries({ queryKey: ["product"] });
+            queryClient.invalidateQueries({ queryKey: ["products-by-skus"] });
+            queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+            queryClient.invalidateQueries({ queryKey: ["product_aggregations"] });
+            queryClient.invalidateQueries({ queryKey: ["search"] });
+            revalidateStorefrontPaths(["/", "/products", "/sale", "/search"]);
             setStatus({ 
               type: "success", 
-              message: `Upload Complete! Successfully processed ${data.result?.successCount || 0} products into the catalog.` 
+              message: `Upload Complete! Successfully processed ${resData.successCount || 0} record(s) into the catalog.` 
             });
           } else if (data.state === "failed") {
             clearInterval(interval);
@@ -62,37 +97,47 @@ export function ProductMigration() {
             setStage("idle");
             setStatus({ type: "error", message: `Upload failed: ${data.failedReason || "Processing error occurred in queue worker."}` });
           }
-        } catch (error) {
-          console.error("Failed to fetch job status", error);
+        } catch {
+          // Transient polling errors are retried cleanly on the next tick
         }
       }, 1000); // Poll every 1 second
     }
     return () => clearInterval(interval);
-  }, [jobId]);
+  }, [jobId, queryClient]);
 
-  const handleUpload = async () => {
+  const handleValidateAndPreview = async () => {
     if (!file) {
       setStatus({ type: "error", message: "Please select a file first." });
       return;
     }
 
-    if (!file.name.endsWith(".csv")) {
+    if (!file.name.toLowerCase().endsWith(".csv")) {
       setStatus({ type: "error", message: "Only .csv files are allowed." });
       return;
     }
 
-    setIsUploading(true);
-    setProgress(0);
+    setIsValidating(true);
+    setCompletionResult(null);
+    setPreviewReport(null);
+    setPendingS3Key(null);
     setUploadProgress(0);
-    setStatus({ type: "idle", message: "Initializing upload..." });
+    setStatus({ type: "idle", message: "Validating CSV rows against live catalog (dry run — no DB changes yet)..." });
 
     try {
-      let activeJobId: string | null = null;
+      let report: CsvMigrationPreviewReport | null = null;
+      const MAX_SERVERLESS_MULTIPART_BYTES = 4.5 * 1024 * 1024;
 
-      // STEP 1: Attempt direct-to-S3 presigned upload (Supports files > 4.5MB, bypassing Vercel payload limits)
-      try {
+      if (file.size <= MAX_SERVERLESS_MULTIPART_BYTES) {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const previewRes = await apiClient.post("/migration/preview", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        report = previewRes.data?.data || null;
+      } else {
         setStage("uploading_s3");
-        setStatus({ type: "idle", message: "Step 1/2: Uploading CSV directly to AWS S3 storage..." });
+        setStatus({ type: "idle", message: "Large CSV detected: staging securely to AWS S3 for validation..." });
 
         const presignedRes = await apiClient.post("/migration/presigned-url", {
           fileName: file.name,
@@ -101,68 +146,145 @@ export function ProductMigration() {
 
         const { uploadUrl, s3Key } = presignedRes.data.data;
 
-        // Direct PUT to S3 using raw axios (omits bearer token headers that S3 signature rejects)
         await axios.put(uploadUrl, file, {
-          headers: {
-            "Content-Type": file.type || "text/csv",
-          },
+          headers: { "Content-Type": file.type || "text/csv" },
           onUploadProgress: (progressEvent) => {
             if (progressEvent.total) {
-              const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-              setUploadProgress(percent);
+              setUploadProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
             }
           },
         });
 
-        // STEP 2: Enqueue background migration job from S3 key
+        setPendingS3Key(s3Key);
         setStage("queueing");
-        setStatus({ type: "idle", message: "Step 2/2: Enqueueing background migration job..." });
+        setStatus({ type: "idle", message: "Inspecting CSV rows against live catalog..." });
 
-        const startRes = await apiClient.post("/migration/start", {
+        const previewRes = await apiClient.post("/migration/preview", {
           s3Key,
           fileName: file.name,
         });
+        report = previewRes.data?.data || null;
+      }
 
-        activeJobId = startRes.data?.data?.jobId;
-      } catch (s3Error: any) {
-        console.warn("Direct S3 upload failed; evaluating fallback options", s3Error);
+      if (!report) {
+        throw new Error("Validation preview did not return a report.");
+      }
 
-        // If file is > 4.5MB, Vercel will reject it with 413, so explain clearly
-        if (file.size > 4.5 * 1024 * 1024) {
-          throw new Error(
-            s3Error.response?.data?.message ||
-            s3Error.message ||
-            `S3 direct upload failed and file (${(file.size / 1024 / 1024).toFixed(1)} MB) exceeds serverless payload limits. Please verify AWS S3 credentials.`
-          );
-        }
+      setPreviewReport(report);
+      setIsPreviewOpen(true);
+      setStage("idle");
+      setStatus({ type: "idle", message: "" });
+    } catch (error: any) {
+      setStage("idle");
+      setStatus({
+        type: "error",
+        message:
+          error.response?.data?.error ||
+          error.response?.data?.message ||
+          error.message ||
+          "Failed to validate CSV file. Please verify headers and format.",
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  };
 
-        // Small file fallback to multipart
-        setStatus({ type: "idle", message: "Direct S3 unavailable. Uploading via server route..." });
-        const formData = new FormData();
-        formData.append("file", file);
+  const handleConfirmMigration = async () => {
+    if (!file && !pendingS3Key) {
+      setStatus({ type: "error", message: "Please select a CSV file first." });
+      return;
+    }
 
-        const response = await apiClient.post("/migration/upload", formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
+    setIsPreviewOpen(false);
+    setIsUploading(true);
+    setProgress(0);
+    setUploadProgress(0);
+    setCompletionResult(null);
+    setStatus({ type: "idle", message: "Initializing bulk catalog update..." });
+
+    try {
+      let activeJobId: string | null = null;
+
+      if (pendingS3Key) {
+        setStage("queueing");
+        setStatus({ type: "idle", message: "Enqueueing validated CSV from AWS S3..." });
+
+        const startRes = await apiClient.post("/migration/start", {
+          s3Key: pendingS3Key,
+          fileName: file?.name,
         });
+        activeJobId = startRes.data?.data?.jobId;
+      } else if (file) {
+        // Attempt direct-to-S3 presigned upload first, with multipart fallback for smaller CSVs
+        try {
+          setStage("uploading_s3");
+          setStatus({ type: "idle", message: "Step 1/2: Uploading validated CSV to AWS S3 storage..." });
 
-        activeJobId = response.data?.data?.jobId;
+          const presignedRes = await apiClient.post("/migration/presigned-url", {
+            fileName: file.name,
+            fileType: file.type || "text/csv",
+          });
+
+          const { uploadUrl, s3Key } = presignedRes.data.data;
+
+          await axios.put(uploadUrl, file, {
+            headers: {
+              "Content-Type": file.type || "text/csv",
+            },
+            onUploadProgress: (progressEvent) => {
+              if (progressEvent.total) {
+                const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                setUploadProgress(percent);
+              }
+            },
+          });
+
+          setStage("queueing");
+          setStatus({ type: "idle", message: "Step 2/2: Enqueueing background migration job..." });
+
+          const startRes = await apiClient.post("/migration/start", {
+            s3Key,
+            fileName: file.name,
+          });
+
+          activeJobId = startRes.data?.data?.jobId;
+        } catch (s3Error: any) {
+          if (file.size > 4.5 * 1024 * 1024) {
+            throw new Error(
+              s3Error.response?.data?.message ||
+              s3Error.message ||
+              `S3 direct upload failed and file (${(file.size / 1024 / 1024).toFixed(1)} MB) exceeds serverless payload limits. Please verify AWS S3 credentials.`
+            );
+          }
+
+          setStatus({ type: "idle", message: "Direct S3 unavailable. Uploading via server route..." });
+          const formData = new FormData();
+          formData.append("file", file);
+
+          const response = await apiClient.post("/migration/upload", formData, {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          });
+
+          activeJobId = response.data?.data?.jobId;
+        }
       }
 
       if (activeJobId) {
         setJobId(activeJobId);
         setStage("processing");
-        setStatus({ type: "idle", message: "CSV queued! BullMQ worker is processing catalog..." });
+        setStatus({ type: "idle", message: "CSV queued! BullMQ worker is applying catalog updates..." });
       } else {
         setIsUploading(false);
         setStage("idle");
         setStatus({ type: "error", message: "Failed to obtain migration Job ID from server." });
       }
 
+      setPendingS3Key(null);
+      setPreviewReport(null);
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-
     } catch (error: any) {
       setIsUploading(false);
       setStage("idle");
@@ -233,7 +355,7 @@ export function ProductMigration() {
               📘 CSV Column Reference & Formatting Guide (For Admin)
             </span>
             <span className="text-[11px] font-semibold text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded">
-              Standard 39 Columns
+              45 Base Columns + Attributes
             </span>
           </div>
 
@@ -266,13 +388,13 @@ export function ProductMigration() {
 
             <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
               <span className="font-bold text-slate-800 font-sans block text-xs border-b border-slate-100 pb-1">
-                3. Swatches & Variations
+                3. Shipping, Dimensions &amp; Variants
               </span>
-              <div><strong className="text-brand">color_swatches</strong>:</div>
-              <div className="text-[10px] text-slate-600 font-sans leading-tight pl-2">
-                <code>Matte Black=#1F1F1F|Red=#DC2626</code>
-              </div>
-              <div className="pt-1"><strong className="text-brand">configurable_variations</strong>:</div>
+              <div><strong className="text-brand">weight</strong> + <strong className="text-brand">weight_unit</strong> (kg / g / ml / L)</div>
+              <div><strong className="text-brand">length, breadth, height</strong> + <strong className="text-brand">dimension_unit</strong> (cm / in / mm)</div>
+              <div><strong className="text-brand">dimensions / lbh</strong>: <code className="text-[10px]">36x28x28</code></div>
+              <div><strong className="text-brand">ship_cost</strong>: Heavy item fee (₹)</div>
+              <div className="pt-0.5"><strong className="text-brand">configurable_variations</strong>:</div>
               <div className="text-[10px] text-slate-600 font-sans leading-tight pl-2 truncate">
                 <code>sku=SKU-1,price=4500,qty=10,color=Black,size=M|...</code>
               </div>
@@ -281,7 +403,7 @@ export function ProductMigration() {
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900">
             <span>
-              💡 <strong>Bulk Stock Update:</strong> You can upload a simple CSV with only <code className="font-bold">sku</code> and <code className="font-bold">qty</code> (or <code className="font-bold">price</code>) to instantly update inventory across thousands of variants!
+              💡 <strong>Safe Partial Bulk Update:</strong> You can upload a focused CSV with only <code className="font-bold">sku</code> and <code className="font-bold">weight, length, breadth, height</code> (or <code className="font-bold">qty, price</code>) — omitted titles, slugs, photos, stock, and specifications are preserved automatically!
             </span>
           </div>
         </div>
@@ -343,21 +465,69 @@ export function ProductMigration() {
                 </div>
               </div>
             )}
+
+            {status.type === "success" && completionResult && (
+              <div className="mt-4 space-y-3 border-t border-green-200 pt-3 text-xs">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded border border-green-200 bg-white px-3 py-2">
+                    <div className="text-gray-500">Created Products</div>
+                    <div className="text-base font-bold text-emerald-700">
+                      {completionResult.createdProductsCount ?? 0}
+                    </div>
+                  </div>
+                  <div className="rounded border border-green-200 bg-white px-3 py-2">
+                    <div className="text-gray-500">Updated Products</div>
+                    <div className="text-base font-bold text-blue-700">
+                      {completionResult.updatedProductsCount ?? 0}
+                    </div>
+                  </div>
+                  <div className="rounded border border-green-200 bg-white px-3 py-2">
+                    <div className="text-gray-500">Variants Updated</div>
+                    <div className="text-base font-bold text-indigo-700">
+                      {completionResult.updatedVariantsCount ?? 0}
+                    </div>
+                  </div>
+                  <div className="rounded border border-green-200 bg-white px-3 py-2">
+                    <div className="text-gray-500">Skipped Rows</div>
+                    <div className="text-base font-bold text-amber-700">
+                      {completionResult.skippedGarbageCount ?? 0}
+                    </div>
+                  </div>
+                </div>
+
+                {completionResult.errors && completionResult.errors.length > 0 && (
+                  <details className="rounded border border-amber-200 bg-amber-50 p-2 text-amber-900">
+                    <summary className="cursor-pointer font-semibold">
+                      View {completionResult.errors.length} batch warning/error(s)
+                    </summary>
+                    <ul className="mt-2 list-disc list-inside space-y-1 font-mono text-[11px]">
+                      {completionResult.errors.map((err, idx) => (
+                        <li key={idx}>
+                          {err.sku ? `[${err.sku}] ` : err.batch ? `[Batch ${err.batch}] ` : ""}
+                          {err.error}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
           </div>
         )}
 
         <div className="mt-8 flex justify-end">
           <button
-            onClick={handleUpload}
-            disabled={!file || isUploading}
+            type="button"
+            onClick={handleValidateAndPreview}
+            disabled={!file || isUploading || isValidating}
             className={`px-6 py-2 rounded-md font-medium text-white transition-colors flex items-center ${
-              !file || isUploading ? "bg-gray-400 cursor-not-allowed" : "bg-black hover:bg-gray-800"
+              !file || isUploading || isValidating ? "bg-gray-400 cursor-not-allowed" : "bg-black hover:bg-gray-800"
             }`}
           >
-            {isUploading && (
+            {(isValidating || isUploading) && (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin -ml-1 mr-2" />
             )}
-            {isUploading ? "Uploading & Processing..." : "Start Bulk Upload"}
+            {isValidating ? "Validating CSV..." : isUploading ? "Uploading & Processing..." : "Validate & Preview CSV"}
           </button>
         </div>
       </div>
@@ -368,12 +538,24 @@ export function ProductMigration() {
           How it works
         </h3>
         <ul className="list-disc list-inside text-sm text-blue-800 space-y-1">
-          <li>This process happens entirely in the background. Your browser will not freeze.</li>
-          <li>Products with the same SKU will automatically update (Upsert) instead of duplicating.</li>
-          <li>Configurable variants are merged automatically using their child SKUs.</li>
-          <li>All extra columns from Magento are automatically saved securely into the database attributes.</li>
+          <li>This process validates all rows first in a popup preview before making any database updates.</li>
+          <li>Products with the same SKU safely patch ONLY filled columns without wiping existing fields or photos.</li>
+          <li>New products, SKU renames (<code className="font-mono">old_sku</code>), and configurable variants merge automatically.</li>
+          <li>All extra columns from Magento are automatically saved cleanly into database attributes without losing existing specs.</li>
         </ul>
       </div>
+
+      <CsvValidationPreviewModal
+        isOpen={isPreviewOpen}
+        fileName={file?.name || ""}
+        report={previewReport}
+        isConfirming={isUploading}
+        onCancel={() => {
+          setIsPreviewOpen(false);
+          setStatus({ type: "idle", message: "" });
+        }}
+        onConfirm={handleConfirmMigration}
+      />
     </div>
   );
 }

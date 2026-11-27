@@ -420,10 +420,7 @@ export function AdminHomepageSectionsModule() {
       { sections: newSections },
       {
         onSuccess: () => {
-          if (successMsg) toast.success(successMsg);
-        },
-        onError: (err: any) => {
-          toast.error(err?.response?.data?.message || err?.message || "Failed to update homepage in database");
+          if (successMsg) toast.info(successMsg);
         },
       }
     );
@@ -746,17 +743,7 @@ export function AdminHomepageSectionsModule() {
   };
 
   const handleSave = () => {
-    updateMutation.mutate(
-      { sections: sectionsState },
-      {
-        onSuccess: () => {
-          toast.success("Homepage sections saved successfully!");
-        },
-        onError: (err: any) => {
-          toast.error(err?.response?.data?.message || err?.message || "Failed to update homepage sections");
-        },
-      }
-    );
+    updateMutation.mutate({ sections: sectionsState });
   };
 
   if (isLoading) {

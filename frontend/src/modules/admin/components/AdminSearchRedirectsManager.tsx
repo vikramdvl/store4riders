@@ -232,7 +232,7 @@ export function AdminSearchRedirectsManager() {
       setIsModalOpen(false);
       refetch();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to save search redirect rule");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to save search redirect rule");
     }
   };
 
@@ -246,7 +246,7 @@ export function AdminSearchRedirectsManager() {
       toast.success(`Rule "${item.searchTerm}" ${!item.isActive ? "activated" : "deactivated"}`);
       refetch();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to toggle status");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to toggle status");
     }
   };
 
@@ -260,7 +260,7 @@ export function AdminSearchRedirectsManager() {
       toast.success(`Search redirect for "${item.searchTerm}" deleted`);
       refetch();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to delete rule");
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to delete rule");
     }
   };
 

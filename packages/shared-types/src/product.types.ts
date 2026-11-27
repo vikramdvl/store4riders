@@ -1,6 +1,6 @@
 export interface IFaq { question: string; answer: string; }
 export interface IProductImage { id: string; url: string; altText?: string; }
-export interface IProductVariant { id: string; sku: string; price: number; specialPrice?: number; stock: number; attributes: Record<string, string>; imageUrl?: string; altText?: string; weight?: number; length?: number; breadth?: number; height?: number; status?: "enabled" | "disabled"; visibility?: string; images?: IProductImage[]; hsnCode?: string; }
+export interface IProductVariant { id: string; sku: string; price: number; specialPrice?: number; stock: number; attributes: Record<string, string>; imageUrl?: string; altText?: string; weight?: number; weightUnit?: "kg" | "g" | "ml" | "L" | string; length?: number; breadth?: number; height?: number; dimensionUnit?: "cm" | "in" | "mm" | string; status?: "enabled" | "disabled"; visibility?: string; images?: IProductImage[]; hsnCode?: string; }
 export interface IProduct {
   _id: string;
   name: string;

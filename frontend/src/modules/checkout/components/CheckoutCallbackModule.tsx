@@ -11,12 +11,15 @@ export const CheckoutCallbackModule = () => {
   
   const status = searchParams.get("status");
   const orderId = searchParams.get("orderId");
+  const guestToken = searchParams.get("guestToken");
+  const guestTokenSuffix = guestToken ? `&guestToken=${encodeURIComponent(guestToken)}` : "";
   
   const [countdown, setCountdown] = useState(5);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const isCancelled = status === "cancel" || status === "cancelled";
   const isSuccess = status === "success";
+  const isVerifying = status === "pending" || status === "verifying";
 
   useEffect(() => {
     timerRef.current = setInterval(() => {
@@ -29,18 +32,21 @@ export const CheckoutCallbackModule = () => {
   }, []);
 
   useEffect(() => {
-    if (countdown <= 0) {
+    if (countdown <= 0 || isVerifying) {
       if (isSuccess) {
         router.push("/account/orders");
       } else if (isCancelled) {
-        const cancelledUrl = orderId ? `/checkout?cancelled=true&orderId=${encodeURIComponent(orderId)}` : "/checkout?cancelled=true";
+        const cancelledUrl = orderId
+          ? `/checkout?cancelled=true&orderId=${encodeURIComponent(orderId)}${guestTokenSuffix}`
+          : "/checkout?cancelled=true";
         router.push(cancelledUrl);
+      } else if (orderId) {
+        router.push(`/checkout?verifying=true&orderId=${encodeURIComponent(orderId)}${guestTokenSuffix}`);
       } else {
-        const failedUrl = orderId ? `/checkout?failed=true&orderId=${encodeURIComponent(orderId)}` : "/checkout?failed=true";
-        router.push(failedUrl);
+        router.push("/checkout?failed=true");
       }
     }
-  }, [countdown, router, isSuccess, isCancelled, orderId]);
+  }, [countdown, router, isSuccess, isCancelled, isVerifying, orderId, guestTokenSuffix]);
 
   return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center p-4">
@@ -52,13 +58,11 @@ export const CheckoutCallbackModule = () => {
             🛒
           </div>
         ) : (
-          <div className="w-20 h-20 rounded-full bg-amber-50 border-2 border-amber-300 flex items-center justify-center text-3xl mb-4 text-amber-600">
-            ⏳
-          </div>
+          <div className="w-16 h-16 rounded-full border-4 border-slate-900 border-t-transparent animate-spin mb-4" />
         )}
         
         <h1 className="text-2xl font-bold mb-2 text-neutral-900">
-          {isSuccess ? "Payment Successful!" : isCancelled ? "Payment Cancelled" : "Checking Payment Status"}
+          {isSuccess ? "Payment Successful!" : isCancelled ? "Payment Cancelled" : "Verifying Payment Status..."}
         </h1>
         
         <p className="text-neutral-600 mb-6 text-sm leading-relaxed">
@@ -66,12 +70,14 @@ export const CheckoutCallbackModule = () => {
             ? `Your order ${orderId ? "#" + orderId : ""} has been placed successfully.` 
             : isCancelled
             ? "You cancelled the payment. All your items are safely in your cart. Returning to checkout..."
-            : "Redirecting to checkout. If money was debited, your order will be confirmed automatically."}
+            : "Confirming transaction status with your bank. Please wait..."}
         </p>
 
-        <p className="text-xs text-neutral-400 mb-6">
-          Redirecting in {countdown} seconds...
-        </p>
+        {!isVerifying && (
+          <p className="text-xs text-neutral-400 mb-6">
+            Redirecting in {countdown} seconds...
+          </p>
+        )}
 
         <Button 
           onClick={() => {
@@ -79,13 +85,15 @@ export const CheckoutCallbackModule = () => {
               router.push("/account/orders");
             } else if (isCancelled) {
               router.push(orderId ? `/checkout?cancelled=true&orderId=${encodeURIComponent(orderId)}` : "/checkout?cancelled=true");
+            } else if (orderId) {
+              router.push(`/checkout?verifying=true&orderId=${encodeURIComponent(orderId)}`);
             } else {
-              router.push(orderId ? `/checkout?failed=true&orderId=${encodeURIComponent(orderId)}` : "/checkout?failed=true");
+              router.push("/checkout?failed=true");
             }
           }}
           className="w-full"
         >
-          {isSuccess ? "View Orders Now" : isCancelled ? "Back to Checkout" : "Check Status on Checkout"}
+          {isSuccess ? "View Orders Now" : isCancelled ? "Back to Checkout" : "Verify Payment Status"}
         </Button>
       </div>
     </div>

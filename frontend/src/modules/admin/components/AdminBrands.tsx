@@ -757,7 +757,8 @@ export function AdminBrands() {
                 if (!editingBrand) {
                   setValue(
                     "slug", 
-                    e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+                    e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
+                    { shouldValidate: true }
                   );
                 }
               }}

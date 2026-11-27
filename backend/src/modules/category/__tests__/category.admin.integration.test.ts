@@ -209,7 +209,7 @@ describe("Admin Category & Submenu Persistence — End-to-End Vitest Suite", () 
       const json = await response!.json();
       expect(json.success).toBe(true);
       expect(CategoryRepository.update).toHaveBeenCalledWith("cat_luggage", expect.objectContaining({
-        parentId: undefined,
+        parentId: "",
       }));
     });
 

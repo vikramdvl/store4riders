@@ -77,9 +77,11 @@ const productSchema = new Schema<IProduct>(
         imageUrl: { type: String }, // Legacy compatibility
         altText: { type: String },
         weight: { type: Number },
+        weightUnit: { type: String, enum: ["kg", "g", "ml", "L"] },
         length: { type: Number },
         breadth: { type: Number },
         height: { type: Number },
+        dimensionUnit: { type: String, enum: ["cm", "in", "mm"] },
         hsnCode: { type: String },
         status: { type: String, enum: ["enabled", "disabled"], default: "enabled" },
         visibility: { type: String },

@@ -172,6 +172,29 @@ export class BlogRepository {
       .exec() as unknown as Promise<IBlogCategory | null>;
   }
 
+  static async syncPostsOnCategoryUpdate(
+    categoryId: string,
+    previousSlug: string,
+    categoryName: string,
+    categorySlug: string
+  ): Promise<void> {
+    await BlogPostModel.updateMany(
+      { $or: [{ categoryId }, { categorySlug: previousSlug }] },
+      { $set: { categoryName, categorySlug } }
+    ).exec();
+  }
+
+  static async clearCategoryFromPosts(categoryId: string, categorySlug?: string): Promise<void> {
+    const conditions: Record<string, any>[] = [{ categoryId }];
+    if (categorySlug) {
+      conditions.push({ categorySlug });
+    }
+    await BlogPostModel.updateMany(
+      { $or: conditions },
+      { $unset: { categoryId: 1, categoryName: 1, categorySlug: 1 } }
+    ).exec();
+  }
+
   static async updateCategoryArticleCount(slugOrId: string, count: number): Promise<void> {
     const filter = mongoose.Types.ObjectId.isValid(slugOrId)
       ? { $or: [{ _id: slugOrId }, { slug: slugOrId.toLowerCase() }] }

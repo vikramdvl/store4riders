@@ -102,6 +102,19 @@ const nextConfig = {
           },
         ],
       },
+      {
+        source: '/checkout/:path*',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+          },
+          {
+            key: 'Cache-Control',
+            value: 'no-store, no-cache, must-revalidate, private',
+          },
+        ],
+      },
     ];
   },
   images: {

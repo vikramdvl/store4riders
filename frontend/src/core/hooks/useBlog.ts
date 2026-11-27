@@ -153,7 +153,15 @@ export function useCreateBlogPost() {
 export function useUpdateBlogPost() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<IBlogPost> }) => {
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: Partial<IBlogPost>;
+      previousSlug?: string;
+      previousCategorySlug?: string;
+    }) => {
       const response = await apiClient.put(`/blog/admin/posts/${id}`, data);
       return response.data.data;
     },
@@ -165,19 +173,32 @@ export function useUpdateBlogPost() {
         queryClient.invalidateQueries({ queryKey: ["blog-post", updatedPost.slug] });
         queryClient.invalidateQueries({ queryKey: ["blog-related", updatedPost.slug] });
       }
+      if (variables.previousSlug && variables.previousSlug !== updatedPost?.slug) {
+        queryClient.invalidateQueries({ queryKey: ["blog-post", variables.previousSlug] });
+        queryClient.invalidateQueries({ queryKey: ["blog-related", variables.previousSlug] });
+      }
       queryClient.invalidateQueries({ queryKey: ["blog-categories"] });
       queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
       revalidateStorefrontPaths([
         "/guides",
         updatedPost?.slug ? `/guides/post/${updatedPost.slug}` : undefined,
         updatedPost?.slug ? `/guides/${updatedPost.slug}` : undefined,
+        variables.previousSlug && variables.previousSlug !== updatedPost?.slug
+          ? `/guides/post/${variables.previousSlug}`
+          : undefined,
+        variables.previousSlug && variables.previousSlug !== updatedPost?.slug
+          ? `/guides/${variables.previousSlug}`
+          : undefined,
         updatedPost?.categorySlug ? `/guides/category/${updatedPost.categorySlug}` : undefined,
         updatedPost?.categorySlug ? `/guides/${updatedPost.categorySlug}` : undefined,
+        variables.previousCategorySlug && variables.previousCategorySlug !== updatedPost?.categorySlug
+          ? `/guides/category/${variables.previousCategorySlug}`
+          : undefined,
       ]);
       toast.success("Blog post updated successfully!");
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || "Failed to update blog post");
+      toast.error(error.response?.data?.error || error.response?.data?.message || "Failed to update blog post");
     },
   });
 }
@@ -252,6 +273,8 @@ export function useUpdateBlogCategory() {
     onSuccess: (updatedCat) => {
       queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
       queryClient.invalidateQueries({ queryKey: ["blog-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-blog-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["blog-posts"] });
       revalidateStorefrontPaths([
         "/guides",
         updatedCat?.slug ? `/guides/category/${updatedCat.slug}` : undefined,
@@ -260,7 +283,7 @@ export function useUpdateBlogCategory() {
       toast.success("Category updated successfully!");
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || "Failed to update category");
+      toast.error(error.response?.data?.error || error.response?.data?.message || "Failed to update category");
     },
   });
 }
@@ -275,6 +298,8 @@ export function useDeleteBlogCategory() {
     onSuccess: (deletedCat) => {
       queryClient.invalidateQueries({ queryKey: ["admin-blog-categories"] });
       queryClient.invalidateQueries({ queryKey: ["blog-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-blog-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["blog-posts"] });
       revalidateStorefrontPaths([
         "/guides",
         deletedCat?.slug ? `/guides/category/${deletedCat.slug}` : undefined,
@@ -283,7 +308,7 @@ export function useDeleteBlogCategory() {
       toast.success("Category deleted successfully!");
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || "Failed to delete category");
+      toast.error(error.response?.data?.error || error.response?.data?.message || "Failed to delete category");
     },
   });
 }

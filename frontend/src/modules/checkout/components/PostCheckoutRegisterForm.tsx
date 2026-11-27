@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from "react";
-import { useRegister, useLogin, useForgotPassword } from "@/core/hooks/useAuth";
+import React, { useState, useEffect, useId } from "react";
+import { useRegister, useLogin, useForgotPassword, useSendRegisterOtp } from "@/core/hooks/useAuth";
 import { apiClient } from "@/core/api/client";
 import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { toast } from "sonner";
+import { EmailOtpVerificationStep } from "@/modules/auth/components/EmailOtpVerificationStep";
 
 const ValidationItem = ({ isValid, text }: { isValid: boolean; text: string }) => (
   <div className="flex items-center gap-2 mb-1">
     {isValid ? (
-      <CheckCircleIcon className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+      <CheckCircleIcon className="w-4 h-4 text-emerald-500 flex-shrink-0" aria-hidden="true" />
     ) : (
-      <XCircleIcon className="w-4 h-4 text-neutral-300 flex-shrink-0" />
+      <XCircleIcon className="w-4 h-4 text-neutral-300 flex-shrink-0" aria-hidden="true" />
     )}
     <span className={`text-[10px] ${isValid ? "text-emerald-700 font-medium" : "text-neutral-500"}`}>
       {text}
@@ -38,18 +38,39 @@ export function PostCheckoutRegisterForm({
   email,
   name,
   phone,
-  countryCode,
   shippingAddress,
 }: PostCheckoutRegisterProps) {
   const [password, setPassword] = useState("");
   const [isExistingAccount, setIsExistingAccount] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
   const [resetSent, setResetSent] = useState(false);
-  
+
+  const [step, setStep] = useState<"details" | "otp">("details");
+  const [otp, setOtp] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [sendError, setSendError] = useState("");
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [otpSentEmail, setOtpSentEmail] = useState<string | null>(null);
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number>(0);
+
+  const emailFieldId = useId();
+  const passwordFieldId = useId();
+
+  const sendOtpMutation = useSendRegisterOtp();
   const registerMutation = useRegister({ disableRedirect: true });
   const loginMutation = useLogin({ disableRedirect: true });
   const forgotMutation = useForgotPassword();
   const router = useRouter();
+
+  const normalizedEmail = (email || "").trim().toLowerCase();
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownSeconds((prev) => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSeconds]);
 
   const handleForgotPassword = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -72,11 +93,20 @@ export function PostCheckoutRegisterForm({
   const hasMinLength = password.length >= 8;
   const hasNumber = /\d/.test(password);
   const hasUpperAndLowerCase = /[A-Z]/.test(password) && /[a-z]/.test(password);
-  const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password);
-  
+  const hasSymbol = /[^A-Za-z0-9\s]/.test(password);
+
   const isPasswordValid = hasMinLength && hasNumber && hasUpperAndLowerCase && hasSymbol;
 
   useEffect(() => {
+    setStep("details");
+    setOtp("");
+    setOtpError("");
+    setSendError("");
+    setOtpSentEmail(null);
+    setOtpExpiresAt(0);
+    setCooldownSeconds(0);
+    setIsChecking(true);
+
     let mounted = true;
     const checkEmail = async () => {
       try {
@@ -84,14 +114,16 @@ export function PostCheckoutRegisterForm({
         if (mounted) {
           setIsExistingAccount(res.data?.data?.exists || false);
         }
-      } catch (err) {
-        // Fallback to non-existing, if error
+      } catch {
+        // Fallback to non-existing if check fails
       } finally {
         if (mounted) setIsChecking(false);
       }
     };
     checkEmail();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [email]);
 
   useEffect(() => {
@@ -103,65 +135,114 @@ export function PostCheckoutRegisterForm({
     }
   }, [registerMutation.isSuccess, loginMutation.isSuccess, router]);
 
+  const buildSanitizedRegistrationNames = () => {
+    const sanitizePart = (str: string) => str.replace(/[^a-zA-Z\s\-']/g, "").trim();
+    const cleanedFullName = sanitizePart(name || "");
+    const nameParts = cleanedFullName ? cleanedFullName.split(/\s+/) : [];
+    let firstName = nameParts[0] || "";
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+
+    if (!firstName || firstName.length < 2) {
+      const emailPrefix = sanitizePart((email || "").split("@")[0] || "");
+      firstName = emailPrefix.length >= 2 ? emailPrefix.slice(0, 50) : "Rider";
+    }
+
+    return { firstName, lastName };
+  };
+
+  const requestOtp = (sourceStep: "details" | "otp" = step) => {
+    setOtpError("");
+    setSendError("");
+    sendOtpMutation.mutate(
+      { email: normalizedEmail },
+      {
+        onSuccess: (res: any) => {
+          const ttlSec = Number(res?.data?.expiresInSeconds || 600);
+          const cooldownSec = Number(res?.data?.cooldownSeconds || 60);
+          setOtpSentEmail(normalizedEmail);
+          setOtpExpiresAt(Date.now() + ttlSec * 1000);
+          setOtp("");
+          setCooldownSeconds(cooldownSec);
+          setStep("otp");
+        },
+        onError: (err: any) => {
+          const message = err?.response?.data?.error || "Failed to send verification code. Please try again.";
+          if (sourceStep === "otp") {
+            setOtpError(message);
+          } else {
+            setSendError(message);
+          }
+        },
+      }
+    );
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!password) return;
 
     if (isExistingAccount) {
-      // Login Flow
       const trimmedName = (name || "").trim();
       const nameParts = trimmedName ? trimmedName.split(/\s+/) : [];
       const checkoutFirstName = nameParts[0] || "";
       const checkoutLastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
 
-      loginMutation.mutate({ email, password }, {
-        onSuccess: async () => {
-          if (checkoutFirstName) {
-            try {
-              await apiClient.put("/users/me", {
-                firstName: checkoutFirstName,
-                lastName: checkoutLastName,
-              });
-            } catch {}
-          }
-          if (shippingAddress && shippingAddress.street) {
-            try {
-              await apiClient.post("/users/me/addresses", {
-                ...shippingAddress,
-                isDefault: true,
-              });
-            } catch {}
-          }
+      loginMutation.mutate(
+        { email, password },
+        {
+          onSuccess: async () => {
+            if (checkoutFirstName) {
+              try {
+                await apiClient.put("/users/me", {
+                  firstName: checkoutFirstName,
+                  lastName: checkoutLastName,
+                });
+              } catch {}
+            }
+            if (shippingAddress && shippingAddress.street) {
+              try {
+                await apiClient.post("/users/me/addresses", {
+                  ...shippingAddress,
+                  isDefault: true,
+                });
+              } catch {}
+            }
+          },
         }
-      });
-    } else {
-      // Register Flow
-      if (!isPasswordValid) return;
+      );
+      return;
+    }
 
-      const trimmedName = (name || "").trim();
-      const nameParts = trimmedName ? trimmedName.split(/\s+/) : [];
-      let firstName = nameParts[0] || "";
-      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+    if (!isPasswordValid) return;
 
-      if (!firstName || firstName.length < 2) {
-        const emailPrefix = (email || "").split("@")[0] || "Customer";
-        firstName = emailPrefix.slice(0, 50);
-      }
+    if (otpSentEmail === normalizedEmail && Date.now() < otpExpiresAt) {
+      setOtpError("");
+      setStep("otp");
+      return;
+    }
 
-      let cleanPhone = (phone || "").trim();
-      if (cleanPhone) {
-        if (!cleanPhone.startsWith("+")) {
-          cleanPhone = `+91${cleanPhone}`;
-        }
-      }
+    requestOtp();
+  };
 
-      registerMutation.mutate({
-        email,
+  const handleVerifyAndRegister = () => {
+    const { firstName, lastName } = buildSanitizedRegistrationNames();
+
+    let cleanPhone = (phone || "").trim();
+    if (cleanPhone && !cleanPhone.startsWith("+")) {
+      cleanPhone = `+91${cleanPhone}`;
+    }
+
+    setOtpError("");
+    registerMutation.mutate(
+      {
+        email: normalizedEmail,
         password,
         firstName,
         lastName: lastName || undefined,
         phone: cleanPhone || undefined,
-      }, {
+        otp,
+      },
+      {
         onSuccess: async () => {
           if (shippingAddress && shippingAddress.street) {
             try {
@@ -171,9 +252,12 @@ export function PostCheckoutRegisterForm({
               });
             } catch {}
           }
-        }
-      });
-    }
+        },
+        onError: (err: any) => {
+          setOtpError(err?.response?.data?.error || "Verification failed. Please try again.");
+        },
+      }
+    );
   };
 
   if (isChecking) {
@@ -201,20 +285,56 @@ export function PostCheckoutRegisterForm({
     );
   }
 
+  if (!isExistingAccount && step === "otp") {
+    return (
+      <div className="w-full max-w-sm mt-1 mb-4 bg-white border border-neutral-200 p-4 sm:p-5 shadow-xs text-left">
+        <EmailOtpVerificationStep
+          email={normalizedEmail}
+          otp={otp}
+          onOtpChange={(val) => {
+            setOtp(val);
+            if (otpError) setOtpError("");
+          }}
+          onSubmitOtp={handleVerifyAndRegister}
+          onResendOtp={() => {
+            if (cooldownSeconds <= 0) requestOtp("otp");
+          }}
+          onBack={() => {
+            setOtpError("");
+            setStep("details");
+          }}
+          cooldownSeconds={cooldownSeconds}
+          isSubmitting={registerMutation.isPending}
+          isResending={sendOtpMutation.isPending}
+          errorMessage={otpError}
+          backLabel="Edit password"
+          submitLabel="Verify & Track Order"
+          compact
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-sm mt-1 mb-4 bg-white border border-neutral-200 p-4 sm:p-5 shadow-xs text-left">
       <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-900 mb-1">
         {isExistingAccount ? "Sign In & Track" : "Track Your Order"}
       </h3>
       <p className="text-[11px] text-neutral-500 mb-3 leading-normal">
-        {isExistingAccount 
-          ? "This email is already registered. Please sign in to track your order." 
-          : "Create an account to easily track this order and speed up future checkouts."}
+        {isExistingAccount
+          ? "This email is already registered. Please sign in to track your order."
+          : "Create an account to easily track this order. We'll verify your email with a quick 6-digit OTP."}
       </p>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-2.5">
+        {sendError && (
+          <div role="alert" className="bg-red-50 border border-red-100 p-2 rounded text-red-800 text-[11px] font-medium">
+            {sendError}
+          </div>
+        )}
+
         {loginMutation.isError && (
-          <div className="bg-red-50 border border-red-100 p-2 rounded text-red-800 text-[11px] font-medium">
+          <div role="alert" className="bg-red-50 border border-red-100 p-2 rounded text-red-800 text-[11px] font-medium">
             {(loginMutation.error as any)?.response?.data?.error || "Invalid credentials. Please verify your password."}
           </div>
         )}
@@ -241,22 +361,29 @@ export function PostCheckoutRegisterForm({
             </div>
           </div>
         )}
-        
+
         <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-0.5 block">
+          <label
+            htmlFor={emailFieldId}
+            className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-0.5 block"
+          >
             Email (Auto-linked for tracking)
           </label>
-          <input 
-            type="email" 
-            value={email} 
-            disabled 
-            className="w-full border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-xs text-neutral-600 rounded-none cursor-not-allowed"
+          <input
+            id={emailFieldId}
+            type="email"
+            value={email}
+            disabled
+            className="w-full border border-neutral-200 bg-neutral-100 px-3 py-2 text-base md:text-xs text-neutral-600 rounded-none cursor-not-allowed"
           />
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-0.5">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-700 block">
+            <label
+              htmlFor={passwordFieldId}
+              className="text-[10px] font-bold uppercase tracking-wider text-neutral-700 block"
+            >
               {isExistingAccount ? "Enter Password *" : "Set a Password *"}
             </label>
             {isExistingAccount && (
@@ -270,16 +397,18 @@ export function PostCheckoutRegisterForm({
               </button>
             )}
           </div>
-          <input 
-            type="password" 
+          <input
+            id={passwordFieldId}
+            type="password"
+            autoComplete={isExistingAccount ? "current-password" : "new-password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder={isExistingAccount ? "Your password" : "Min 8 characters"}
             required
-            className="w-full border border-neutral-300 focus:border-brand px-3 py-1.5 text-xs text-neutral-900 focus:outline-none rounded-none transition-colors"
+            className="w-full border border-neutral-300 focus:border-brand px-3 py-2 text-base md:text-xs text-neutral-900 focus:outline-none rounded-none transition-colors"
           />
         </div>
-        
+
         {!isExistingAccount && (
           <div className="bg-neutral-50 p-2.5 rounded border border-neutral-100">
             <ValidationItem isValid={hasMinLength} text="Minimum 8 characters" />
@@ -289,15 +418,24 @@ export function PostCheckoutRegisterForm({
           </div>
         )}
 
-        <button 
-          type="submit" 
-          disabled={registerMutation.isPending || loginMutation.isPending || !password || (!isExistingAccount && !isPasswordValid)}
-          className="w-full bg-neutral-900 hover:bg-black text-white text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors disabled:opacity-50 rounded-none cursor-pointer"
-        >
-          {isExistingAccount 
-            ? (loginMutation.isPending ? "Logging in..." : "Log In & Track Order") 
-            : (registerMutation.isPending ? "Creating..." : "Create Account & Track Order")
+        <button
+          type="submit"
+          disabled={
+            sendOtpMutation.isPending ||
+            registerMutation.isPending ||
+            loginMutation.isPending ||
+            !password ||
+            (!isExistingAccount && !isPasswordValid)
           }
+          className="w-full bg-neutral-900 hover:bg-black text-white min-h-[44px] text-[11px] font-bold uppercase tracking-wider py-2.5 transition-colors disabled:opacity-50 rounded-none cursor-pointer"
+        >
+          {isExistingAccount
+            ? loginMutation.isPending
+              ? "Logging in..."
+              : "Log In & Track Order"
+            : sendOtpMutation.isPending
+              ? "Sending OTP..."
+              : "Verify Email & Create Account"}
         </button>
       </form>
     </div>

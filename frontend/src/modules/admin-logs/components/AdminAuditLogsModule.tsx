@@ -584,7 +584,7 @@ export function AdminAuditLogsModule() {
           isLoading={blockedIpsLoading}
           isBlocking={blockIpMutation.isPending}
           isUnblocking={unblockIpMutation.isPending}
-          onBlockIp={(payload) => blockIpMutation.mutate(payload)}
+          onBlockIp={(payload, options) => blockIpMutation.mutate(payload, options)}
           onUnblockIp={(ipOrId) => unblockIpMutation.mutate(ipOrId)}
         />
       )}
@@ -603,7 +603,7 @@ export function AdminAuditLogsModule() {
           isIpBlocked={Boolean(selectedLog.context?.ip && blockedIpSet.has(selectedLog.context.ip))}
           isBlockingIp={blockIpMutation.isPending}
           isUnblockingIp={unblockIpMutation.isPending}
-          onBlockIp={(payload) => blockIpMutation.mutate(payload)}
+          onBlockIp={(payload, options) => blockIpMutation.mutate(payload, options)}
           onUnblockIp={(ip) => unblockIpMutation.mutate(ip)}
           onClose={() => setSelectedLog(null)}
         />

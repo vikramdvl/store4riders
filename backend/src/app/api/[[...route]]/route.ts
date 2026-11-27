@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { centralRouter } from "@/router";
-import { applyCors } from "@/core/middlewares/cors";
+import { applyCors, isOriginAllowed } from "@/core/middlewares/cors";
 import { applySecurityHeaders } from "@/core/middlewares/security";
 import { applyRequestId } from "@/core/middlewares/requestId";
 import { errorHandler } from "@/core/middlewares/errorHandler";
@@ -10,6 +10,7 @@ import { checkGeneralApiRateLimit } from "@/core/middlewares/rateLimiter";
 import { ApiResponse } from "@/core/response/ApiResponse";
 import { BlockedIpService } from "@/modules/blocked-ip/blocked-ip.service";
 import { AuditLogService } from "@/modules/audit-log/audit-log.service";
+import { getClientIp } from "@/core/utils/clientIp";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ const handleRequest = async (
 
     // Global Baseline Rate Limiter (Protects ALL endpoints from DDoS / scraping)
     // Only internal build/SSG on localhost bypasses; all external internet IPs are strictly rate limited
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "127.0.0.1";
+    const ip = getClientIp(req);
     const isInternalLocal = ip === "127.0.0.1" || ip === "::1" || ip === "localhost";
     if (!isInternalLocal || !routePath.includes('products')) {
       await checkGeneralApiRateLimit(ip);
@@ -64,6 +65,21 @@ const handleRequest = async (
         403
       );
       return applyHeaders(blockedRes, req);
+    }
+
+    // Block cross-site state-changing requests from unauthorized origins (CSRF defense)
+    const isStateChanging = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
+    const requestOrigin = req.headers.get("origin");
+    const hasBearerAuth = req.headers.get("authorization")?.startsWith("Bearer ");
+    const isWebhookEndpoint =
+      (routePath[0] === "orders" && routePath[1] === "webhook") ||
+      (routePath[0] === "payments" && routePath[1] === "webhook") ||
+      ((routePath[0] === "shipping" || routePath[0] === "shipments") && routePath[1] === "webhooks") ||
+      (routePath[0] === "homepage" && routePath[1] === "instagram" && routePath[2] === "webhook");
+
+    if (isStateChanging && requestOrigin && !hasBearerAuth && !isWebhookEndpoint && !isOriginAllowed(requestOrigin)) {
+      const csrfRes = ApiResponse.error("Cross-origin request denied", 403);
+      return applyHeaders(csrfRes, req);
     }
     
     // Route to Central Router

@@ -52,6 +52,38 @@ import { extractUserFromAuth } from "../../core/middlewares/auth";
  *       202:
  *         description: Migration job started in background
  *
+ * /api/v1/migration/preview:
+ *   post:
+ *     summary: Validate and preview CSV migration changes without modifying the database
+ *     tags: [Migration]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - s3Key
+ *             properties:
+ *               s3Key:
+ *                 type: string
+ *               fileName:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Dry-run CSV validation report and change preview generated successfully
+ *       400:
+ *         description: Invalid or empty CSV file
+ *
  * /api/v1/migration/upload:
  *   post:
  *     summary: Upload Magento CSV for migration (Multipart fallback)
@@ -88,6 +120,12 @@ export async function migrationRouter(req: NextRequest, routePath: string[]) {
     const userId = extractUserFromAuth(req);
     await checkAdmin(userId, UserService.getRole);
     return MigrationController.startMigration(req);
+  }
+
+  if (method === "POST" && path === "preview") {
+    const userId = extractUserFromAuth(req);
+    await checkAdmin(userId, UserService.getRole);
+    return MigrationController.previewCsv(req);
   }
 
   if (method === "POST" && path === "upload") {

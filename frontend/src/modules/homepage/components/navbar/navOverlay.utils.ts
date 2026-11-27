@@ -258,26 +258,31 @@ export function resolveStorefrontNavItems(
         const leaf = extractLeafSlug(subItem.href);
         if (hiddenSlugs.has(leaf)) return false;
 
-        if (isBrandNav && Array.isArray(dbBrands)) {
+        if (isBrandNav && Array.isArray(dbBrands) && dbBrands.length > 0) {
           const matchedDbBrand = dbBrands.find((b) => isMatchingBrand(subItem, b));
-          if (matchedDbBrand) {
-            const isHidden = matchedDbBrand.showInMenu === false || (matchedDbBrand.showInMenu as any) === "false" || matchedDbBrand.isActive === false;
-            if (isHidden) {
-              return false;
-            }
+          if (!matchedDbBrand) {
+            return false;
+          }
+          const isHidden =
+            matchedDbBrand.isDeleted === true ||
+            matchedDbBrand.showInMenu === false ||
+            (matchedDbBrand.showInMenu as any) === "false" ||
+            matchedDbBrand.isActive === false;
+          if (isHidden) {
+            return false;
+          }
 
-            const brandGroups = (
-              Array.isArray(matchedDbBrand.menuGroups) && matchedDbBrand.menuGroups.length > 0
-                ? matchedDbBrand.menuGroups
-                : matchedDbBrand.menuGroup
-                ? [matchedDbBrand.menuGroup]
-                : []
-            ).filter((g) => !g.toLowerCase().includes("popular"));
+          const brandGroups = (
+            Array.isArray(matchedDbBrand.menuGroups) && matchedDbBrand.menuGroups.length > 0
+              ? matchedDbBrand.menuGroups
+              : matchedDbBrand.menuGroup
+              ? [matchedDbBrand.menuGroup]
+              : []
+          ).filter((g) => !g.toLowerCase().includes("popular"));
 
-            if (brandGroups.length > 0) {
-              const belongsHere = brandGroups.some((bg) => isBrandGroupMatch(bg, currentGroupLower));
-              if (!belongsHere) return false;
-            }
+          if (brandGroups.length > 0) {
+            const belongsHere = brandGroups.some((bg) => isBrandGroupMatch(bg, currentGroupLower));
+            if (!belongsHere) return false;
           }
         }
 

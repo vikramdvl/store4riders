@@ -48,6 +48,32 @@ export const RATE_LIMIT_CONFIG = {
   },
 
   /**
+   * 1.2 Registration Email OTP Limiter
+   * Protects: /api/v1/auth/send-register-otp
+   * Purpose: Prevents email bombing while allowing legitimate users retries/resends.
+   */
+  REGISTER_OTP: {
+    keyPrefix: process.env.NODE_ENV === "development" ? "rl_reg_otp_dev" : "rl_reg_otp",
+    points: process.env.NODE_ENV === "development" ? 100 : 10, // 10 OTP sends per 15 mins per IP in prod
+    duration: 15 * 60,       // per 15 minutes
+    blockDuration: 15 * 60,  // Block IP for 15 minutes if exceeded
+    errorMessage: "Too many verification code requests from this IP. Please try again after 15 minutes.",
+  },
+
+  /**
+   * 1.3 Checkout Email Lookup Limiter
+   * Protects: /api/v1/auth/check-email
+   * Purpose: Prevents mass email enumeration/scraping while allowing normal checkout flow.
+   */
+  CHECK_EMAIL: {
+    keyPrefix: process.env.NODE_ENV === "development" ? "rl_check_email_dev" : "rl_check_email",
+    points: process.env.NODE_ENV === "development" ? 100 : 20, // 20 checks per 15 mins per IP in prod
+    duration: 15 * 60,       // per 15 minutes
+    blockDuration: 15 * 60,
+    errorMessage: "Too many email verification checks from this IP. Please try again later.",
+  },
+
+  /**
    * 2. Checkout & Order Creation Limiter
    * Protects: /api/v1/order (POST)
    * Purpose: Prevents card-testing attacks, coupon spamming, and inventory exhaustion bots.
@@ -118,6 +144,18 @@ export const RATE_LIMIT_CONFIG = {
     duration: 15 * 60,       // per 15 minutes
     blockDuration: 30 * 60,  // Cooldown block for 30 minutes if exceeded
     errorMessage: "Too many review submissions from your IP. Please try again after 15 minutes.",
+  },
+
+  /**
+   * 8. Payment Verification / S2S Sync Limiter
+   * Protects: POST /api/v1/orders/sync-payment & POST /api/v1/orders/verify
+   * Purpose: Allows genuine progressive polling + manual re-checks while preventing enumeration flooding.
+   */
+  PAYMENT_SYNC: {
+    keyPrefix: "rl_pay_sync",
+    points: 45,              // generous enough for multi-attempt polling + reconnect retries
+    duration: 60,            // per 1 minute
+    errorMessage: "Too many payment status checks. Please wait a few seconds before trying again.",
   },
 } as const;
 

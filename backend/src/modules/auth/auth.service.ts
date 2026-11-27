@@ -2,26 +2,241 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { UserRepository } from "../user/user.repository";
 import { UserModel } from "../user/user.model";
-import { generateTokens, verifyToken, getSessionConfigForRole } from "../../core/utils/jwt";
-import { UnauthorizedError, ConflictError, AppError } from "../../core/errors/AppError";
-import { setCache, deleteCache } from "../../core/cache/redis";
-import { RegisterInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from "@store4riders/shared-validation";
+import { generateTokens, verifyToken, getSessionConfigForRole, resolveAuthScope, type AuthScope } from "../../core/utils/jwt";
+import { UnauthorizedError, ForbiddenError, ConflictError, ValidationError, AppError } from "../../core/errors/AppError";
+import {
+  getCache,
+  setCache,
+  deleteCache,
+  setCacheIfAbsent,
+  incrementCacheCounter,
+  consumeCacheOnce,
+} from "../../core/cache/redis";
+import { SendRegisterOtpInput, RegisterInput, LoginInput, ForgotPasswordInput, ResetPasswordInput } from "@store4riders/shared-validation";
 import { sendSmtpEmail } from "../../core/email/smtp";
+import { logger } from "../../core/utils/logger";
+
+const REGISTER_OTP_TTL_SECONDS = 10 * 60; // 10 minutes
+const REGISTER_OTP_COOLDOWN_SECONDS = 60; // 1 minute resend cooldown
+const REGISTER_OTP_MAX_ATTEMPTS = 5;
+const REGISTER_OTP_MAX_SENDS_PER_WINDOW = 5;
+const REGISTER_OTP_SEND_WINDOW_SECONDS = 15 * 60;
+
+interface RegisterOtpRecord {
+  otpHash: string;
+  salt: string;
+  maxAttempts: number;
+  expiresAt: number;
+}
+
+const getRegisterOtpKey = (email: string) => `reg_otp:${email}`;
+const getRegisterOtpAttemptsKey = (email: string) => `reg_otp_att:${email}`;
+const getRegisterOtpCooldownKey = (email: string) => `reg_otp_cd:${email}`;
+const getRegisterOtpCountKey = (email: string) => `reg_otp_count:${email}`;
+
+const escapeHtml = (value: string): string =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const hashRegistrationOtp = (salt: string, email: string, otp: string): string => {
+  return crypto
+    .createHash("sha256")
+    .update(`${salt}:${email}:${otp}`)
+    .digest("hex");
+};
+
+const buildRegistrationOtpEmailHtml = (email: string, otp: string, expiryMinutes: number): string => {
+  const safeEmail = escapeHtml(email);
+  const safeOtp = escapeHtml(otp);
+  return `
+  <div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; color: #1f2937;">
+    <div style="background-color: #111827; padding: 20px 24px; text-align: center;">
+      <h1 style="color: #ffffff; font-size: 20px; font-weight: 800; letter-spacing: 1px; margin: 0; text-transform: uppercase;">
+        Store4Riders
+      </h1>
+      <p style="color: #9ca3af; font-size: 11px; margin: 4px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px;">
+        Premium Motorcycle Riding Gear
+      </p>
+    </div>
+
+    <div style="padding: 32px 28px;">
+      <h2 style="color: #111827; font-size: 18px; font-weight: 700; margin: 0 0 12px 0;">
+        Verify your email address
+      </h2>
+      <p style="color: #4b5563; font-size: 14px; line-height: 1.6; margin: 0 0 22px 0;">
+        Use the 6-digit verification code below to finish creating your Store4Riders account for <strong>${safeEmail}</strong>:
+      </p>
+
+      <div style="text-align: center; margin: 24px 0; padding: 18px 20px; background-color: #f9fafb; border: 1px dashed #d1d5db; border-radius: 6px;">
+        <span style="display: inline-block; font-family: 'Courier New', Courier, monospace; font-size: 30px; font-weight: 800; letter-spacing: 8px; color: #111827;">
+          ${safeOtp}
+        </span>
+      </div>
+
+      <p style="color: #4b5563; font-size: 13px; line-height: 1.5; margin: 0 0 12px 0;">
+        This code expires in <strong>${expiryMinutes} minutes</strong> and can only be used once.
+      </p>
+
+      <div style="border-top: 1px solid #f3f4f6; padding-top: 16px; margin-top: 24px;">
+        <p style="color: #9ca3af; font-size: 11px; line-height: 1.5; margin: 0;">
+          <strong>Security Note:</strong> Never share this code with anyone. Store4Riders will never call or message you asking for your OTP. If you did not request this, you can safely ignore this email.
+        </p>
+      </div>
+    </div>
+
+    <div style="background-color: #f9fafb; padding: 16px 24px; text-align: center; border-top: 1px solid #e5e7eb;">
+      <p style="color: #6b7280; font-size: 11px; margin: 0;">
+        Need help? Contact our rider support team at <a href="mailto:support@store4riders.com" style="color: #FF5429; text-decoration: none;">support@store4riders.com</a>
+      </p>
+    </div>
+  </div>
+`;
+};
 
 /**
  * @class AuthService
  * @description Core business logic for user authentication.
  * Handles bcrypt password hashing, credential verification, JWT generation, 
- * and secure token refresh flows. Interacts with UserRepository.
+ * email OTP verification, and secure token refresh flows. Interacts with UserRepository.
  */
 export class AuthService {
+
+  static async sendRegisterOtp(data: SendRegisterOtpInput) {
+    const normalizedEmail = data.email.trim().toLowerCase();
+
+    const existing = await UserRepository.findByEmail(normalizedEmail);
+    if (existing) {
+      throw new ConflictError("Email already in use");
+    }
+
+    const cooldownKey = getRegisterOtpCooldownKey(normalizedEmail);
+    const cooldownUntil = Date.now() + REGISTER_OTP_COOLDOWN_SECONDS * 1000;
+    const lockAcquired = await setCacheIfAbsent(
+      cooldownKey,
+      { cooldownUntil },
+      REGISTER_OTP_COOLDOWN_SECONDS
+    );
+    if (!lockAcquired) {
+      const activeCooldown = await getCache(cooldownKey);
+      const waitSeconds = activeCooldown?.cooldownUntil
+        ? Math.max(1, Math.ceil((Number(activeCooldown.cooldownUntil) - Date.now()) / 1000))
+        : REGISTER_OTP_COOLDOWN_SECONDS;
+      throw new AppError(`Please wait ${waitSeconds} seconds before requesting a new verification code`, 429);
+    }
+
+    const countKey = getRegisterOtpCountKey(normalizedEmail);
+    const sendCount = await incrementCacheCounter(countKey, REGISTER_OTP_SEND_WINDOW_SECONDS);
+    if (sendCount > REGISTER_OTP_MAX_SENDS_PER_WINDOW) {
+      await deleteCache(cooldownKey);
+      throw new AppError("Too many verification codes requested for this email. Please try again after 15 minutes.", 429);
+    }
+
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const salt = crypto.randomBytes(16).toString("hex");
+    const otpHash = hashRegistrationOtp(salt, normalizedEmail, otp);
+    const expiresAt = Date.now() + REGISTER_OTP_TTL_SECONDS * 1000;
+
+    const otpKey = getRegisterOtpKey(normalizedEmail);
+    const attemptsKey = getRegisterOtpAttemptsKey(normalizedEmail);
+    const record: RegisterOtpRecord = {
+      otpHash,
+      salt,
+      maxAttempts: REGISTER_OTP_MAX_ATTEMPTS,
+      expiresAt,
+    };
+
+    await deleteCache(attemptsKey);
+    await setCache(otpKey, record, REGISTER_OTP_TTL_SECONDS);
+
+    try {
+      const html = buildRegistrationOtpEmailHtml(normalizedEmail, otp, Math.floor(REGISTER_OTP_TTL_SECONDS / 60));
+      await sendSmtpEmail(normalizedEmail, "Verify Your Email - Store4Riders", html);
+    } catch (err) {
+      await deleteCache(otpKey);
+      await deleteCache(attemptsKey);
+      await deleteCache(cooldownKey);
+      logger.error(`Failed to send registration OTP to ${normalizedEmail}`, err);
+      throw new AppError("Verification email could not be sent. Please try again.", 500);
+    }
+
+    return {
+      email: normalizedEmail,
+      expiresInSeconds: REGISTER_OTP_TTL_SECONDS,
+      cooldownSeconds: REGISTER_OTP_COOLDOWN_SECONDS,
+    };
+  }
+
+  private static async verifyRegistrationOtp(normalizedEmail: string, rawOtp: string): Promise<void> {
+    const otpKey = getRegisterOtpKey(normalizedEmail);
+    const attemptsKey = getRegisterOtpAttemptsKey(normalizedEmail);
+    const record = (await getCache(otpKey)) as RegisterOtpRecord | null;
+
+    if (!record || !record.otpHash || !record.salt || Date.now() > Number(record.expiresAt)) {
+      await deleteCache(otpKey);
+      await deleteCache(attemptsKey);
+      throw new ValidationError("Verification code expired or not found. Please request a new code.");
+    }
+
+    const maxAttempts = Number(record.maxAttempts || REGISTER_OTP_MAX_ATTEMPTS);
+    const remainingTtl = Math.max(1, Math.ceil((Number(record.expiresAt) - Date.now()) / 1000));
+    const attemptNumber = await incrementCacheCounter(attemptsKey, remainingTtl);
+
+    if (attemptNumber > maxAttempts) {
+      await deleteCache(otpKey);
+      await deleteCache(attemptsKey);
+      throw new ValidationError("Too many incorrect verification attempts. Please request a new code.");
+    }
+
+    const cleanOtp = String(rawOtp || "").trim();
+    const expectedHash = hashRegistrationOtp(record.salt, normalizedEmail, cleanOtp);
+    const expectedBuf = Buffer.from(expectedHash, "hex");
+    const storedBuf = Buffer.from(record.otpHash, "hex");
+    const isValid = expectedBuf.length === storedBuf.length && crypto.timingSafeEqual(expectedBuf, storedBuf);
+
+    if (!isValid) {
+      if (attemptNumber >= maxAttempts) {
+        await deleteCache(otpKey);
+        await deleteCache(attemptsKey);
+        throw new ValidationError("Too many incorrect verification attempts. Please request a new code.");
+      }
+
+      const remainingAttempts = maxAttempts - attemptNumber;
+      throw new ValidationError(
+        `Invalid verification code. ${remainingAttempts} attempt${remainingAttempts === 1 ? "" : "s"} remaining.`
+      );
+    }
+
+    // Consume OTP atomically so concurrent requests with the same code cannot register twice
+    const consumed = await consumeCacheOnce<RegisterOtpRecord>(otpKey);
+    if (!consumed) {
+      throw new ValidationError("Verification code expired or not found. Please request a new code.");
+    }
+
+    await deleteCache(attemptsKey);
+    await deleteCache(getRegisterOtpCooldownKey(normalizedEmail));
+    await deleteCache(getRegisterOtpCountKey(normalizedEmail));
+  }
   
   static async register(data: RegisterInput) {
-    const existing = await UserRepository.findByEmail(data.email);
+    const normalizedEmail = data.email.trim().toLowerCase();
+    const existing = await UserRepository.findByEmail(normalizedEmail);
     if (existing) throw new ConflictError("Email already in use");
 
+    await AuthService.verifyRegistrationOtp(normalizedEmail, data.otp);
+
     const hashedPassword = await bcrypt.hash(data.password, 12);
-    const user = await UserRepository.create({ ...data, password: hashedPassword });
+    const { otp: _otp, ...userData } = data;
+    const user = await UserRepository.create({
+      ...userData,
+      email: normalizedEmail,
+      password: hashedPassword,
+      isEmailVerified: true,
+      emailVerifiedAt: new Date(),
+    });
     const userId = (user as any)._id?.toString() || user.id;
     const role = user.role || "customer";
     try {
@@ -29,16 +244,16 @@ export class AuthService {
     } catch {
       // Cache unavailability should not block registration
     }
-    const tokens = generateTokens(userId, role);
+    const tokens = generateTokens(userId, role, typeof (user as any).tokenVersion === "number" ? (user as any).tokenVersion : 0);
     const { refreshMaxAgeSeconds } = getSessionConfigForRole(role);
     
-    // Auto-link any past guest orders made with this email
+    // Auto-link any past guest orders made with this verified email
     try {
       const { OrderRepository } = await import("../order/order.repository");
       await OrderRepository.linkGuestOrders(user.email, userId);
       await AuthService.syncUserFromLinkedOrders(userId, user);
     } catch (e) {
-      console.error("Failed to link guest orders on register:", e);
+      logger.error("Failed to link guest orders on register:", e);
     }
 
     return {
@@ -51,14 +266,15 @@ export class AuthService {
         lastName: user.lastName,
         name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
         role,
+        isEmailVerified: true,
         phone: user.phone || "",
         addresses: user.addresses || [],
       }
     };
   }
 
-  static async login(data: LoginInput) {
-    const user = await UserRepository.findByEmailWithPassword(data.email);
+  static async login(data: LoginInput, requestScope?: AuthScope) {
+    const user = await UserRepository.findByEmailWithPassword(data.email.trim());
     if (!user) throw new UnauthorizedError("Invalid credentials");
 
     if (user.isActive === false) {
@@ -70,25 +286,39 @@ export class AuthService {
 
     const userId = (user as any)._id?.toString() || user.id;
     const role = user.role || "customer";
+    const requestedScope: AuthScope = data.scope || requestScope || "customer";
+    const userScope = resolveAuthScope(role);
+
+    if (requestedScope === "customer" && userScope !== "customer") {
+      throw new ForbiddenError("Staff and admin accounts must sign in through the Admin Portal");
+    }
+    if (requestedScope === "admin" && userScope !== "admin") {
+      throw new ForbiddenError("Customer accounts cannot access the Admin Portal");
+    }
+
     try {
       await deleteCache(`blacklist:${userId}`);
     } catch {
-      // Cache unavailability should not block registration
+      // Cache unavailability should not block login
     }
-    const tokens = generateTokens(userId, role);
+    const tokenVersion = typeof (user as any).tokenVersion === "number" ? (user as any).tokenVersion : 0;
+    const tokens = generateTokens(userId, role, tokenVersion);
     const { refreshMaxAgeSeconds } = getSessionConfigForRole(role);
 
-    // Auto-link any past guest orders made with this email
-    try {
-      const { OrderRepository } = await import("../order/order.repository");
-      await OrderRepository.linkGuestOrders(user.email, userId);
-      await AuthService.syncUserFromLinkedOrders(userId, user);
-    } catch (e) {
-      console.error("Failed to link guest orders on login:", e);
+    // Auto-link any past guest orders only when email is verified (or legacy pre-OTP user)
+    if (user.isEmailVerified !== false) {
+      try {
+        const { OrderRepository } = await import("../order/order.repository");
+        await OrderRepository.linkGuestOrders(user.email, userId);
+        await AuthService.syncUserFromLinkedOrders(userId, user);
+      } catch (e) {
+        logger.error("Failed to link guest orders on login:", e);
+      }
     }
 
     return {
       tokens,
+      scope: userScope,
       sessionMaxAgeSeconds: refreshMaxAgeSeconds,
       user: {
         id: userId,
@@ -97,21 +327,39 @@ export class AuthService {
         lastName: user.lastName,
         name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
         role,
+        isEmailVerified: user.isEmailVerified !== false,
         phone: user.phone || "",
         addresses: user.addresses || [],
       }
     };
   }
 
-  static async refreshToken(oldToken: string) {
+  static async refreshToken(oldToken: string, expectedScope?: AuthScope) {
     try {
       const decoded = verifyToken(oldToken, true);
 
-      // Verify blacklisting from Redis
+      if (expectedScope && decoded.scope && decoded.scope !== expectedScope) {
+        throw new ForbiddenError(
+          expectedScope === "admin"
+            ? "Admin portal session required"
+            : "Customer storefront session required"
+        );
+      }
+
+      const tokenHash = crypto.createHash("sha256").update(oldToken).digest("hex");
+
+      // Verify blacklisting & rotation replay protection from Redis/cache
       try {
         const { getCache } = await import("../../core/cache/redis");
-        const userBlacklistVal = await getCache(`blacklist:${decoded.userId}`);
-        const isTokenBlacklisted = await getCache(`bl_token_${oldToken}`);
+        const [userBlacklistVal, isTokenBlacklisted, usedRefreshMarker, gracePayload] = await Promise.all([
+          getCache(`blacklist:${decoded.userId}`),
+          getCache(`bl_token_${oldToken}`),
+          getCache<string>(`bl_rt_used_${tokenHash}`),
+          getCache<{ accessToken: string; refreshToken: string; sessionMaxAgeSeconds: number; scope: AuthScope }>(
+            `grace_rt_${tokenHash}`
+          ),
+        ]);
+
         if (isTokenBlacklisted) {
           throw new UnauthorizedError("Session has expired or was logged out");
         }
@@ -125,27 +373,66 @@ export class AuthService {
             throw new UnauthorizedError("Session has expired or was logged out");
           }
         }
+        if (usedRefreshMarker) {
+          if (gracePayload && gracePayload.accessToken && gracePayload.refreshToken) {
+            return gracePayload;
+          }
+          throw new UnauthorizedError("Refresh token has already been used");
+        }
       } catch (e: any) {
-        if (e instanceof UnauthorizedError) throw e;
+        if (e instanceof UnauthorizedError || e instanceof ForbiddenError) throw e;
       }
 
       const user = await UserRepository.findById(decoded.userId);
       if (!user || user.isActive === false) {
         throw new UnauthorizedError("Account has been disabled");
       }
+
+      const currentTokenVersion = typeof (user as any).tokenVersion === "number" ? (user as any).tokenVersion : 0;
+      if (typeof decoded.tokenVersion === "number" && decoded.tokenVersion !== currentTokenVersion) {
+        throw new UnauthorizedError("Session has expired or was logged out");
+      }
+
       const role = user.role || "customer";
-      const tokens = generateTokens(decoded.userId, role);
+      const userScope = resolveAuthScope(role);
+      if (expectedScope && userScope !== expectedScope) {
+        throw new ForbiddenError(
+          expectedScope === "admin"
+            ? "Admin portal session required"
+            : "Customer storefront session required"
+        );
+      }
+
+      const tokens = generateTokens(decoded.userId, role, currentTokenVersion);
       const { refreshMaxAgeSeconds } = getSessionConfigForRole(role);
-      return { ...tokens, sessionMaxAgeSeconds: refreshMaxAgeSeconds };
+      const result = { ...tokens, scope: userScope, sessionMaxAgeSeconds: refreshMaxAgeSeconds };
+
+      try {
+        await Promise.all([
+          setCache(`grace_rt_${tokenHash}`, result, 15),
+          setCache(`bl_rt_used_${tokenHash}`, String(Date.now()), refreshMaxAgeSeconds),
+        ]);
+      } catch {
+        // Cache unavailability should not break token refresh
+      }
+
+      return result;
     } catch (err: any) {
-      if (err instanceof UnauthorizedError) throw err;
+      if (err instanceof UnauthorizedError || err instanceof ForbiddenError) throw err;
       throw new UnauthorizedError("Invalid refresh token");
     }
   }
 
   static async logout(userId: string) {
-    // Store logout timestamp so only refresh tokens issued prior to logout are invalidated
+    // Store logout timestamp and advance tokenVersion so prior access/refresh tokens become invalid across instances
     await setCache(`blacklist:${userId}`, String(Date.now()), 7 * 24 * 60 * 60);
+    try {
+      if (typeof UserRepository.incrementTokenVersion === "function") {
+        await UserRepository.incrementTokenVersion(userId);
+      }
+    } catch {
+      // Cache revocation remains in place if tokenVersion update fails
+    }
   }
 
   static async syncUserFromLinkedOrders(userId: string, user?: any) {
@@ -226,9 +513,22 @@ export class AuthService {
   }
 
   static async forgotPassword(data: ForgotPasswordInput) {
-    const user = await UserModel.findOne({ email: data.email });
+    const cleanEmail = data.email.trim();
+    const normalizedEmail = cleanEmail.toLowerCase();
+    const escaped = cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const user =
+      (await UserModel.findOne({ email: normalizedEmail })) ||
+      (await UserModel.findOne({ email: new RegExp(`^${escaped}$`, "i") }));
     if (!user) {
       // Return successfully to prevent email enumeration attacks
+      return;
+    }
+
+    const cooldownKey = `fp_cd:${normalizedEmail}`;
+    const canSend = await setCacheIfAbsent(cooldownKey, { at: Date.now() }, 60);
+    if (!canSend) {
+      // Silently ignore bursts within 60s without leaking email existence
       return;
     }
 
@@ -247,7 +547,8 @@ export class AuthService {
       "http://localhost:3000"
     ).replace(/\/+$/, "");
     const resetUrl = `${frontendBaseUrl}/reset-password/${resetToken}`;
-    const recipientName = (user as any).firstName || "Rider";
+    const safeRecipientName = escapeHtml((user as any).firstName || "Rider");
+    const safeUserEmail = escapeHtml(user.email);
 
     const message = `
       <div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; color: #1f2937;">
@@ -262,10 +563,10 @@ export class AuthService {
 
         <div style="padding: 32px 28px;">
           <h2 style="color: #111827; font-size: 18px; font-weight: 700; margin: 0 0 16px 0;">
-            Hi ${recipientName},
+            Hi ${safeRecipientName},
           </h2>
           <p style="color: #4b5563; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;">
-            We received a request to reset the password for your Store4Riders account (<strong>${user.email}</strong>). Click the button below to set a new password:
+            We received a request to reset the password for your Store4Riders account (<strong>${safeUserEmail}</strong>). Click the button below to set a new password:
           </p>
 
           <div style="text-align: center; margin: 28px 0;">
@@ -299,6 +600,7 @@ export class AuthService {
     try {
       await sendSmtpEmail(user.email, "Password Reset - Store4Riders", message);
     } catch (err) {
+      await deleteCache(cooldownKey);
       (user as any).resetPasswordToken = undefined;
       (user as any).resetPasswordExpire = undefined;
       await user.save();
@@ -321,10 +623,16 @@ export class AuthService {
     (user as any).password = hashedPassword;
     (user as any).resetPasswordToken = undefined;
     (user as any).resetPasswordExpire = undefined;
+    (user as any).tokenVersion = (typeof (user as any).tokenVersion === "number" ? (user as any).tokenVersion : 0) + 1;
     
     await user.save();
 
     const resetUserId = (user as any)._id?.toString() || user.id;
+    if (resetUserId) {
+      try {
+        await deleteCache(`auth_user_state:${resetUserId}`);
+      } catch {}
+    }
     if (resetUserId) {
       try {
         await setCache(`blacklist:${resetUserId}`, String(Date.now()), 7 * 24 * 60 * 60);

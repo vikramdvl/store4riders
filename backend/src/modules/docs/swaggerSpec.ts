@@ -26,22 +26,49 @@ export const openApiSpec = {
     },
   ],
   paths: {
-    "/auth/register": {
+    "/auth/send-register-otp": {
       post: {
         tags: ["Auth"],
-        summary: "Register a new user",
+        summary: "Send 6-digit email verification OTP for registration",
         requestBody: {
           required: true,
           content: {
             "application/json": {
               schema: {
                 type: "object",
+                required: ["email"],
+                properties: {
+                  email: { type: "string", format: "email" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Verification code sent to email" },
+          409: { description: "Email already in use" },
+          429: { description: "Cooldown or rate limit exceeded" },
+        },
+      },
+    },
+    "/auth/register": {
+      post: {
+        tags: ["Auth"],
+        summary: "Register a new user with verified email OTP",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["firstName", "email", "password", "otp"],
                 properties: {
                   firstName: { type: "string" },
                   lastName: { type: "string" },
                   email: { type: "string" },
                   password: { type: "string" },
                   phone: { type: "string" },
+                  otp: { type: "string", pattern: "^\\d{6}$" },
                 },
               },
             },
@@ -49,6 +76,7 @@ export const openApiSpec = {
         },
         responses: {
           201: { description: "User registered successfully" },
+          400: { description: "Invalid or expired OTP" },
         },
       },
     },

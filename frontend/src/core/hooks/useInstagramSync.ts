@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { IHomepageConfig } from "@store4riders/shared-types";
 import { toast } from "sonner";
+import { revalidateStorefrontPaths } from "../utils/revalidateStorefront";
 
 export function useSyncInstagramFeed() {
   const queryClient = useQueryClient();
@@ -17,6 +18,7 @@ export function useSyncInstagramFeed() {
       queryClient.setQueryData(["homepage", "config"], data);
       queryClient.setQueryData(["homepage", "public"], data);
       queryClient.invalidateQueries({ queryKey: ["homepage"] });
+      revalidateStorefrontPaths(["/"]);
       const count = data?.sections?.socialMedia?.reels?.length || 0;
       toast.success(`Successfully synced ${count} Instagram reels & live profile stats!`);
     },

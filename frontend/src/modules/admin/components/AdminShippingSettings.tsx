@@ -23,6 +23,8 @@ import {
   Save,
   Loader2,
   Info,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 interface IShippingSettings {
@@ -64,7 +66,7 @@ export function AdminShippingSettings() {
         toast.success(`"${selectedWh.name}" set as Primary Dispatch & Exchange Warehouse`);
       },
       onError: (err: any) => {
-        toast.error(err.response?.data?.message || "Failed to update default warehouse");
+        toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to update default warehouse");
       }
     });
 
@@ -86,7 +88,7 @@ export function AdminShippingSettings() {
         toast.success(data?.message || "Successfully synced warehouses from Shiprocket!");
       },
       onError: (err: any) => {
-        toast.error(err.response?.data?.message || "Failed to sync warehouses from Shiprocket");
+        toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to sync warehouses from Shiprocket");
       }
     });
   };
@@ -106,6 +108,23 @@ export function AdminShippingSettings() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!settings) return;
+
+    const cleanedPresets = (settings.packagePresets || [])
+      .map((p) => ({
+        name: String(p.name || "").trim(),
+        length: Number(p.length),
+        breadth: Number(p.breadth),
+        height: Number(p.height),
+      }))
+      .filter((p) => p.name || p.length > 0 || p.breadth > 0 || p.height > 0);
+
+    const invalidPreset = cleanedPresets.find(
+      (p) => !p.name || !(p.length >= 1) || !(p.breadth >= 1) || !(p.height >= 1)
+    );
+    if (invalidPreset) {
+      toast.error("Each warehouse box preset needs a name and L/B/H dimensions of at least 1 cm.");
+      return;
+    }
 
     try {
       setSaving(true);
@@ -130,7 +149,7 @@ export function AdminShippingSettings() {
           settings.exchangeShippingFee !== "" && Number(settings.exchangeShippingFee) >= 0
             ? Number(settings.exchangeShippingFee)
             : 299,
-        packagePresets: settings.packagePresets?.map(({ _id, ...rest }: any) => rest),
+        packagePresets: cleanedPresets,
       };
       await apiClient.put("/admin/settings", payload);
       await queryClient.invalidateQueries({ queryKey: ["publicSettings"] });
@@ -527,6 +546,133 @@ export function AdminShippingSettings() {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* 4. Standard Master Box Presets (L x B x H) */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs space-y-4">
+          <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                <Package size={16} className="text-[#FF5429]" />
+                Standard Master Box Presets (L × B × H)
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Define your warehouse cartons so the Order Dispatch panel can auto-recommend the right box for multi-product orders and offer 1-click selection.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setSettings({
+                  ...settings,
+                  packagePresets: [
+                    ...(settings.packagePresets || []),
+                    { name: "", length: 30, breadth: 25, height: 20 },
+                  ],
+                })
+              }
+              className="inline-flex items-center gap-1.5 bg-slate-900 hover:bg-brand text-white text-xs font-bold px-3 py-1.5 rounded-md transition-colors cursor-pointer shrink-0"
+            >
+              <Plus size={14} />
+              <span>Add Box Preset</span>
+            </button>
+          </div>
+
+          {(settings.packagePresets || []).length === 0 ? (
+            <div className="p-4 rounded-lg bg-slate-50 border border-dashed border-slate-300 text-center text-xs text-slate-500">
+              No master box presets configured. Click &ldquo;Add Box Preset&rdquo; to define your standard warehouse cartons.
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {(settings.packagePresets || []).map((preset, idx) => {
+                const volKg = ((Number(preset.length) || 0) * (Number(preset.breadth) || 0) * (Number(preset.height) || 0)) / 5000;
+                return (
+                  <div
+                    key={preset._id || `preset-${idx}`}
+                    className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end p-3 rounded-lg bg-slate-50/70 border border-slate-200"
+                  >
+                    <div className="sm:col-span-5">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                        Box Name
+                      </label>
+                      <input
+                        type="text"
+                        value={preset.name}
+                        onChange={(e) => {
+                          const updated = [...(settings.packagePresets || [])];
+                          updated[idx] = { ...updated[idx], name: e.target.value };
+                          setSettings({ ...settings, packagePresets: updated });
+                        }}
+                        placeholder="e.g. Jumbo Master Carton (Helmet + Jacket)"
+                        className="w-full bg-white border border-slate-300 rounded-md px-3 py-1.5 text-xs font-semibold text-slate-900 focus:outline-none focus:border-brand"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                        L (cm)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={preset.length}
+                        onChange={(e) => {
+                          const updated = [...(settings.packagePresets || [])];
+                          updated[idx] = { ...updated[idx], length: Math.max(1, Number(e.target.value) || 1) };
+                          setSettings({ ...settings, packagePresets: updated });
+                        }}
+                        className="w-full bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-brand"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                        B (cm)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={preset.breadth}
+                        onChange={(e) => {
+                          const updated = [...(settings.packagePresets || [])];
+                          updated[idx] = { ...updated[idx], breadth: Math.max(1, Number(e.target.value) || 1) };
+                          setSettings({ ...settings, packagePresets: updated });
+                        }}
+                        className="w-full bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-brand"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                        H (cm) • {volKg.toFixed(1)}kg vol
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={preset.height}
+                        onChange={(e) => {
+                          const updated = [...(settings.packagePresets || [])];
+                          updated[idx] = { ...updated[idx], height: Math.max(1, Number(e.target.value) || 1) };
+                          setSettings({ ...settings, packagePresets: updated });
+                        }}
+                        className="w-full bg-white border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-brand"
+                      />
+                    </div>
+                    <div className="sm:col-span-1 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = (settings.packagePresets || []).filter((_, i) => i !== idx);
+                          setSettings({ ...settings, packagePresets: updated });
+                        }}
+                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors cursor-pointer"
+                        title="Remove box preset"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Submit Button */}

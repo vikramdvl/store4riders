@@ -69,7 +69,7 @@ describe("CCavenueGateway", () => {
     expect(decrypted).toContain("amount=1500.00");
     expect(decrypted).toContain("currency=INR");
     expect(decrypted).toContain("redirect_url=https://store4riders.com/api/v1/orders/webhook/ccavenue");
-    expect(decrypted).toContain("cancel_url=https://store4riders.com/checkout");
+    expect(decrypted).toContain("cancel_url=https://store4riders.com/api/v1/orders/webhook/ccavenue/cancel");
     expect(decrypted).toContain("billing_name=Vikram Kumar");
     expect(decrypted).not.toContain("https%3A%2F%2F");
   });
@@ -134,5 +134,102 @@ describe("CCavenueGateway", () => {
     expect(result.payload.id).toBe("312009876543");
     expect(result.payload.amount).toBe(1500);
     expect(result.payload.bankRefNo).toBe("HDFC123456");
+  });
+
+  it("should emit payment.pending with namespaced event ID for Awaited/Initiated CCAvenue webhook", async () => {
+    const rawData = "order_id=OD-S4R-2610100089&tracking_id=312009876544&order_status=Awaited&amount=1500.00";
+    const encResp = encryptResponse(rawData, testWorkingKey);
+
+    const result = await gateway.handleWebhook({}, `encResp=${encResp}`);
+
+    expect(result.event).toBe("payment.pending");
+    expect(result.id).toBe("312009876544:payment.pending");
+    expect(result.payload.isCancelled).toBe(false);
+  });
+
+  it("should mark Aborted CCAvenue webhook as isCancelled=true", async () => {
+    const rawData = "order_id=OD-S4R-2610100090&tracking_id=312009876545&order_status=Aborted&amount=1500.00";
+    const encResp = encryptResponse(rawData, testWorkingKey);
+
+    const result = await gateway.handleWebhook({}, `encResp=${encResp}`);
+
+    expect(result.event).toBe("payment.failed");
+    expect(result.id).toBe("312009876545:payment.failed");
+    expect(result.payload.isCancelled).toBe(true);
+  });
+
+  it("should emit payment.failed with isCancelled=false for declined Failure status", async () => {
+    const rawData = "order_id=OD-S4R-2610100091&tracking_id=312009876546&order_status=Failure&status_message=Bank+declined&amount=1500.00";
+    const encResp = encryptResponse(rawData, testWorkingKey);
+
+    const result = await gateway.handleWebhook({}, `encResp=${encResp}`);
+
+    expect(result.event).toBe("payment.failed");
+    expect(result.payload.isCancelled).toBe(false);
+    expect(result.payload.statusMessage).toBe("Bank declined");
+  });
+
+  it("should emit payment.pending when CCAvenue webhook order_status is empty", async () => {
+    const rawData = "order_id=OD-S4R-2610100092&tracking_id=312009876547&amount=1500.00";
+    const encResp = encryptResponse(rawData, testWorkingKey);
+
+    const result = await gateway.handleWebhook({}, `encResp=${encResp}`);
+
+    expect(result.event).toBe("payment.pending");
+    expect(result.id).toBe("312009876547:payment.pending");
+  });
+
+  it("should reject corrupted encResp payloads cleanly", async () => {
+    await expect(gateway.handleWebhook({}, "encResp=deadbeefnotvalid")).rejects.toThrow();
+  });
+
+  it("should gracefully handle plaintext status=1 response in getPaymentStatus", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue({
+      text: async () => "status=1&enc_response=Order Not Found",
+    } as any);
+
+    const status = await gateway.getPaymentStatus("OD-S4R-MISSING");
+    expect(status.order_status).toBe("unknown");
+    expect(status.status_message).toContain("Order Not Found");
+
+    fetchSpy.mockRestore();
+  });
+
+  it("should decrypt valid status=0 Order_Status_Result JSON in getPaymentStatus", async () => {
+    const jsonPayload = JSON.stringify({
+      Order_Status_Result: { order_no: "OD-S4R-100", order_status: "Shipped", reference_no: "998877", order_amt: "1500.00" },
+    });
+    const encResp = encryptResponse(jsonPayload, testWorkingKey);
+
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue({
+      text: async () => `status=0&enc_response=${encResp}`,
+    } as any);
+
+    const status = await gateway.getPaymentStatus("OD-S4R-100");
+    expect(status.Order_Status_Result.order_status).toBe("Shipped");
+    expect(status.Order_Status_Result.reference_no).toBe("998877");
+
+    fetchSpy.mockRestore();
+  });
+
+  it("should emit refund.processed for CCAvenue Refunded webhook with deterministic dedup ID", async () => {
+    const rawData = "order_id=OD-S4R-REF1&order_status=Refunded&amount=750.00&bank_ref_no=ARN1122";
+    const encResp = encryptResponse(rawData, testWorkingKey);
+
+    const r1 = await gateway.handleWebhook({}, `encResp=${encResp}`);
+    const r2 = await gateway.handleWebhook({}, `encResp=${encResp}`);
+
+    expect(r1.event).toBe("refund.processed");
+    expect(r1.payload.amount).toBe(750);
+    expect(r1.id).toBe(r2.id);
+  });
+
+  it("should emit payment.disputed for CCAvenue chargeback or high risk webhooks", async () => {
+    const rawData = "order_id=OD-S4R-RISK1&tracking_id=312009876999&order_status=Success&risk_status=High&amount=2500.00";
+    const encResp = encryptResponse(rawData, testWorkingKey);
+
+    const res = await gateway.handleWebhook({}, `encResp=${encResp}`);
+    expect(res.event).toBe("payment.disputed");
+    expect(res.payload.disputeId).toBe("312009876999");
   });
 });

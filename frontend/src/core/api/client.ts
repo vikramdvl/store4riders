@@ -1,7 +1,21 @@
 import axios from "axios";
-import { useAuthStore } from "@/stores/useAuthStore";
+import { useAuthStore, requestCrossTabSessionSync } from "@/stores/useAuthStore";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+
+export const isAdminPortalContext = (): boolean => {
+  if (typeof window === "undefined") return false;
+  const { pathname, hostname } = window.location;
+  return pathname.startsWith("/admin") || hostname.startsWith("admin.");
+};
+
+export const getAdminLoginPath = (): string => {
+  const secretPath = process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH || "rider-staff-gate";
+  if (typeof window !== "undefined" && window.location.hostname.startsWith("admin.")) {
+    return `/${secretPath}?expired=true`;
+  }
+  return `/admin/${secretPath}?expired=true`;
+};
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -12,11 +26,22 @@ export const apiClient = axios.create({
 });
 
 // Add an interceptor for tokens from Zustand store
-apiClient.interceptors.request.use((config) => {
+apiClient.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
-    // Zustand persist stores data in localStorage, but we can access it directly via getState()
-    const { token } = useAuthStore.getState();
-    if (token) {
+    const portalScope = isAdminPortalContext() ? "admin" : "customer";
+    if (!config.headers["x-auth-scope"]) {
+      config.headers["x-auth-scope"] = portalScope;
+    }
+
+    let { isAuthenticated, token, user } = useAuthStore.getState();
+    if (isAuthenticated && !token) {
+      await requestCrossTabSessionSync();
+      const updated = useAuthStore.getState();
+      token = updated.token;
+      user = updated.user;
+    }
+    const storedScope = user?.role && user.role !== "customer" ? "admin" : "customer";
+    if (token && (!user || storedScope === portalScope)) {
       config.headers.Authorization = `Bearer ${token}`;
     }
   }
@@ -42,19 +67,21 @@ const processQueue = (error: any, token: string | null = null) => {
 };
 
 const handleSessionExpired = () => {
+  const prevUser = useAuthStore.getState().user;
+  const wasAdminUser = Boolean(prevUser?.role && prevUser.role !== "customer");
   useAuthStore.getState().logout();
 
   // ROUTE-AWARE REDIRECT:
   // NEVER kick a browsing customer out of public storefront pages (Home, Category, PDP, Cart) to /login.
-  // Demote to guest silently so browsing continues smoothly.
-  // ONLY redirect if actively on private account or admin management routes.
+  // NEVER redirect Admin Portal sessions to the customer /login page.
   if (typeof window !== "undefined") {
     const pathname = window.location.pathname;
-    const isProtectedRoute =
-      pathname.startsWith("/account") ||
-      pathname.startsWith("/admin");
+    if (isAdminPortalContext()) {
+      window.location.href = wasAdminUser ? getAdminLoginPath() : "/";
+      return;
+    }
 
-    if (isProtectedRoute) {
+    if (pathname.startsWith("/account")) {
       window.location.href = `/login?expired=true&redirect=${encodeURIComponent(pathname)}`;
     }
   }
@@ -64,11 +91,30 @@ const handleSessionExpired = () => {
  * Deduplicated access token refresh helper shared by the 401 interceptor and
  * proactive tab-visibility session renewal.
  */
-export async function refreshAccessToken(): Promise<string | null> {
-  const { isAuthenticated, refreshToken } = useAuthStore.getState();
+export async function refreshAccessToken(explicitScope?: "admin" | "customer"): Promise<string | null> {
+  const portalScope = explicitScope || (isAdminPortalContext() ? "admin" : "customer");
+  const initialState = useAuthStore.getState();
+  if (!initialState.isAuthenticated) {
+    return null;
+  }
+
+  // Hydrate in-memory tokens from an open sibling tab before hitting /auth/refresh
+  if (!initialState.token && !initialState.refreshToken) {
+    await requestCrossTabSessionSync();
+    const synced = useAuthStore.getState();
+    const syncedScope = synced.user?.role && synced.user.role !== "customer" ? "admin" : "customer";
+    if (synced.token && (!synced.user || syncedScope === portalScope) && !isTokenExpiringSoon(synced.token, synced.lastTokenRefreshAt)) {
+      return synced.token;
+    }
+  }
+
+  const { isAuthenticated, refreshToken, user } = useAuthStore.getState();
   if (!isAuthenticated) {
     return null;
   }
+
+  const storedScope = user?.role && user.role !== "customer" ? "admin" : "customer";
+  const bodyRefreshToken = !user || storedScope === portalScope ? refreshToken : undefined;
 
   if (isRefreshing) {
     return new Promise<string | null>((resolve, reject) => {
@@ -79,11 +125,14 @@ export async function refreshAccessToken(): Promise<string | null> {
   isRefreshing = true;
 
   try {
-    // Send both HttpOnly cookie and body token for cross-origin fallback support
+    // Send both HttpOnly cookie and scope header/body fallback for cross-origin support
     const refreshResponse = await axios.post(
       `${API_URL}/auth/refresh`,
-      { refreshToken: refreshToken || undefined },
-      { withCredentials: true }
+      { refreshToken: bodyRefreshToken || undefined },
+      {
+        withCredentials: true,
+        headers: { "x-auth-scope": portalScope },
+      }
     );
 
     const newAccessToken = refreshResponse.data?.data?.accessToken;
@@ -102,7 +151,15 @@ export async function refreshAccessToken(): Promise<string | null> {
     // Only log out on explicit auth rejection (401/403). Never log out on 429, 5xx, or network errors.
     const status = refreshError?.response?.status;
     if (status === 401 || status === 403) {
-      handleSessionExpired();
+      const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+      const isPublicRoute = !isAdminPortalContext() && !pathname.startsWith("/account");
+      const errorMsg = String(refreshError?.response?.data?.error || "");
+      // If a newly opened public tab lacked an in-memory refreshToken and cookies weren't sent cross-origin,
+      // don't broadcast a global LOGOUT that would kick an active Admin/Account tab out of its session.
+      const missingTokenOnPublicTab = isPublicRoute && !bodyRefreshToken && errorMsg === "No refresh token";
+      if (!missingTokenOnPublicTab) {
+        handleSessionExpired();
+      }
     }
     throw refreshError;
   } finally {
@@ -141,7 +198,12 @@ export function initSessionLifecycle(): void {
   if (typeof window === "undefined" || lifecycleInitialized) return;
   lifecycleInitialized = true;
 
-  const checkAndRefreshSession = () => {
+  const checkAndRefreshSession = async () => {
+    const initial = useAuthStore.getState();
+    if (!initial.isAuthenticated) return;
+    if (!initial.token) {
+      await requestCrossTabSessionSync();
+    }
     const { isAuthenticated, token, lastTokenRefreshAt } = useAuthStore.getState();
     if (!isAuthenticated) return;
     if (isTokenExpiringSoon(token, lastTokenRefreshAt)) {
@@ -152,7 +214,7 @@ export function initSessionLifecycle(): void {
   };
 
   // Reconcile expired idle sessions or near-expiry tokens on initial mount
-  checkAndRefreshSession();
+  void checkAndRefreshSession();
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
@@ -175,6 +237,7 @@ apiClient.interceptors.response.use(
     const isAuthRoute =
       originalRequest?.url?.includes("/auth/login") ||
       originalRequest?.url?.includes("/auth/register") ||
+      originalRequest?.url?.includes("/auth/send-register-otp") ||
       originalRequest?.url?.includes("/auth/refresh") ||
       originalRequest?.url?.includes("/auth/logout");
 
