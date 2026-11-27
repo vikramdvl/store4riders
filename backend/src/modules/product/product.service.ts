@@ -1,8 +1,14 @@
 import { ProductRepository } from "./product.repository";
-import { IProduct } from "@store4riders/shared-types";
+import { IProduct, ISpecFieldDefinition } from "@store4riders/shared-types";
 import { NotFoundError, ConflictError } from "../../core/errors/AppError";
 import { indexProduct, removeProductFromIndex } from "../../core/search/meilisearch";
-import { slugify, extractProductDimensions, extractProductWeight } from "@store4riders/shared-utils";
+import {
+  slugify,
+  extractProductDimensions,
+  extractProductWeight,
+  resolveCategorySpecDefinitions,
+  buildSpecificationsFromTemplate,
+} from "@store4riders/shared-utils";
 import { getCache, setCache, deleteCache, clearProductCaches } from "../../core/cache/redis";
 import { buildSearchSlugs, resolveCanonicalCategorySlugs } from "./product.category-constants";
 import { supportsTransactions } from "../../core/database/transaction";
@@ -109,7 +115,7 @@ export class ProductService {
   }
 
   static async getProductBySlug(slug: string): Promise<IProduct> {
-    const cacheKey = `product_slug_v4_${slug}`;
+    const cacheKey = `product_slug_v6_${slug}`;
     const cached = await getCache(cacheKey);
     if (cached) return cached;
 
@@ -367,10 +373,12 @@ export class ProductService {
     let subCategoryName = (product as any).subCategory || "";
     let subCategorySlug = (product as any).subCategorySlug || "";
     const categoryHierarchy: Array<{ name: string; slug: string }> = [];
+    let resolvedSpecTemplate: ISpecFieldDefinition[] = [];
 
     const resolveCategoryTask = async () => {
       try {
         const { CategoryModel } = await import("../category/category.model");
+        const { CategoryRepository } = await import("../category/category.repository");
         const { LEAF_TO_PARENT_MAP } = await import("./product.category-constants");
         const mongoose = await import("mongoose");
         const candidateSlugs = [
@@ -378,14 +386,20 @@ export class ProductService {
           ...(Array.isArray(product.categorySlugs) ? product.categorySlugs : []),
         ].filter((s): s is string => typeof s === "string" && s.trim().length > 0);
 
-        if (product.magentoCategories) {
-          const parts = product.magentoCategories.split(",").flatMap((c: string) =>
-            c.split("/").map((p: string) => slugify(p.trim())).filter((p: string) => p && !p.includes("root") && !p.includes("default"))
-          );
-          for (const p of parts) {
-            if (!candidateSlugs.includes(p)) candidateSlugs.push(p);
-          }
-        }
+    // Split on non-escaped slashes only so Magento escaped slashes like "Bags \/ Luggage" stay whole
+    const resolvedCategoryParts = (rawCats: string): string[] =>
+      rawCats
+        .replace(/\\\/|\\\//g, " ")
+        .split("/")
+        .map((p: string) => slugify(p.trim()))
+        .filter((p: string) => p && !p.includes("root") && !p.includes("default"));
+
+    if (product.magentoCategories) {
+      const parts = product.magentoCategories.split(",").flatMap(resolvedCategoryParts);
+      for (const p of parts) {
+        if (!candidateSlugs.includes(p)) candidateSlugs.push(p);
+      }
+    }
 
         const orConditions: any[] = [];
         if (candidateSlugs.length > 0) {
@@ -396,10 +410,24 @@ export class ProductService {
         }
 
         let matchedCats: any[] = [];
+        let primaryCat: any = null;
         let subCat: any = null;
         let parentCat: any = null;
+        let directCat: any = null;
         if (orConditions.length > 0) {
           matchedCats = await CategoryModel.find({ $or: orConditions }).lean().exec();
+        }
+
+        if (product.categoryId) {
+          const catIdStr = String(product.categoryId).trim().toLowerCase();
+          primaryCat = matchedCats.find(
+            (c) =>
+              String(c._id) === String(product.categoryId) ||
+              (c.slug && String(c.slug).toLowerCase() === catIdStr)
+          );
+          if (!primaryCat) {
+            primaryCat = await CategoryRepository.findById(String(product.categoryId)).catch(() => null);
+          }
         }
 
         if (matchedCats.length > 0) {
@@ -450,9 +478,9 @@ export class ProductService {
             }
           } else {
             // All matched are top-level or primary
-            const primaryCat = matchedCats[0];
-            categoryName = primaryCat.name;
-            categorySlug = primaryCat.slug;
+            const fallbackPrimary = primaryCat || matchedCats[0];
+            categoryName = fallbackPrimary.name;
+            categorySlug = fallbackPrimary.slug;
           }
         }
 
@@ -512,6 +540,20 @@ export class ProductService {
           categoryHierarchy.push({ name: subCategoryName, slug: subCategorySlug });
         }
 
+        // Ensure direct/parent category record is resolved when alias slugs or parentId differ from matchedCats
+        if (!parentCat && primaryCat?.parentId) {
+          parentCat = await CategoryRepository.findById(String(primaryCat.parentId)).catch(() => null);
+        }
+        if (categorySlug && (!primaryCat || primaryCat.slug !== categorySlug)) {
+          directCat = await CategoryRepository.findBySlug(categorySlug).catch(() => null);
+        }
+        if (!directCat && subCategorySlug) {
+          const leafSubSlug = subCategorySlug.split("/").filter(Boolean).pop();
+          if (leafSubSlug) {
+            directCat = await CategoryRepository.findBySlug(leafSubSlug).catch(() => null);
+          }
+        }
+
         // DYNAMIC SIZE CHART RESOLUTION:
         // 1. If product has no explicit sizeChart, check legacy Magento attributes (e.g. size_chart_01, sizechart)
         if (!product.sizeChart && !product.size_chart) {
@@ -532,22 +574,61 @@ export class ProductService {
         if (!product.sizeChart && !product.size_chart) {
           const getCatChart = (c: any) => (c ? (c.sizeChart || c.size_chart) : undefined);
           const inheritedChart =
+            getCatChart(primaryCat) ||
             getCatChart(subCat) ||
             getCatChart(parentCat) ||
-            (matchedCats.find((c) => getCatChart(c)) ? getCatChart(matchedCats.find((c) => getCatChart(c))) : undefined);
+            (matchedCats.find((c) => getCatChart(c)) ? getCatChart(matchedCats.find((c) => getCatChart(c))) : undefined) ||
+            getCatChart(directCat);
 
           if (inheritedChart) {
             product.sizeChart = inheritedChart;
-          } else if (categorySlug) {
-            const directCat = await CategoryModel.findOne({ slug: categorySlug }).lean().exec();
-            const chart = getCatChart(directCat);
-            if (chart) {
-              product.sizeChart = chart;
-            }
           }
         }
+
+        // CATEGORY SPECIFICATIONS & ATTRIBUTES TEMPLATE RESOLUTION:
+        // Resolve strictly from the product's category template (specDefinitions / blueprint),
+        // ordered from most specific (subcategory / primary) to parent category.
+        const isPrimaryTopLevelWhileSubExists = Boolean(
+          subCat && primaryCat && !primaryCat.parentId && String(subCat._id) !== String(primaryCat._id)
+        );
+        const rawChain = isPrimaryTopLevelWhileSubExists
+          ? [subCat, primaryCat, parentCat, ...matchedCats, directCat]
+          : [primaryCat, subCat, parentCat, ...matchedCats, directCat];
+        const categoryChain: any[] = [];
+        const seenCatKeys = new Set<string>();
+        for (const cat of rawChain) {
+          if (!cat) continue;
+          const key = String(cat._id || cat.slug || cat.name || "");
+          if (key && !seenCatKeys.has(key)) {
+            seenCatKeys.add(key);
+            categoryChain.push(cat);
+          }
+        }
+
+        resolvedSpecTemplate = resolveCategorySpecDefinitions({
+          categories: categoryChain,
+          productAttributeSetCode: product.attributeSetCode || (product.attributes as any)?.attribute_set_code,
+          fallbackHints: [
+            subCategorySlug,
+            categorySlug,
+            product.categoryId,
+            subCategoryName,
+            categoryName,
+          ],
+        });
       } catch {
-        // Non-blocking fallback
+        // Non-blocking fallback to blueprint detection from product hints
+        resolvedSpecTemplate = resolveCategorySpecDefinitions({
+          categories: [],
+          productAttributeSetCode: product.attributeSetCode || (product.attributes as any)?.attribute_set_code,
+          fallbackHints: [
+            subCategorySlug,
+            categorySlug,
+            product.categoryId,
+            subCategoryName,
+            categoryName,
+          ],
+        });
       }
     };
 
@@ -562,6 +643,22 @@ export class ProductService {
     if (subCategoryName) (product as any).subCategory = subCategoryName;
     if (subCategorySlug) (product as any).subCategorySlug = subCategorySlug;
     if (categoryHierarchy.length > 0) (product as any).categoryHierarchy = categoryHierarchy;
+    product.categorySpecTemplate = resolvedSpecTemplate;
+    product.specifications = buildSpecificationsFromTemplate(resolvedSpecTemplate, product.attributes, {
+      name: product.name,
+      shortDescription: product.shortDescription || (product as any).short_description,
+      description: product.description,
+      brand: brandName || product.brand,
+      gender: product.gender,
+      countryOfManufacture: product.countryOfManufacture,
+      weight: product.weight,
+      weightUnit: (product as any).weightUnit,
+      length: (product as any).length,
+      breadth: (product as any).breadth,
+      height: (product as any).height,
+      dimensionUnit: (product as any).dimensionUnit,
+      variants: product.variants as any[],
+    });
 
     await setCache(cacheKey, product, PRODUCT_DETAIL_TTL);
     return product;
@@ -595,7 +692,7 @@ export class ProductService {
     const cached = await getCache(cacheKey);
     if (cached) return cached;
 
-    let product: IProduct | null = (await getCache(`product_slug_v4_${slugOrId}`)) as IProduct | null;
+    let product: IProduct | null = (await getCache(`product_slug_v6_${slugOrId}`)) as IProduct | null;
     if (!product && slugOrId.match(/^[0-9a-fA-F]{24}$/)) {
       product = await ProductRepository.findById(slugOrId);
     }
@@ -632,7 +729,7 @@ export class ProductService {
     const cached = await getCache(cacheKey);
     if (cached) return cached;
 
-    let product: IProduct | null = (await getCache(`product_slug_v4_${slugOrId}`)) as IProduct | null;
+    let product: IProduct | null = (await getCache(`product_slug_v6_${slugOrId}`)) as IProduct | null;
     if (!product && slugOrId.match(/^[0-9a-fA-F]{24}$/)) {
       product = await ProductRepository.findById(slugOrId);
     }
@@ -669,7 +766,7 @@ export class ProductService {
     const cached = await getCache(cacheKey);
     if (cached) return cached;
 
-    let product: IProduct | null = (await getCache(`product_slug_v4_${slugOrId}`)) as IProduct | null;
+    let product: IProduct | null = (await getCache(`product_slug_v6_${slugOrId}`)) as IProduct | null;
     if (!product && slugOrId.match(/^[0-9a-fA-F]{24}$/)) {
       product = await ProductRepository.findById(slugOrId);
     }
@@ -1695,6 +1792,8 @@ export class ProductService {
       await deleteCache(`product_slug_${slug}`);
       await deleteCache(`product_slug_v2_${slug}`);
       await deleteCache(`product_slug_v4_${slug}`);
+      await deleteCache(`product_slug_v5_${slug}`);
+      await deleteCache(`product_slug_v6_${slug}`);
       await deleteCache(`product_kit_v4_${slug}`);
       await deleteCache(`product_kit_v5_${slug}`);
       await deleteCache(`product_upsell_v4_${slug}`);

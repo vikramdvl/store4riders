@@ -336,5 +336,24 @@ describe("Navbar & Submenu Navigation Integrity Suite", () => {
       expect(allMenuHrefs).not.toContain("/brands/maddog");
       expect(allMenuHrefs).not.toContain("/brands/parani");
     });
+
+    it("hides deleted storefront template categories such as helmet-cleaners from the navbar", () => {
+      const dbCategories = [
+        {
+          _id: "cat_cleaners_tombstone",
+          name: "Helmet Cleaners",
+          slug: "helmet-cleaners",
+          includeInMenu: false,
+          isDeleted: true,
+        },
+      ];
+
+      const resolved = resolveStorefrontNavItems(DEFAULT_NAV_ITEMS, [], dbCategories);
+      const helmetsNav = resolved.find((i) => i.id === "helmets");
+      const allHelmetHrefs = (helmetsNav?.megaMenuItems || []).flatMap((g) => g.items.map((sub) => sub.href));
+
+      expect(allHelmetHrefs).not.toContain("/motorcycle-helmets/helmet-cleaners");
+      expect(allHelmetHrefs).toContain("/motorcycle-helmets/balaclava");
+    });
   });
 });

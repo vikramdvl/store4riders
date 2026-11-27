@@ -1,3 +1,5 @@
+import { ISpecFieldDefinition, IProductSpecification } from "@store4riders/shared-types";
+
 export interface ProductImage {
   url: string;
   altText: string;
@@ -85,6 +87,8 @@ export interface PDPData {
   stockStatus?: number;
   videoUrl?: string;
   attributes?: Record<string, string>;
+  categorySpecTemplate?: ISpecFieldDefinition[];
+  specifications?: IProductSpecification[];
 }
 
 export interface ProductDetailProps {

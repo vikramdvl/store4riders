@@ -156,4 +156,61 @@ describe("apiClient - Token Refresh & Session Resilience", () => {
       });
     }
   });
+
+  it("never broadcasts an admin LOGOUT when a customer storefront session expires", async () => {
+    const originalLocation = window.location;
+    let assignedHref = "";
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...originalLocation,
+        pathname: "/account",
+        hostname: "store4riders.com",
+        get href() {
+          return assignedHref;
+        },
+        set href(val: string) {
+          assignedHref = val;
+        },
+      },
+    });
+
+    const postedMessages: any[] = [];
+    const OriginalBroadcastChannel = globalThis.BroadcastChannel;
+    class MockBroadcastChannel {
+      onmessage: ((ev: any) => void) | null = null;
+      postMessage(msg: any) {
+        postedMessages.push(msg);
+      }
+      close() {}
+    }
+    (globalThis as any).BroadcastChannel = MockBroadcastChannel;
+
+    try {
+      useAuthStore.setState({
+        user: { email: "admin@store4riders.com", role: "super_admin" },
+        token: "stale_token",
+        refreshToken: "stale_refresh",
+        isAuthenticated: true,
+        lastTokenRefreshAt: Date.now(),
+      });
+
+      vi.spyOn(axios, "post").mockRejectedValueOnce({
+        response: { status: 401, data: { error: "Invalid refresh token" } },
+      });
+
+      await expect(refreshAccessToken("customer")).rejects.toBeDefined();
+      expect(assignedHref).toContain("/login?expired=true");
+
+      // Even if logout() is invoked directly on storefront, scope defaults to "customer", not "admin"
+      useAuthStore.getState().logout("customer");
+      expect(postedMessages.every((m) => m.scope !== "admin")).toBe(true);
+    } finally {
+      (globalThis as any).BroadcastChannel = OriginalBroadcastChannel;
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
+  });
 });

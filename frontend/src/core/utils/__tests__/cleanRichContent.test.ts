@@ -104,6 +104,14 @@ describe('cleanRichContent Utility', () => {
     expect(cleaned).toContain('class="rounded-xl mx-auto max-w-full h-auto rounded-md shadow-xs my-2"');
     expect(cleaned).toContain('loading="lazy" />');
   });
+
+  it('should strip text-align: justify to prevent narrow mobile column word-spacing rivers', () => {
+    const justified = '<p style="text-align: justify; color: #333; margin-bottom: 10px;">Stormproof dry bag description</p>';
+    const cleaned = cleanRichContent(justified);
+
+    expect(cleaned).not.toContain('text-align: justify');
+    expect(cleaned).toContain('margin-bottom: 10px');
+  });
 });
 
 describe('stripHtml Utility', () => {

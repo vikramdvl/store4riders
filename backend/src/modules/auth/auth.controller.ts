@@ -397,3 +397,5 @@ export class AuthController {
     return ApiResponse.success({ exists: !!user }, "Email checked successfully");
   }
 }
+
+export { setCookies as setAuthCookies };

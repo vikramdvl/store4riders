@@ -142,8 +142,55 @@ textarea {
   line-height: 1.65;
   color: #334155;
   overflow-x: auto;
+  overflow-wrap: break-word;
   -webkit-overflow-scrolling: touch;
   max-width: 100%;
+}
+
+.magento-layout p,
+.magento-layout li {
+  text-wrap: pretty;
+}
+
+.magento-layout a,
+.magento-layout code {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .magento-layout p,
+  .magento-layout li {
+    text-align: left !important;
+  }
+}
+
+.spec-heading-balance {
+  text-wrap: balance;
+}
+
+.specs-table-container {
+  container-type: inline-size;
+}
+
+@container (width < 270px) {
+  .specs-table,
+  .specs-table tbody,
+  .specs-row,
+  .specs-label,
+  .specs-value {
+    display: block;
+    width: 100%;
+  }
+
+  .specs-label {
+    border-right: 0;
+    border-bottom: 1px solid #f5f5f5;
+    padding-bottom: 0.25rem;
+  }
+
+  .specs-value {
+    padding-top: 0.375rem;
+  }
 }
 
 @media (min-width: 768px) {

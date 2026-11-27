@@ -94,6 +94,7 @@
      * /products/{slug}:
      *   get:
      *     summary: Get product by slug
+     *     description: Returns full product details including resolved `categorySpecTemplate` and template-driven `specifications` from the Category Specifications & Attributes Template.
      *     tags: [Products]
      *     parameters:
      *       - in: path
@@ -103,7 +104,7 @@
      *           type: string
      *     responses:
      *       200:
-     *         description: Product details
+     *         description: Product details with categorySpecTemplate and specifications
      */
 
 /**

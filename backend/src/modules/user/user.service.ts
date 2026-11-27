@@ -2,6 +2,8 @@ import { randomUUID } from "crypto";
 import { UserRepository } from "./user.repository";
 import { IUser, IUserAddress, UserRole } from "@store4riders/shared-types";
 import { NotFoundError, ForbiddenError, ConflictError, ValidationError, UnauthorizedError } from "../../core/errors/AppError";
+import { setCache, deleteCache } from "../../core/cache/redis";
+import { generateTokens, getSessionConfigForRole, type AuthScope } from "../../core/utils/jwt";
 
 /**
  * @class UserService
@@ -26,6 +28,9 @@ export class UserService {
   static async getProfile(userId: string): Promise<IUser> {
     const user = await UserRepository.findById(userId);
     if (!user) throw new NotFoundError("User");
+    if (user.isActive === false) {
+      throw new UnauthorizedError("Account has been disabled");
+    }
 
     const needsSync = !user.phone || !user.phone.trim()
       || !user.addresses || user.addresses.length === 0
@@ -44,14 +49,30 @@ export class UserService {
   }
 
   static async updateProfile(userId: string, data: Partial<IUser>): Promise<IUser> {
+    const existing = await UserRepository.findById(userId);
+    if (!existing) throw new NotFoundError("User");
+    if (existing.isActive === false) {
+      throw new UnauthorizedError("Account has been disabled");
+    }
     const user = await UserRepository.update(userId, data);
     if (!user) throw new NotFoundError("User");
     return user;
   }
 
-  static async changePassword(userId: string, currentPass: string, newPass: string): Promise<void> {
+  static async changePassword(
+    userId: string,
+    currentPass: string,
+    newPass: string
+  ): Promise<{
+    tokens: { accessToken: string; refreshToken: string };
+    scope: AuthScope;
+    sessionMaxAgeSeconds: number;
+  }> {
     const user = await UserRepository.findByIdWithPassword(userId);
     if (!user) throw new NotFoundError("User");
+    if (user.isActive === false) {
+      throw new UnauthorizedError("Account has been disabled");
+    }
 
     if (!user.password) {
       throw new ValidationError("Account does not have a local password configured");
@@ -65,6 +86,49 @@ export class UserService {
 
     const hashedPassword = await bcrypt.hash(newPass, 12);
     await UserRepository.update(userId, { password: hashedPassword });
+
+    const fallbackNextVersion = typeof user.tokenVersion === "number" ? user.tokenVersion + 1 : 1;
+    const incrementedVersion =
+      typeof UserRepository.incrementTokenVersion === "function"
+        ? await UserRepository.incrementTokenVersion(userId)
+        : null;
+    const nextTokenVersion = typeof incrementedVersion === "number" ? incrementedVersion : fallbackNextVersion;
+
+    // Anchor the blacklist timestamp strictly prior to the current second so newly minted tokens (iat)
+    // remain valid while prior sessions are rejected alongside the bumped tokenVersion.
+    const revocationTimestampMs = Math.max(0, (Math.floor(Date.now() / 1000) - 1) * 1000);
+    try {
+      await Promise.all([
+        setCache(`blacklist:${userId}`, String(revocationTimestampMs), 7 * 24 * 60 * 60),
+        deleteCache(`auth_user_state:${userId}`),
+      ]);
+    } catch {
+      // Cache unavailability must not fail password updates once tokenVersion is incremented
+    }
+
+    const role = user.role || "customer";
+    const tokens = generateTokens(userId, role, nextTokenVersion);
+    const { scope, refreshMaxAgeSeconds } = getSessionConfigForRole(role);
+
+    try {
+      const { AuditLogService } = await import("../audit-log/audit-log.service");
+      await AuditLogService.record({
+        category: "AUTH",
+        action: "PASSWORD_CHANGED",
+        severity: "info",
+        actor: { userId, email: user.email, role },
+        resource: { type: "User", id: userId, label: user.email },
+        message: `Password updated for ${user.email} and prior sessions were revoked`,
+      });
+    } catch {
+      // Audit logging failure must not fail password updates
+    }
+
+    return {
+      tokens,
+      scope,
+      sessionMaxAgeSeconds: refreshMaxAgeSeconds,
+    };
   }
 
   static async getAddresses(userId: string): Promise<IUserAddress[]> {

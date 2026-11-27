@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useQuery, keepPreviousData, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ISpecFieldDefinition, IProductSpecification } from "@store4riders/shared-types";
 import { apiClient } from "../api/client";
 import { revalidateStorefrontPaths, collectProductStorefrontPaths } from "../utils/revalidateStorefront";
 
@@ -83,6 +84,8 @@ export interface IBackendProduct {
   allowBackorders?: boolean;
   videoUrl?: string;
   attributes?: Record<string, string>;
+  categorySpecTemplate?: ISpecFieldDefinition[];
+  specifications?: IProductSpecification[];
   avgRating?: number;
   reviewCount?: number;
 }

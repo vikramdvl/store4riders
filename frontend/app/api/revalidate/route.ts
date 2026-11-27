@@ -36,7 +36,8 @@ async function verifyAdminRequest(request: NextRequest): Promise<boolean> {
   }
 
   const authHeader = request.headers.get("authorization");
-  const cookieToken = request.cookies.get("accessToken")?.value;
+  const adminCookieToken = request.cookies.get("adminAccessToken")?.value;
+  const cookieToken = adminCookieToken || request.cookies.get("accessToken")?.value;
   if (!authHeader && !cookieToken) {
     return false;
   }
@@ -46,6 +47,9 @@ async function verifyAdminRequest(request: NextRequest): Promise<boolean> {
     headers.Authorization = authHeader;
   } else if (cookieToken) {
     headers.Authorization = `Bearer ${cookieToken}`;
+  }
+  if (adminCookieToken || authHeader) {
+    headers["x-auth-scope"] = "admin";
   }
   const rawCookie = request.headers.get("cookie");
   if (rawCookie) {

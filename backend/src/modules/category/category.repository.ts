@@ -46,6 +46,13 @@ export class CategoryRepository {
     return categories;
   }
 
+  static async findExactBySlug(slug: string): Promise<ICategory | null> {
+    if (!slug) return null;
+    const cleanSlug = slug.replace(/\.html$/i, "").toLowerCase().trim();
+    const doc = await CategoryModel.findOne({ slug: cleanSlug }).lean().exec();
+    return (doc as unknown as ICategory) || null;
+  }
+
   static async findBySlug(slug: string): Promise<ICategory | null> {
     if (!slug) return null;
     const cleanSlug = slug.replace(/\.html$/i, "").toLowerCase().trim();
@@ -142,8 +149,15 @@ export class CategoryRepository {
   static async update(id: string, data: Partial<ICategory>): Promise<ICategory | null> {
     if (!id) return null;
 
-    // 1. First find any existing document using robust lookup
-    const existing = await this.findById(id);
+    // 1. Find existing document; when updating by a non-ObjectId template slug matching data.slug,
+    //    match exact slug only so we never hijack an unrelated legacy alias document.
+    const cleanId = String(id).trim();
+    const isObjectId = mongoose.Types.ObjectId.isValid(cleanId);
+    const targetSlug = data.slug ? String(data.slug).replace(/\.html$/i, "").toLowerCase().trim() : "";
+    const existing =
+      !isObjectId && targetSlug && targetSlug === cleanId.toLowerCase()
+        ? await this.findExactBySlug(cleanId)
+        : await this.findById(id);
 
     if (existing) {
       const updateData: Record<string, any> = { ...data };

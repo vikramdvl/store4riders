@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { updateProfileSchema, addressSchema, changePasswordSchema } from "@store4riders/shared-validation";
-import { extractUserFromAuth } from "../../core/middlewares/auth";
+import { extractUserFromAuth, extractVerifiedAuth } from "../../core/middlewares/auth";
 import { IUser, IUserAddress } from "@store4riders/shared-types";
 import { ValidationError } from "../../core/errors/AppError";
 
@@ -27,7 +27,7 @@ export class UserValidator {
   }
   
   static async validateUpdateProfile(req: NextRequest): Promise<{ userId: string; data: Partial<IUser> }> {
-    const userId = extractUserFromAuth(req);
+    const { userId } = await extractVerifiedAuth(req);
     const body = await this.getBody(req);
     const result = updateProfileSchema.safeParse(body);
     if (!result.success) {
@@ -37,7 +37,7 @@ export class UserValidator {
   }
 
   static async validateAddAddress(req: NextRequest): Promise<{ userId: string; data: Omit<IUserAddress, 'id'> }> {
-    const userId = extractUserFromAuth(req);
+    const { userId } = await extractVerifiedAuth(req);
     const body = await this.getBody(req);
     const result = addressSchema.safeParse(body);
     if (!result.success) {
@@ -47,7 +47,7 @@ export class UserValidator {
   }
 
   static async validateUpdateAddress(req: NextRequest): Promise<{ userId: string; data: Partial<IUserAddress> }> {
-    const userId = extractUserFromAuth(req);
+    const { userId } = await extractVerifiedAuth(req);
     const body = await this.getBody(req);
     const result = addressSchema.partial().safeParse(body);
     if (!result.success) {
@@ -57,7 +57,7 @@ export class UserValidator {
   }
 
   static async validateChangePassword(req: NextRequest): Promise<{ userId: string; currentPassword: string; newPassword: string }> {
-    const userId = extractUserFromAuth(req);
+    const { userId } = await extractVerifiedAuth(req);
     const body = await this.getBody(req);
     const result = changePasswordSchema.safeParse(body);
     if (!result.success) {

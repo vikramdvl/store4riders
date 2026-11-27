@@ -5,4 +5,6 @@ export * from "./shipping";
 export * from "./google-taxonomy";
 export * from "./dimension-parser";
 export * from "./exchange";
+export * from "./spec-smart-resolver";
+export * from "./spec-templates";
 

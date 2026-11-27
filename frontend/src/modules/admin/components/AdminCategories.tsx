@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { compressImageToWebP, uploadImageToS3 } from "@/core/utils/imageCompressor";
 import { ISpecFieldDefinition } from "@store4riders/shared-types";
 import { slugify } from "@store4riders/shared-utils";
-import { CATEGORY_SPEC_DEFINITIONS } from "./product-form/product-specs.constants";
+import { CATEGORY_SPEC_DEFINITIONS, detectAttributeSetFromCategory, normalizeAttributeSetCode } from "./product-form/product-specs.constants";
 import { SizeChartUploader } from "./SizeChartUploader";
 import {
   areCategorySlugsEquivalent,
@@ -83,6 +83,7 @@ export const AdminCategories = () => {
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false);
   const [isTogglingMenuId, setIsTogglingMenuId] = useState<string | null>(null);
+  const [categoryToDelete, setCategoryToDelete] = useState<any | null>(null);
 
   const handleToggleIncludeInMenu = async (cat: any) => {
     const catId = cat._id ? String(cat._id) : cat.id ? String(cat.id) : cat.slug;
@@ -504,7 +505,23 @@ export const AdminCategories = () => {
   };
 
   const handleResetToBlueprint = (blueprintCode?: string) => {
-    const code = blueprintCode || watch("attributeSetCode") || "Default";
+    const rawCode = blueprintCode || watch("attributeSetCode");
+    const normalizedExplicit = rawCode ? normalizeAttributeSetCode(rawCode) : "Default";
+    const fallbackDetected = editingCategory
+      ? detectAttributeSetFromCategory(
+          watch("slug") || watch("name") || editingCategory.slug || editingCategory.name || "",
+          allCatalogCategories
+        )
+      : parentForNewSubcategory
+      ? detectAttributeSetFromCategory(
+          parentForNewSubcategory.slug || parentForNewSubcategory.name || "",
+          allCatalogCategories
+        )
+      : "Default";
+    const code =
+      normalizedExplicit !== "Default" && normalizedExplicit !== "CategoryCustom"
+        ? normalizedExplicit
+        : fallbackDetected;
     const blueprint = CATEGORY_SPEC_DEFINITIONS[code] || CATEGORY_SPEC_DEFINITIONS.Default;
     if (blueprint) {
       setSpecDefinitions(blueprint.fields.map((f) => ({ ...f, presets: [...(f.presets || [])] })));
@@ -529,7 +546,10 @@ export const AdminCategories = () => {
       if (category.specDefinitions && category.specDefinitions.length > 0) {
         setSpecDefinitions(category.specDefinitions.map((s) => ({ ...s, presets: [...(s.presets || [])] })));
       } else {
-        const code = (category as any).attributeSetCode || "Default";
+        const code =
+          (category as any).attributeSetCode ||
+          detectAttributeSetFromCategory(category.slug || category.name || "", allCatalogCategories) ||
+          "Default";
         const blueprint = CATEGORY_SPEC_DEFINITIONS[code] || CATEGORY_SPEC_DEFINITIONS.Default;
         setSpecDefinitions(blueprint.fields.map((f) => ({ ...f, presets: [...(f.presets || [])] })));
       }
@@ -537,10 +557,24 @@ export const AdminCategories = () => {
       setSelectedHeroCategoryIds(category.heroCategoryIds || []);
       setFaqRichModes({});
       setFaqPreviews({});
+      const rawParentId = String(category.parentId || "").trim();
+      const matchedParent = rawParentId
+        ? canonicalMenuCategories.find(
+            (c) =>
+              String(c._id || "") === rawParentId ||
+              String(c.id || "") === rawParentId ||
+              String(c.slug || "").toLowerCase() === rawParentId.toLowerCase() ||
+              areCategorySlugsEquivalent(c.slug, rawParentId)
+          )
+        : undefined;
+      const normalizedParentId = matchedParent
+        ? String(matchedParent._id || matchedParent.slug)
+        : rawParentId;
+
       reset({
         name: category.name,
         slug: category.slug,
-        parentId: category.parentId || "",
+        parentId: normalizedParentId,
         description: category.description || "",
         image: category.image || "",
         bannerImage: category.bannerImage || "",
@@ -574,7 +608,10 @@ export const AdminCategories = () => {
       if (parentCategory.specDefinitions && parentCategory.specDefinitions.length > 0) {
         setSpecDefinitions(parentCategory.specDefinitions.map((s) => ({ ...s, presets: [...(s.presets || [])] })));
       } else {
-        const code = (parentCategory as any).attributeSetCode || "Default";
+        const code =
+          (parentCategory as any).attributeSetCode ||
+          detectAttributeSetFromCategory(parentCategory.slug || parentCategory.name || "", allCatalogCategories) ||
+          "Default";
         const blueprint = CATEGORY_SPEC_DEFINITIONS[code] || CATEGORY_SPEC_DEFINITIONS.Default;
         setSpecDefinitions(blueprint.fields.map((f) => ({ ...f, presets: [...(f.presets || [])] })));
       }
@@ -684,6 +721,9 @@ export const AdminCategories = () => {
       }
     } else if (!payload.parentId || payload.parentId === "" || payload.parentId === "null") {
       delete payload.parentId;
+      if (!payload.menuNavSection && !payload.menuGroup) {
+        payload.menuGroup = "admin-custom";
+      }
     }
     if (!payload.slug || payload.slug.trim() === "") delete payload.slug;
 
@@ -716,26 +756,57 @@ export const AdminCategories = () => {
   };
 
   const handleDelete = (category: any) => {
-    const id = category._id || category.id || category.slug;
-    const isValidMongoId = id && /^[0-9a-fA-F]{24}$/.test(id);
+    setCategoryToDelete(category);
+  };
 
-    if (!isValidMongoId && !category.hasDbRecord) {
-      if (confirm(`"${category.name}" is part of the storefront navigation template and has no custom database document. Would you like to hide it from the navigation menu?`)) {
-        updateCategory.mutate({
-          id: category.slug || id,
-          data: {
-            name: category.name,
-            slug: category.slug,
-            includeInMenu: false,
-          },
-        });
+  const hasRemainingSearchMatchesAfterDelete = (deletedCat: any): boolean => {
+    const q = categorySearch.toLowerCase().trim();
+    if (!q) return true;
+    const delId = String(deletedCat?._id || "");
+    const delSlug = String(deletedCat?.slug || "").toLowerCase().trim();
+    return activeCategoriesSource.some((c: any) => {
+      const cId = String(c._id || "");
+      const cSlug = String(c.slug || "").toLowerCase().trim();
+      if ((delId && cId === delId) || (delSlug && cSlug === delSlug)) {
+        return false;
       }
+      return (
+        c.name.toLowerCase().includes(q) ||
+        cSlug.includes(q) ||
+        (c.menuGroup && c.menuGroup.toLowerCase().includes(q))
+      );
+    });
+  };
+
+  const confirmDeleteCategory = () => {
+    if (!categoryToDelete) return;
+    const targetCategory = categoryToDelete;
+    const id = targetCategory._id || targetCategory.id || targetCategory.slug;
+    const handleDeleteSuccess = () => {
+      setCategoryToDelete(null);
+      if (categorySearch.trim() && !hasRemainingSearchMatchesAfterDelete(targetCategory)) {
+        setCategorySearch("");
+      }
+    };
+
+    if (targetCategory.isTemplate) {
+      deleteCategory.mutate(
+        {
+          id: id || targetCategory.slug,
+          isTemplate: true,
+          slug: targetCategory.slug,
+          name: targetCategory.name,
+        },
+        {
+          onSuccess: handleDeleteSuccess,
+        }
+      );
       return;
     }
 
-    if (confirm(`Are you sure you want to delete "${category.name}"? All subcategories might lose their parent.`)) {
-      deleteCategory.mutate(id || category.slug);
-    }
+    deleteCategory.mutate(id || targetCategory.slug, {
+      onSuccess: handleDeleteSuccess,
+    });
   };
 
   const renderCategoryNode = (category: IStoreCategoryNode, depth = 0, index?: number): React.ReactNode => {
@@ -1142,8 +1213,19 @@ export const AdminCategories = () => {
           <div className="p-8 text-center text-slate-500">Loading categories...</div>
         ) : categoryViewTab === "menu" ? (
           filteredTree.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">
-              {categorySearch ? `No categories match "${categorySearch}".` : "No categories found in this department."}
+            <div className="p-8 text-center text-slate-500 space-y-2">
+              <p>
+                {categorySearch ? `No categories match "${categorySearch}".` : "No categories found in this department."}
+              </p>
+              {categorySearch && (
+                <button
+                  type="button"
+                  onClick={() => setCategorySearch("")}
+                  className="text-xs font-semibold text-brand hover:underline cursor-pointer"
+                >
+                  Clear search to show all categories
+                </button>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -1152,8 +1234,19 @@ export const AdminCategories = () => {
           )
         ) : (
           filteredUnmapped.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">
-              {categorySearch ? `No unmapped categories match "${categorySearch}".` : "No unmapped legacy categories found."}
+            <div className="p-8 text-center text-slate-500 space-y-2">
+              <p>
+                {categorySearch ? `No unmapped categories match "${categorySearch}".` : "No unmapped legacy categories found."}
+              </p>
+              {categorySearch && (
+                <button
+                  type="button"
+                  onClick={() => setCategorySearch("")}
+                  className="text-xs font-semibold text-brand hover:underline cursor-pointer"
+                >
+                  Clear search to show all unmapped categories
+                </button>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -1345,7 +1438,7 @@ export const AdminCategories = () => {
                   Category Specifications & Attributes Template
                 </label>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Define what technical specifications, attributes, and quick-preset chips will appear for products in this category.
+                  Define the exact technical specifications and presets shown on product pages in this category. Missing product attributes are also smartly extracted from product descriptions to match these fields.
                 </p>
               </div>
               <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
@@ -2110,6 +2203,47 @@ export const AdminCategories = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(categoryToDelete)}
+        onClose={() => {
+          if (!deleteCategory.isPending) setCategoryToDelete(null);
+        }}
+        title="Confirm Category Deletion"
+      >
+        <div className="space-y-4 pt-1">
+          <p className="text-xs sm:text-sm text-slate-600">
+            Are you sure you want to delete{" "}
+            <span className="font-bold text-slate-900">&quot;{categoryToDelete?.name}&quot;</span>{" "}
+            (<code className="font-mono text-xs text-slate-700">/{categoryToDelete?.slug}</code>)?
+          </p>
+          <p className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+            {categoryToDelete?.isTemplate
+              ? `Only "${categoryToDelete?.name}" will be removed from the Storefront Menu and catalog navigation. Its parent category and any subcategories will stay intact.`
+              : `Only "${categoryToDelete?.name}" will be deleted. Its parent category stays intact, and any subcategories under it will be safely promoted.`}
+          </p>
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCategoryToDelete(null)}
+              disabled={deleteCategory.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmDeleteCategory}
+              disabled={deleteCategory.isPending}
+              isLoading={deleteCategory.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleteCategory.isPending ? "Deleting..." : "Delete Category"}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

@@ -21,6 +21,7 @@ import {
   isCanonicalCategoryPath,
   isKnownCategorySlug,
 } from "@/core/utils/navCategories";
+import { resolveProductSpecificationsFromTree } from "@store4riders/shared-utils";
 
 const rawApiBase = (
   process.env.API_URL ||
@@ -48,18 +49,29 @@ const getProduct = cache(async (slug: string) => {
   }
 });
 
-const getCategoryNode = cache(async (categorySlug: string) => {
+const getCategoryTree = cache(async (): Promise<any[]> => {
   try {
     const res = await fetch(`${API_BASE}/categories/tree`, {
       next: { revalidate: 1800 },
       signal: AbortSignal.timeout(5000),
     });
-    if (res.ok) {
-      const data = await res.json();
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.data) ? data.data : [];
+  } catch {
+    return [];
+  }
+});
+
+const getCategoryNode = cache(async (categorySlug: string) => {
+  try {
+    const tree = await getCategoryTree();
+    if (tree.length > 0) {
       const cleanTarget = categorySlug.toLowerCase().trim();
       const targetAliases = CATEGORY_SLUG_ALIASES[cleanTarget] || [];
       const findCategory = (nodes: any[]): any => {
         for (const n of nodes) {
+          if (n?.isDeleted) continue;
           const nSlug = (n.slug || "").toLowerCase().trim();
           if (
             nSlug === cleanTarget ||
@@ -75,7 +87,7 @@ const getCategoryNode = cache(async (categorySlug: string) => {
         }
         return null;
       };
-      const node = findCategory(data?.data || []);
+      const node = findCategory(tree);
       if (node) return node;
     }
 
@@ -271,8 +283,8 @@ function buildPolicyMetadata(policyPage: any, candidateSlug: string): Metadata {
   };
 }
 
-function renderProductPage(
-  product: any,
+async function renderProductPage(
+  rawProduct: any,
   candidateSlug: string,
   slugArray: string[],
   resolvedSearchParams: Record<string, string | string[] | undefined>
@@ -290,6 +302,27 @@ function renderProductPage(
     }
     const qs = qsParams.toString() ? `?${qsParams.toString()}` : "";
     permanentRedirect(`/${candidateSlug}${qs}`);
+  }
+
+  let product = rawProduct;
+  const hasBackendTemplate = Array.isArray(product?.categorySpecTemplate) && product.categorySpecTemplate.length > 0;
+  const hasBackendSpecs = Array.isArray(product?.specifications);
+  const needsTreeResolution = Boolean(product && !hasBackendTemplate && !hasBackendSpecs);
+  const needsSpecEnrichment = Boolean(
+    product &&
+      (needsTreeResolution ||
+        (hasBackendTemplate && (!hasBackendSpecs || product.specifications.length <= 1)))
+  );
+  if (needsSpecEnrichment) {
+    const tree = needsTreeResolution ? await getCategoryTree() : [];
+    if (!needsTreeResolution || tree.length > 0) {
+      const resolved = resolveProductSpecificationsFromTree(tree, product, CATEGORY_SLUG_ALIASES);
+      product = {
+        ...product,
+        categorySpecTemplate: resolved.categorySpecTemplate,
+        specifications: resolved.specifications,
+      };
+    }
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://store4riders.com";
@@ -472,7 +505,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
     ]);
 
     if (product) {
-      return renderProductPage(product, candidateSlug, slugArray, resolvedSearchParams);
+      return await renderProductPage(product, candidateSlug, slugArray, resolvedSearchParams);
     }
 
     categoryNode = resolvedCat;
@@ -495,7 +528,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
     // Product slug fast-path: resolve product directly without awaiting category 404 or settings fetches
     const product = await getProduct(candidateSlug);
     if (product) {
-      return renderProductPage(product, candidateSlug, slugArray, resolvedSearchParams);
+      return await renderProductPage(product, candidateSlug, slugArray, resolvedSearchParams);
     }
 
     const [resolvedCat, policyPage] = await Promise.all([

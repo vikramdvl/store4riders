@@ -85,5 +85,37 @@
    *         description: Address added
    */
 
+/**
+   * @swagger
+   * /users/me/password:
+   *   put:
+   *     summary: Change password and rotate sessions
+   *     description: Verifies the current password, updates the password hash, revokes all prior access/refresh sessions via tokenVersion and blacklist invalidation, and issues fresh HttpOnly session cookies for the current session.
+   *     tags: [Users]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - currentPassword
+   *               - newPassword
+   *             properties:
+   *               currentPassword:
+   *                 type: string
+   *               newPassword:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Password changed and current session rotated
+   *       400:
+   *         description: Invalid current password or validation failure
+   *       401:
+   *         description: Authentication failed or account disabled
+   */
+
 // Fix for TypeScript isolatedModules error
 export {};

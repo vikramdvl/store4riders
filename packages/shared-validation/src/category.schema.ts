@@ -22,6 +22,7 @@ export const createCategorySchema = z.object({
   metaKeywords: z.string().max(1000).optional().or(z.literal("")),
   videoUrl: z.string().optional().or(z.literal("")),
   includeInMenu: z.boolean().optional().default(true),
+  isDeleted: z.boolean().optional(),
   menuGroup: z.string().optional().or(z.literal("")),
   menuLabel: z.string().optional().or(z.literal("")),
   menuNavSection: z.string().optional().or(z.literal("")),

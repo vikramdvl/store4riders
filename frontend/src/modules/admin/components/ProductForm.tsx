@@ -25,7 +25,7 @@ import {
   CustomAttribute, ProductFaq 
 } from "./product-form/product-form.types";
 import { 
-  CATEGORY_SPEC_DEFINITIONS, detectAttributeSetFromCategory, getCategoryBlueprint 
+  CATEGORY_SPEC_DEFINITIONS, detectAttributeSetFromCategory, getCategoryBlueprint, normalizeAttributeSetCode
 } from "./product-form/product-specs.constants";
 import { 
   ProductFormProvider, ProductFormContextType 
@@ -236,28 +236,43 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
     return findNode(categoryTree);
   }, [categoryId, categoryTree]);
 
-  const categoryCustomSpecDef = useMemo(() => {
-    if (!selectedCategoryNode?.specDefinitions || selectedCategoryNode.specDefinitions.length === 0) return null;
-    return {
-      title: `${selectedCategoryNode.name} Specifications & Attributes`,
-      subtitle: `Custom category specifications defined in Categories Manager`,
-      icon: "sliders" as const,
-      fields: selectedCategoryNode.specDefinitions,
+  const selectedCategoryParentNode = useMemo(() => {
+    if (!selectedCategoryNode?.parentId) return null;
+    const targetParent = String(selectedCategoryNode.parentId);
+    const findNode = (nodes: any[]): any => {
+      for (const n of nodes) {
+        if (String(n._id || "") === targetParent || String(n.id || "") === targetParent || n.slug === targetParent) {
+          return n;
+        }
+        if (n.children && n.children.length > 0) {
+          const found = findNode(n.children);
+          if (found) return found;
+        }
+      }
+      return null;
     };
-  }, [selectedCategoryNode]);
+    return findNode(categoryTree);
+  }, [selectedCategoryNode, categoryTree]);
+
+  const categoryCustomSpecDef = useMemo(() => {
+    const customOwner =
+      selectedCategoryNode?.specDefinitions?.length > 0
+        ? selectedCategoryNode
+        : selectedCategoryParentNode?.specDefinitions?.length > 0
+        ? selectedCategoryParentNode
+        : null;
+    if (!customOwner) return null;
+    return {
+      title: `${customOwner.name} Specifications & Attributes`,
+      subtitle: `Category specifications defined in Categories Manager`,
+      icon: "sliders" as const,
+      fields: customOwner.specDefinitions,
+    };
+  }, [selectedCategoryNode, selectedCategoryParentNode]);
 
   const activeTemplate = useMemo(() => {
     if (attributeSetCode && attributeSetCode !== "Default" && attributeSetCode !== "CategoryCustom") {
-      const lower = attributeSetCode.toLowerCase();
-      if (lower.includes("helmet")) return "Helmets";
-      if (lower.includes("jacket") || lower.includes("pant") || lower.includes("suit") || lower.includes("racing")) return "Jackets";
-      if (lower.includes("glove")) return "Gloves";
-      if (lower.includes("boot")) return "Boots";
-      if (lower.includes("saddle") || lower.includes("tank") || lower.includes("hydration") || lower.includes("bag")) return "Saddle Bag";
-      if (lower.includes("lube") || lower.includes("liquid") || lower.includes("care") || lower.includes("oil")) return "Chain Lubes / Liquids";
-      if (lower.includes("spare") || lower.includes("exhaust") || lower.includes("cover")) return "Spares, Accessories, Exhausts";
-      if (lower.includes("communicator") || lower.includes("gadget")) return "Communicator";
-      return attributeSetCode;
+      return normalizeAttributeSetCode(attributeSetCode);
     }
     if (categoryCustomSpecDef) {
       return "CategoryCustom";
@@ -272,8 +287,20 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
   const applyCategoryBlueprint = (catIdOrSlug: string) => {
     if (!catIdOrSlug) return;
     const blueprint = getCategoryBlueprint(catIdOrSlug, categoryTree);
+    const findNode = (nodes: any[]): any => {
+      for (const n of nodes) {
+        if (n._id === catIdOrSlug || n.id === catIdOrSlug || n.slug === catIdOrSlug) return n;
+        if (n.children?.length) {
+          const found = findNode(n.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    const targetNode = findNode(categoryTree);
+    const hasCustomTemplate = Boolean(targetNode?.specDefinitions?.length > 0);
     if (blueprint) {
-      setAttributeSetCode(blueprint.attributeSet);
+      setAttributeSetCode(hasCustomTemplate ? "CategoryCustom" : blueprint.attributeSet);
       setHsnCode(blueprint.defaultHsn);
       setTaxClassName(blueprint.defaultTaxClass);
       setIsCustomTaxRate(false);
@@ -283,11 +310,17 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
   };
 
   const currentSpecDefinition = useMemo(() => {
-    if ((attributeSetCode === "CategoryCustom" || !attributeSetCode) && categoryCustomSpecDef) {
+    if (
+      categoryCustomSpecDef &&
+      (!attributeSetCode ||
+        attributeSetCode === "CategoryCustom" ||
+        attributeSetCode === selectedCategoryNode?.attributeSetCode ||
+        attributeSetCode === activeBlueprint.attributeSet)
+    ) {
       return categoryCustomSpecDef;
     }
     return CATEGORY_SPEC_DEFINITIONS[activeTemplate] || categoryCustomSpecDef || CATEGORY_SPEC_DEFINITIONS.Default;
-  }, [attributeSetCode, categoryCustomSpecDef, activeTemplate]);
+  }, [attributeSetCode, categoryCustomSpecDef, activeTemplate, selectedCategoryNode, activeBlueprint.attributeSet]);
 
   const activeCategoryFieldKeys = useMemo(() => {
     if (!currentSpecDefinition) return [];
@@ -388,6 +421,9 @@ export function ProductForm({ mode, initialSlugOrId }: ProductFormProps) {
 
       if (existingProduct.gender) {
         setGender(existingProduct.gender);
+      }
+      if (existingProduct.attributeSetCode) {
+        setAttributeSetCode(existingProduct.attributeSetCode);
       }
 
       // Attributes

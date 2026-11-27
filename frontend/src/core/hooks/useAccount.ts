@@ -63,7 +63,12 @@ export function useChangePassword() {
       const response = await apiClient.put("/users/me/password", data);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const accessToken = data?.data?.accessToken;
+      const refreshToken = data?.data?.refreshToken;
+      if (accessToken) {
+        useAuthStore.getState().setToken(accessToken, refreshToken);
+      }
       toast.success("Password changed successfully!");
     },
     onError: (err: any) => {

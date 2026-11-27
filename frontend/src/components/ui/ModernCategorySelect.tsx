@@ -121,7 +121,7 @@ function buildSelectCategoryOptions(dbCategories: any[] = []): CategoryOption[] 
   // 2. Remaining non-duplicate custom & SEO database categories
   const traverseRemainingDb = (nodes: any[], parentNames: string[] = []) => {
     for (const n of nodes) {
-      if (!n) continue;
+      if (!n || n.isDeleted) continue;
       const name = String(n.name || "").trim();
       const slug = String(n.slug || n._id || "").trim();
       const groupLabel =

@@ -202,14 +202,14 @@ export function resolveStorefrontNavItems(
 
   const hiddenSlugs = new Set<string>();
   flatDbCategories.forEach((c) => {
-    if (c.includeInMenu === false && c.slug) {
+    if ((c.includeInMenu === false || c.isDeleted === true) && c.slug) {
       hiddenSlugs.add(String(c.slug).trim().toLowerCase());
     }
   });
 
   const customBySection = new Map<string, any[]>();
   flatDbCategories.forEach((c) => {
-    if (c.includeInMenu === false) return;
+    if (c.includeInMenu === false || c.isDeleted === true) return;
 
     const catSlug = String(c.slug || "").trim().toLowerCase();
     const explicitSection = typeof c.menuNavSection === "string" ? c.menuNavSection.trim() : "";

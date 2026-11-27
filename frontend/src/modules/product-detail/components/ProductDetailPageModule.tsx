@@ -3,6 +3,9 @@
 import { useParams } from "next/navigation";
 import { Suspense, useEffect, useMemo } from "react";
 import { useProductBySlug, useProductKit, useProductUpsell, useProductCrossSell, useProductReviews, IBackendProduct } from "@/core/hooks/useProducts";
+import { useCategoryTree } from "@/core/hooks/useCategories";
+import { CATEGORY_SLUG_ALIASES } from "@/core/utils/navCategories";
+import { resolveProductSpecificationsFromTree } from "@store4riders/shared-utils";
 import { ProductDetailModule } from "@/modules/product-detail";
 import { normalizeExternalImageUrl, deduplicateProductImages, getProductThumbnailUrl, getPreferredInStockColor, isUtilityOrInfographicImage } from "@/core/utils/mediaUrlHelper";
 import { PDPData, KitProduct } from "@/modules/product-detail/types/product-detail.types";
@@ -887,6 +890,8 @@ const mapProductToPDP = (
     weight: product.weight,
     videoUrl: product.videoUrl,
     attributes: product.attributes instanceof Map ? Object.fromEntries(product.attributes) : (product.attributes || {}),
+    categorySpecTemplate: product.categorySpecTemplate,
+    specifications: product.specifications,
   };
 };
 
@@ -906,6 +911,20 @@ export const ProductDetailPageModule = ({ slug: propSlug, initialProduct }: Prod
   const slug = propSlug || (params?.slug as string) || lastCatSlug || "";
 
   const { data: product, isLoading, error } = useProductBySlug(slug, initialProduct || undefined);
+
+  const hasBackendSpecTemplate = Boolean(
+    Array.isArray(product?.categorySpecTemplate) && product.categorySpecTemplate.length > 0
+  );
+  const hasBackendSpecifications = Array.isArray(product?.specifications);
+  const needsClientTreeResolution = Boolean(
+    product && !hasBackendSpecTemplate && !hasBackendSpecifications
+  );
+  const needsClientSpecEnrichment = Boolean(
+    product &&
+      (needsClientTreeResolution ||
+        (hasBackendSpecTemplate && (!hasBackendSpecifications || product!.specifications!.length <= 1)))
+  );
+  const { data: categoryTree = [] } = useCategoryTree({ enabled: needsClientTreeResolution });
 
   // These queries fire in PARALLEL once product is available (not waterfall).
   // They won't block the page from rendering â€” the page shows immediately
@@ -1012,7 +1031,7 @@ export const ProductDetailPageModule = ({ slug: propSlug, initialProduct }: Prod
 
   const mappedProduct = useMemo(() => {
     if (!product) return null;
-    return mapProductToPDP(
+    const mapped = mapProductToPDP(
       product,
       (kitProducts || []).map(mapToKitProduct),
       (upsellProducts || []).map(mapToKitProduct),
@@ -1021,7 +1040,36 @@ export const ProductDetailPageModule = ({ slug: propSlug, initialProduct }: Prod
       storeReviewsData?.pages.flatMap((p) => p.data) || [],
       settings
     );
-  }, [product, kitProducts, upsellProducts, crossSellProducts, mappedReviews, storeReviewsData, settings]);
+
+    if (needsClientSpecEnrichment) {
+      const resolved = resolveProductSpecificationsFromTree(
+        needsClientTreeResolution ? categoryTree : [],
+        {
+          ...product,
+          category: mapped.category,
+          categorySlug: mapped.categorySlug,
+          subCategory: mapped.subCategory,
+          subCategorySlug: mapped.subCategorySlug,
+        },
+        CATEGORY_SLUG_ALIASES
+      );
+      mapped.categorySpecTemplate = resolved.categorySpecTemplate;
+      mapped.specifications = resolved.specifications;
+    }
+
+    return mapped;
+  }, [
+    product,
+    kitProducts,
+    upsellProducts,
+    crossSellProducts,
+    mappedReviews,
+    storeReviewsData,
+    settings,
+    needsClientSpecEnrichment,
+    needsClientTreeResolution,
+    categoryTree,
+  ]);
 
   if (isLoading) {
     return <ProductDetailLoading />;

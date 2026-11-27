@@ -375,4 +375,111 @@ describe("navCategories Suite — Storefront Navbar & Admin Categories Tree", ()
       expect(isKnownCategorySlug("full-face-helmets")).toBe(true);
     });
   });
+
+  describe("Mapped Legacy Categories & Deleted Template Categories", () => {
+    it("removes legacy and alias categories from unmapped list once mapped to a parent category", () => {
+      const fullFaceId = "6ac9de6835b1b42fa90ac6d3";
+      const mockDbCategories = [
+        {
+          _id: fullFaceId,
+          name: "Full Face Helmets",
+          slug: "full-face-helmets",
+          children: [
+            {
+              _id: "c_ls2_800",
+              name: "LS2 FF800 Storm II Helmets (Touring Range)",
+              slug: "ls2-ff800-storm-ii-helmets-touring-range",
+              parentId: fullFaceId,
+            },
+            {
+              _id: "c_ls2_320",
+              name: "LS2 FF320 Stream II (Daily Rider Range)",
+              slug: "ls2-ff320-stream-ii-daily-rider-range",
+              parentId: fullFaceId,
+            },
+            {
+              _id: "c_axor_brutale",
+              name: "Axor Brutale Dual Spoiler Helmet",
+              slug: "axor-brutale-dual-spoiler-helmet",
+              parentId: fullFaceId,
+            },
+            {
+              _id: "c_smk_nova",
+              name: "SMK Nova Helmets",
+              slug: "smk-nova-helmets",
+              parentId: fullFaceId,
+            },
+            {
+              _id: "c_axor_agera",
+              name: "Axor Agera Full Face Helmets",
+              slug: "axor-agera-full-face-helmets",
+              parentId: fullFaceId,
+            },
+            {
+              _id: "c_under_5000",
+              name: "Best helmets under Rs.5000",
+              slug: "best-helmets-under-rs-5000",
+              parentId: fullFaceId,
+            },
+            {
+              _id: "c_smk_gullwing",
+              name: "SMK Gullwing helmets",
+              slug: "smk-gullwing-helmets",
+              parentId: "full-face-helmets",
+            },
+          ],
+        },
+        {
+          _id: "c_still_unmapped",
+          name: "SMK Stellar Helmet",
+          slug: "smk-stellar-helmet",
+        },
+      ];
+
+      const tree = getStoreNavbarCategoryTree(mockDbCategories);
+      const helmetsNode = tree.find((n) => n.slug === "motorcycle-helmets");
+      const fullFaceNode = helmetsNode?.children?.find((c) => c.slug === "full-face-helmets");
+      const nestedSlugs = fullFaceNode?.children?.map((c) => c.slug) || [];
+
+      expect(nestedSlugs).toContain("ls2-ff800-storm-ii-helmets-touring-range");
+      expect(nestedSlugs).toContain("ls2-ff320-stream-ii-daily-rider-range");
+      expect(nestedSlugs).toContain("axor-brutale-dual-spoiler-helmet");
+      expect(nestedSlugs).toContain("smk-nova-helmets");
+      expect(nestedSlugs).toContain("axor-agera-full-face-helmets");
+      expect(nestedSlugs).toContain("best-helmets-under-rs-5000");
+      expect(nestedSlugs).toContain("smk-gullwing-helmets");
+
+      const unmapped = getUnmappedLegacyCategories(mockDbCategories, tree);
+      const unmappedSlugs = unmapped.map((c) => c.slug);
+      expect(unmappedSlugs).toEqual(["smk-stellar-helmet"]);
+    });
+
+    it("excludes soft-deleted template categories (e.g. helmet-cleaners) from Storefront Menu and unmapped list without hijacking aliases", () => {
+      const mockDbCategories = [
+        {
+          _id: "cat_cleaners_tombstone",
+          name: "Helmet Cleaners",
+          slug: "helmet-cleaners",
+          includeInMenu: false,
+          isDeleted: true,
+        },
+        {
+          _id: "cat_moto_care",
+          name: "Motorcycle Care",
+          slug: "motorcycle-care",
+        },
+      ];
+
+      const tree = getStoreNavbarCategoryTree(mockDbCategories);
+      const helmetsNode = tree.find((n) => n.slug === "motorcycle-helmets");
+      const helmetSubSlugs = helmetsNode?.children?.map((c) => c.slug) || [];
+
+      expect(helmetSubSlugs).not.toContain("helmet-cleaners");
+
+      const unmapped = getUnmappedLegacyCategories(mockDbCategories, tree);
+      const unmappedSlugs = unmapped.map((c) => c.slug);
+      expect(unmappedSlugs).not.toContain("helmet-cleaners");
+      expect(unmappedSlugs).toContain("motorcycle-care");
+    });
+  });
 });

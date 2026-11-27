@@ -4,224 +4,28 @@ import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cleanRichContent, handleRichTextClick } from "@/core/utils/cleanRichContent";
-import { resolveMagentoMediaUrls } from "@/core/utils/mediaUrlHelper";
+import { ISpecFieldDefinition, IProductSpecification } from "@store4riders/shared-types";
+import { buildSpecificationsFromTemplate, isJunkSpecValue } from "@store4riders/shared-utils";
 import { ReviewData } from "../types/product-detail.types";
 import { WriteReviewModal } from "./WriteReviewModal";
 import { AllReviewsModal } from "./AllReviewsModal";
 
 /* ─── SVG Icon Components ─── */
-const ShieldIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
-);
-const DropletIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
-);
-const WrenchIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-);
-const HeartIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-);
-const EyeIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
-);
-const AwardIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526"/><circle cx="12" cy="8" r="6"/></svg>
-);
 const LayersIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>
 );
-const ChevronIcon = ({ open }: { open: boolean }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-    className={`transition-transform duration-300 ${open ? "rotate-180" : ""}`}
-  ><path d="m6 9 6 6 6-6" /></svg>
-);
-const TruckIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 13.52 9H12"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
-);
-
-/* ─── Icon Mapping ─── */
-const SECTION_ICON_MAP: Record<string, React.ReactNode> = {
-  material: <WrenchIcon />, construction: <WrenchIcon />,
-  protection: <ShieldIcon />, water: <DropletIcon />, waterproof: <DropletIcon />,
-  safety: <EyeIcon />, convenience: <EyeIcon />,
-  comfort: <HeartIcon />, fit: <HeartIcon />,
-  damage: <AwardIcon />, warranty: <AwardIcon />, accidental: <AwardIcon />,
-  feature: <LayersIcon />,
-};
-
-const getIconForTitle = (title: string): React.ReactNode => {
-  const lower = title.toLowerCase();
-  for (const [keyword, icon] of Object.entries(SECTION_ICON_MAP)) {
-    if (lower.includes(keyword)) return icon;
-  }
-  return <LayersIcon />;
-};
-
-/* ─── HTML Parser ─── */
-interface DescriptionSection {
-  title: string;
-  htmlContent: string;
-  icon: React.ReactNode;
-}
 
 const cleanHtml = (html: string): string => {
   if (!html) return "";
   return cleanRichContent(html);
 };
 
-const formatFeatureTitle = (rawText: string): string => {
-  if (!rawText) return "";
-  let text = rawText.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-  text = text.replace(/[:\-–—\s]+$/, '');
-  return text;
-};
-
-/* ─── Specification Label & Filtering Configuration ─── */
-const IGNORED_SPEC_KEYS = new Set([
-  "attribute_set_code",
-  "ship_cost",
-  "show_featured_badge",
-  "weight_unit",
-  "brand",
-  "gender",
-  "condition",
-  "status",
-  "sku",
-  "name",
-  "id",
-  "_id",
-  "color",
-  "colour",
-  "size",
-  "configurable_variations",
-  "tax_class_name",
-  "hsn_code",
-  "category",
-  "category_id",
-  "codazon_custom_tab",
-  "size_chart",
-  "size_chart_01",
-  "size_chart_02",
-  "size_chart_03",
-  "sizechart",
-  "options_container",
-  "has_options",
-  "required_options",
-  "gift_message_available",
-  "url_key",
-  "url_path",
-  "image",
-  "small_image",
-  "thumbnail",
-  "base_image",
-  "frameborder",
-  "allowfullscreen",
-  "jacket_kit",
-]);
-
-const isHtmlString = (str: string): boolean => {
-  return /<[a-z\d]+(?:\s+[^>]*>|>)/i.test(str) || str.includes("</") || str.includes("/>") || str.includes("<table") || str.includes("<div");
-};
-
-const isJunkKey = (key: string): boolean => {
-  const k = key.trim().toLowerCase();
-  // Reject keys with legacy punctuation corruption (e.g. |"Unisex",brand)
-  if (/["'|,<>{}()[\]]/.test(k)) return true;
-  // Reject keys that are too long or empty
-  if (!k || k.length > 35) return true;
-  // Reject ignored keys
-  if (IGNORED_SPEC_KEYS.has(k)) return true;
-  // Reject size chart variants
-  if (k.startsWith("size_chart") || k.startsWith("sizechart")) return true;
-  return false;
-};
-
-const isJunkValue = (val: string): boolean => {
-  const v = val.trim().toLowerCase();
-  if (!v || v.length > 200) return true;
-  // Reject HTML content (e.g. size chart tables)
-  if (isHtmlString(val)) return true;
-  // Reject generic filler or placeholder strings
-  const junkValues = new Set([
-    "new", "used", "refurbished",
-    "none", "null", "undefined", "n/a", "na",
-    "default", "standard", "-", "--", "0", "0.000000"
-  ]);
-  if (junkValues.has(v)) return true;
-  return false;
-};
-
-const FRIENDLY_SPEC_LABELS: Record<string, string> = {
-  material: "Shell / Outer Material",
-  shell_material: "Shell Construction",
-  outer_material: "Outer Shell Material",
-  certification: "Safety Standard & Certification",
-  safety_certification: "Safety Standard & Certification",
-  pinlock_ready: "Pinlock Anti-Fog Ready",
-  pinlock: "Pinlock Anti-Fog Ready",
-  sun_visor: "Internal Sun Visor",
-  closure_type: "Chin Strap / Fastener",
-  fastener: "Closure / Fastening System",
-  bluetooth_ready: "Bluetooth / Intercom Cavities",
-  intercom_ready: "Bluetooth / Intercom Ready",
-  armour_level: "Armour Protection Level",
-  armor_level: "Armour Protection Level",
-  protection_level: "Impact Protection Level",
-  chest_armour: "Chest Armour Readiness",
-  back_armour: "Back Armour Included",
-  waterproofing: "Weatherproofing & Rain Layer",
-  water_resistance: "Water Resistance",
-  thermal_liner: "Thermal / Winter Insulation",
-  ventilation: "Ventilation & Airflow Ports",
-  reflectives: "Night Reflectives (3M Scotchlite)",
-  knuckle_protector: "Knuckle Protection Slider",
-  palm_slider: "Palm Scaphoid Slider",
-  touchscreen: "Touchscreen Smart Compatibility",
-  finger_bridge: "Anti-Separation Finger Bridge",
-  motorcycle_model: "Motorcycle Compatibility",
-  bike_compatibility: "Bike Compatibility",
-  weight: "Weight / Mass",
-  country_of_origin: "Country of Origin",
-  country_of_manufacture: "Country of Origin",
-  warranty: "Manufacturer Warranty",
-  riding_style: "Riding Discipline & Style",
-  helmet_type: "Helmet Classification",
-};
-
-const formatSpecKey = (rawKey: string): string => {
-  const cleanKey = rawKey.trim().toLowerCase();
-  if (FRIENDLY_SPEC_LABELS[cleanKey]) {
-    return FRIENDLY_SPEC_LABELS[cleanKey];
-  }
-  return cleanKey
-    .replace(/[-_]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-};
-
-const isHighlightSpec = (key: string, value: string): boolean => {
-  const k = key.toLowerCase();
-  const v = value.toLowerCase();
-  if (k.includes("cert") || k.includes("safety") || k.includes("armour") || k.includes("armor")) {
-    return true;
-  }
-  if (
-    v.includes("ece 22.06") ||
-    v.includes("ce level 2") ||
-    v.includes("carbon fiber") ||
-    v.includes("snell") ||
-    v.includes("double d")
-  ) {
-    return true;
-  }
-  return false;
-};
-
 /**
  * DetailAndReviews Component
  *
  * Clean, modern e-commerce specifications & reviews module.
- * No clunky see-more/less clamping — rich typography and full readability.
+ * Technical Specifications & Standards are rendered strictly through the
+ * Category Specifications & Attributes Template for a unified UX across each category.
  */
 export const DetailAndReviews: React.FC<{
   fullDescription: string;
@@ -232,81 +36,48 @@ export const DetailAndReviews: React.FC<{
   brandSlug?: string;
   brandLogo?: string;
   attributes?: Record<string, string>;
-}> = ({ fullDescription, reviews, productId, productName, brand, brandSlug, brandLogo, attributes }) => {
+  specTemplate?: ISpecFieldDefinition[];
+  specifications?: IProductSpecification[];
+}> = ({
+  fullDescription,
+  reviews,
+  productId,
+  productName,
+  brand,
+  brandSlug,
+  brandLogo,
+  attributes,
+  specTemplate,
+  specifications,
+}) => {
   const router = useRouter();
   const parsedDescription = React.useMemo(() => cleanHtml(fullDescription), [fullDescription]);
   const [isMobileDescExpanded, setIsMobileDescExpanded] = React.useState(false);
 
-  // Formatted, strictly sanitized technical specifications
+  // Strictly driven by the Category Specifications & Attributes Template
   const displayableSpecs = React.useMemo(() => {
-    const result: Array<{ rawKey: string; label: string; value: string; isHighlight: boolean }> = [];
-    const seenLabels = new Set<string>();
-
-    // 1. Process structured attributes if present
-    if (attributes && typeof attributes === "object") {
-      const entries = Object.entries(attributes);
-      entries.forEach(([key, val]) => {
-        if (isJunkKey(key)) return;
-        const cleanVal = typeof val === "string" ? val.trim() : String(val || "").trim();
-        if (isJunkValue(cleanVal)) return;
-
-        const label = formatSpecKey(key);
-        // Prevent duplicate labels (e.g. country_of_origin and country_of_manufacture both mapping to "Country of Origin")
-        if (seenLabels.has(label.toLowerCase())) return;
-        seenLabels.add(label.toLowerCase());
-
-        result.push({
-          rawKey: key,
-          label,
-          value: cleanVal,
-          isHighlight: isHighlightSpec(key, cleanVal),
-        });
-      });
+    if (Array.isArray(specifications) && specifications.length > 0) {
+      return specifications
+        .filter((spec) => spec && spec.label?.trim() && spec.value?.trim() && !isJunkSpecValue(spec.value))
+        .map((spec) => ({
+          rawKey: spec.key,
+          label: spec.label.trim(),
+          value: spec.value.trim(),
+          isHighlight: Boolean(spec.isHighlight),
+        }));
     }
 
-    // 2. If structured attributes didn't yield specs (e.g. legacy Magento products),
-    // automatically extract verified manufacturer specs from the description bullet points
-    if (result.length < 2 && fullDescription) {
-      const liMatches = [...fullDescription.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)];
-      for (const m of liMatches) {
-        const text = m[1].replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-        const colonIdx = text.indexOf(':');
-        if (colonIdx > 1 && colonIdx < 35) {
-          const rawLabel = text.slice(0, colonIdx).trim();
-          const rawVal = text.slice(colonIdx + 1).trim();
-
-          if (
-            rawVal.length > 0 &&
-            rawVal.length < 220 &&
-            !isJunkKey(rawLabel) &&
-            !isJunkValue(rawVal) &&
-            !seenLabels.has(rawLabel.toLowerCase())
-          ) {
-            seenLabels.add(rawLabel.toLowerCase());
-            result.push({
-              rawKey: rawLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
-              label: formatSpecKey(rawLabel),
-              value: rawVal,
-              isHighlight: isHighlightSpec(rawLabel, rawVal),
-            });
-          }
-        }
-      }
+    if (Array.isArray(specTemplate) && specTemplate.length > 0 && attributes) {
+      return buildSpecificationsFromTemplate(specTemplate, attributes).map((spec) => ({
+        rawKey: spec.key,
+        label: spec.label,
+        value: spec.value,
+        isHighlight: Boolean(spec.isHighlight),
+      }));
     }
 
-    // Sort logically: Core/Technical specs first, general metadata (Country of Origin, Warranty) at the end
-    result.sort((a, b) => {
-      const isAOrigin = a.label.toLowerCase().includes("origin") || a.label.toLowerCase().includes("manufacture");
-      const isBOrigin = b.label.toLowerCase().includes("origin") || b.label.toLowerCase().includes("manufacture");
-      if (isAOrigin && !isBOrigin) return 1;
-      if (!isAOrigin && isBOrigin) return -1;
-      if (a.isHighlight && !b.isHighlight) return -1;
-      if (!a.isHighlight && b.isHighlight) return 1;
-      return 0;
-    });
-
-    return result;
-  }, [attributes, fullDescription]);
+    return [];
+  }, [specifications, specTemplate, attributes]);
 
   React.useEffect(() => {
     const handleExpand = () => setIsMobileDescExpanded(true);
@@ -333,11 +104,11 @@ export const DetailAndReviews: React.FC<{
       </div>
 
       {/* ── 2-Column Content ── */}
-      <div className="max-w-[1400px] mx-auto px-1 sm:px-2 pt-4 md:pt-8 pb-0 md:pb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-8 lg:gap-12 items-start">
+      <div className="max-w-[1400px] mx-auto px-0 sm:px-2 pt-3 md:pt-8 pb-0 md:pb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6 lg:gap-12 items-start">
 
           {/* ─── LEFT: Product Details Card ─── */}
-          <div id="product-description-card" className="bg-white border border-neutral-200 rounded-xl p-4 sm:p-7 shadow-xs scroll-mt-20">
+          <div id="product-description-card" className="min-w-0 bg-white border border-neutral-200 rounded-xl p-3.5 sm:p-7 shadow-xs scroll-mt-20">
             {/* Inner Header - Hidden on mobile to prevent duplicate heading */}
             <div className="hidden md:flex items-center gap-3 pb-4 mb-6 border-b border-neutral-100">
               <span className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-100/80 flex items-center justify-center text-[#d9480f]">
@@ -436,65 +207,93 @@ export const DetailAndReviews: React.FC<{
                 )}
               </div>
 
-            {/* ─── Technical Specifications & Attributes Grid ─── */}
+            {/* ─── Technical Specifications & Attributes Table ─── */}
             {displayableSpecs.length > 0 && (
-              <div className="mt-7 pt-6 border-t border-neutral-200/90 space-y-3.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-8 h-8 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center text-[#ab1509] shrink-0">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                        <path d="m9 12 2 2 4-4"/>
-                      </svg>
+              <section
+                aria-labelledby="technical-specs-heading"
+                className="mt-6 sm:mt-7 pt-5 sm:pt-6 border-t border-neutral-200/90"
+              >
+                <div className="border border-neutral-200 rounded-xl overflow-hidden shadow-2xs bg-white">
+                  <div className="bg-neutral-50/90 border-b border-neutral-200/80 px-3.5 py-3 sm:px-5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span
+                        aria-hidden="true"
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center text-[#ab1509] shrink-0"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                          <path d="m9 12 2 2 4-4"/>
+                        </svg>
+                      </span>
+                      <div className="min-w-0">
+                        <h4
+                          id="technical-specs-heading"
+                          className="spec-heading-balance font-heading text-xs sm:text-sm font-bold text-neutral-900 uppercase tracking-wide leading-snug"
+                        >
+                          Technical Specifications & Standards
+                        </h4>
+                        <p className="text-[11px] text-neutral-500 font-medium leading-snug mt-0.5">
+                          Verified manufacturer parameters &amp; rider protection
+                        </p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] sm:text-[11px] font-bold shrink-0 whitespace-nowrap">
+                      <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      Verified Gear Specs
                     </span>
-                    <div>
-                      <h4 className="font-heading text-sm font-bold text-neutral-900 uppercase tracking-wide">
-                        Technical Specifications & Standards
-                      </h4>
-                      <p className="text-[11px] text-neutral-400 font-medium">
-                        Verified manufacturer parameters & rider protection
-                      </p>
-                    </div>
                   </div>
-                  <span className="self-start sm:self-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    Verified Gear Specs
-                  </span>
-                </div>
 
-                <div className="border border-neutral-200 rounded-xl overflow-hidden shadow-2xs divide-y divide-neutral-100 bg-white">
-                  {displayableSpecs.map(({ rawKey, label, value, isHighlight }, idx) => (
-                    <div
-                      key={rawKey}
-                      className={`grid grid-cols-1 sm:grid-cols-12 px-4 sm:px-5 py-3 items-center text-xs sm:text-sm transition-colors ${
-                        idx % 2 === 0 ? "bg-white" : "bg-neutral-50/50"
-                      }`}
+                  <div
+                    className="specs-table-container w-full"
+                    role="region"
+                    aria-labelledby="technical-specs-heading"
+                  >
+                    <table
+                      aria-labelledby="technical-specs-heading"
+                      className="specs-table w-full border-collapse text-left"
                     >
-                      <div className="sm:col-span-5 font-bold text-neutral-700 flex items-center gap-2">
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                            isHighlight ? "bg-[#ab1509]" : "bg-neutral-300"
-                          }`}
-                        />
-                        <span>{label}</span>
-                      </div>
-                      <div className="sm:col-span-7 font-medium text-neutral-900 mt-1 sm:mt-0 flex items-center justify-between gap-2">
-                        <span className="break-words">{value}</span>
-                        {isHighlight && (
-                          <span className="text-[10px] uppercase tracking-wider font-extrabold text-[#ab1509] bg-red-50 border border-red-200/80 px-2 py-0.5 rounded-sm shrink-0">
-                            Core Spec
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                      <thead className="sr-only">
+                        <tr>
+                          <th scope="col">Specification</th>
+                          <th scope="col">Value</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-100">
+                        {displayableSpecs.map(({ rawKey, label, value, isHighlight }, idx) => (
+                          <tr
+                            key={rawKey}
+                            className={`specs-row transition-colors ${
+                              idx % 2 === 0 ? "bg-white" : "bg-neutral-50/40"
+                            }`}
+                          >
+                            <th
+                              scope="row"
+                              className="specs-label w-[44%] sm:w-[40%] px-3.5 sm:px-5 py-2.5 sm:py-3 align-top text-left font-semibold text-[11.5px] sm:text-[13px] text-neutral-600 bg-neutral-50/60 border-r border-neutral-100 leading-snug break-words"
+                            >
+                              {label}
+                            </th>
+                            <td className="specs-value w-[56%] sm:w-[60%] px-3.5 sm:px-5 py-2.5 sm:py-3 align-top font-semibold text-xs sm:text-sm text-neutral-900 leading-snug break-words">
+                              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                                <span className="min-w-0 break-words">{value}</span>
+                                {isHighlight && (
+                                  <span className="text-[9.5px] sm:text-[10px] uppercase tracking-wider font-extrabold text-[#ab1509] bg-red-50 border border-red-200/80 px-1.5 sm:px-2 py-0.5 rounded-sm shrink-0">
+                                    Core Spec
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              </section>
             )}
           </div>
 
           {/* ─── RIGHT: Reviews (Desktop only: sticky on scroll) ─── */}
-          <div className="hidden lg:flex flex-col gap-3 lg:sticky lg:top-6 lg:self-start">
+          <div className="hidden lg:flex flex-col gap-3 lg:sticky lg:top-6 lg:self-start min-w-0">
             <CustomerReviews reviews={reviews} productId={productId} productName={productName} />
           </div>
 

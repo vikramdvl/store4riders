@@ -20,6 +20,7 @@ const categorySchema = new Schema<ICategory>(
     metaKeywords: { type: String, default: "" },
     videoUrl: { type: String },
     includeInMenu: { type: Boolean, default: true },
+    isDeleted: { type: Boolean, default: false },
     menuGroup: { type: String },
     menuLabel: { type: String, default: "" },
     menuNavSection: { type: String, default: "" },
@@ -51,7 +52,10 @@ const categorySchema = new Schema<ICategory>(
   { timestamps: true }
 );
 
-if (mongoose.models.Category && !mongoose.models.Category.schema.path("metaKeywords")) {
+if (
+  mongoose.models.Category &&
+  (!mongoose.models.Category.schema.path("metaKeywords") || !mongoose.models.Category.schema.path("isDeleted"))
+) {
   delete (mongoose.models as any).Category;
 }
 

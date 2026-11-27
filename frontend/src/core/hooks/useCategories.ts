@@ -22,13 +22,14 @@ const formatApiError = (error: any, fallback: string): string => {
   return fallback;
 };
 
-export function useCategoryTree() {
+export function useCategoryTree(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["categoryTree"],
     queryFn: async () => {
       const response = await apiClient.get<{ success: boolean; data: ICategoryTree[] }>("/categories/tree");
       return response.data.data;
     },
+    enabled: options?.enabled ?? true,
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -69,17 +70,40 @@ export function useUpdateCategory() {
   });
 }
 
+export type DeleteCategoryInput =
+  | string
+  | {
+      id: string;
+      isTemplate?: boolean;
+      slug?: string;
+      name?: string;
+    };
+
 export function useDeleteCategory() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const response = await apiClient.delete(`/admin/categories/${id}`);
+    mutationFn: async (input: DeleteCategoryInput) => {
+      if (typeof input === "string") {
+        const response = await apiClient.delete(`/admin/categories/${input}`);
+        return response.data;
+      }
+
+      const response = await apiClient.delete(`/admin/categories/${input.id}`, {
+        params: input.isTemplate
+          ? {
+              soft: "true",
+              ...(input.slug ? { slug: input.slug } : {}),
+              ...(input.name ? { name: input.name } : {}),
+            }
+          : undefined,
+      });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       toast.success("Category deleted successfully");
       queryClient.invalidateQueries({ queryKey: ["categoryTree"] });
-      revalidateStorefrontPaths(["/", "/products"]);
+      const slug = typeof variables === "string" ? undefined : variables.slug;
+      revalidateStorefrontPaths(collectCategoryStorefrontPaths(slug ? { slug } : null));
     },
     onError: (error: any) => {
       toast.error(formatApiError(error, "Failed to delete category"));

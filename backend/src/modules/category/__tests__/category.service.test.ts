@@ -156,5 +156,102 @@ describe('CategoryService — Comprehensive Unit Tests', () => {
         CategoryService.createCategory({ name: 'Gloves', slug: 'gloves' })
       ).rejects.toThrow("Category with slug 'gloves' already exists");
     });
+
+    it('should revive a soft-deleted template category when recreated with the same slug', async () => {
+      vi.mocked(CategoryRepository.findBySlug).mockResolvedValueOnce({
+        _id: 'cleaners_tombstone',
+        name: 'Helmet Cleaners',
+        slug: 'helmet-cleaners',
+        isDeleted: true,
+      } as any);
+      vi.mocked(CategoryRepository.update).mockResolvedValueOnce({
+        _id: 'cleaners_tombstone',
+        name: 'Helmet Cleaners',
+        slug: 'helmet-cleaners',
+        isDeleted: false,
+        includeInMenu: true,
+      } as any);
+
+      const created = await CategoryService.createCategory({
+        name: 'Helmet Cleaners',
+        slug: 'helmet-cleaners',
+        includeInMenu: true,
+      });
+
+      expect(CategoryRepository.update).toHaveBeenCalledWith(
+        'cleaners_tombstone',
+        expect.objectContaining({ slug: 'helmet-cleaners', isDeleted: false })
+      );
+      expect(created.isDeleted).toBe(false);
+    });
+  });
+
+  describe('6. Slug-Based Parent Resolution & Template Soft Delete', () => {
+    it('should resolve slug-based parentIds and preserve categories mapped to external template parents', async () => {
+      const mockCategories = [
+        { _id: 'ff_id', name: 'Full Face Helmets', slug: 'full-face-helmets' },
+        { _id: 'smk_id', name: 'SMK Gullwing helmets', slug: 'smk-gullwing-helmets', parentId: 'full-face-helmets' },
+        { _id: 'cam_id', name: 'Action Cameras', slug: 'action-cameras', parentId: 'gadgets' },
+      ];
+
+      vi.mocked(redis.getCache).mockResolvedValue(null);
+      vi.mocked(CategoryRepository.findAll).mockResolvedValue(mockCategories as any);
+
+      const tree = await CategoryService.getCategoryTree();
+
+      const fullFace = tree.find((c: any) => c.slug === 'full-face-helmets');
+      expect(fullFace?.children.map((c: any) => c.slug)).toContain('smk-gullwing-helmets');
+
+      const actionCams = tree.find((c: any) => c.slug === 'action-cameras');
+      expect(actionCams).toBeDefined();
+      expect(actionCams.parentId).toBe('gadgets');
+    });
+
+    it('should soft-delete template category without affecting unrelated alias documents and exclude it from getCategoryBySlug', async () => {
+      vi.mocked(CategoryRepository.findExactBySlug).mockResolvedValueOnce({
+        _id: '672cb0a123456789abcdef55',
+        name: 'Helmet Cleaners',
+        slug: 'helmet-cleaners',
+      } as any);
+      vi.mocked(CategoryRepository.findById).mockResolvedValueOnce({
+        _id: '672cb0a123456789abcdef55',
+        name: 'Helmet Cleaners',
+        slug: 'helmet-cleaners',
+      } as any);
+      vi.mocked(CategoryRepository.updateMany).mockResolvedValue(undefined as any);
+      vi.mocked(CategoryRepository.update).mockResolvedValueOnce({
+        _id: '672cb0a123456789abcdef55',
+        name: 'Helmet Cleaners',
+        slug: 'helmet-cleaners',
+        includeInMenu: false,
+        isDeleted: true,
+      } as any);
+
+      await CategoryService.softDeleteTemplateCategory(
+        '672cb0a123456789abcdef55',
+        'helmet-cleaners',
+        'Helmet Cleaners'
+      );
+
+      expect(CategoryRepository.update).toHaveBeenCalledWith(
+        '672cb0a123456789abcdef55',
+        expect.objectContaining({
+          includeInMenu: false,
+          isDeleted: true,
+          parentId: '',
+        })
+      );
+
+      vi.mocked(redis.getCache).mockResolvedValueOnce(null);
+      vi.mocked(CategoryRepository.findBySlug).mockResolvedValueOnce({
+        _id: '672cb0a123456789abcdef55',
+        name: 'Helmet Cleaners',
+        slug: 'helmet-cleaners',
+        isDeleted: true,
+      } as any);
+
+      const resolved = await CategoryService.getCategoryBySlug('helmet-cleaners');
+      expect(resolved).toBeNull();
+    });
   });
 });

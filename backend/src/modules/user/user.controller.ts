@@ -27,8 +27,22 @@ export class UserController {
 
   static async changePassword(req: NextRequest) {
     const { userId, currentPassword, newPassword } = await UserValidator.validateChangePassword(req);
-    await UserService.changePassword(userId, currentPassword, newPassword);
-    return ApiResponse.success(null, "Password changed successfully");
+    const { tokens, scope, sessionMaxAgeSeconds } = await UserService.changePassword(
+      userId,
+      currentPassword,
+      newPassword
+    );
+    const res = ApiResponse.success(
+      {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        scope,
+      },
+      "Password changed successfully"
+    );
+    const { setAuthCookies } = await import("../auth/auth.controller");
+    setAuthCookies(req, res, tokens.accessToken, tokens.refreshToken, sessionMaxAgeSeconds, scope);
+    return res;
   }
 
   static async getAddresses(req: NextRequest) {

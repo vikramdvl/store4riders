@@ -3,12 +3,12 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { useAuthStore, requestCrossTabSessionSync } from "@/stores/useAuthStore";
-import { getAdminLoginPath } from "@/core/api/client";
+import { getAdminLoginPath, refreshAccessToken } from "@/core/api/client";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
 
 export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated, setAuth, setUser, setToken, logout } = useAuthStore();
+  const { user, isAuthenticated, setAuth, setUser, logout } = useAuthStore();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [verified, setVerified] = useState(false);
@@ -62,19 +62,12 @@ export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
         if (!active) return;
         const status = err?.response?.status;
 
-        // If access token expired or wasn't hydrated after reload, renew cleanly via adminRefreshToken cookie
+        // If access token expired or wasn't hydrated after reload, renew cleanly via shared refresh mutex
         if (status === 401 || !currentToken) {
           try {
-            const bodyRefresh = storedIsAdmin ? currentState.refreshToken || undefined : undefined;
-            const refreshRes = await axios.post(
-              `${API_URL}/auth/refresh`,
-              { refreshToken: bodyRefresh },
-              { withCredentials: true, headers: { "x-auth-scope": "admin" } }
-            );
-            const newAccess = refreshRes.data?.data?.accessToken;
-            const newRefresh = refreshRes.data?.data?.refreshToken;
+            const newAccess = await refreshAccessToken("admin");
+            const newRefresh = useAuthStore.getState().refreshToken || undefined;
             if (newAccess) {
-              setToken(newAccess, newRefresh);
               const meData = await validateMe(newAccess);
               if (!active) return;
               if (meData?.user?.role && meData.user.role !== "customer") {
@@ -100,7 +93,7 @@ export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
 
         if (!active) return;
         if (storedIsAdmin) {
-          logout();
+          logout("admin");
           router.replace(getAdminLoginPath());
         } else {
           // Obfuscate admin existence: unauthenticated or customer access redirects to home
@@ -114,7 +107,7 @@ export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [mounted, router, setAuth, setToken, setUser, logout]);
+  }, [mounted, router, setAuth, setUser, logout]);
 
   if (!mounted || !verified) {
     return <div className="h-screen w-full flex items-center justify-center">Loading...</div>;

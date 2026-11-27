@@ -61,6 +61,7 @@ export const ProductsPageModule = ({
     const catAliases = CATEGORY_SLUG_ALIASES[cleanCat] || [];
     const findNode = (nodes: any[]): any => {
       for (const n of nodes) {
+        if (n?.isDeleted) continue;
         const nSlug = (n.slug || "").toLowerCase().trim();
         if (
           nSlug === cleanCat ||

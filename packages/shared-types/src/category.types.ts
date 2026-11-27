@@ -22,6 +22,7 @@ export interface ICategory {
   videoUrl?: string;
   filterConfig?: ICategoryFilterConfig[];
   includeInMenu?: boolean;
+  isDeleted?: boolean;
   menuGroup?: string;
   menuLabel?: string;
   menuNavSection?: string;

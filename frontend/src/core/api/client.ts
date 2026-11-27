@@ -69,7 +69,8 @@ const processQueue = (error: any, token: string | null = null) => {
 const handleSessionExpired = () => {
   const prevUser = useAuthStore.getState().user;
   const wasAdminUser = Boolean(prevUser?.role && prevUser.role !== "customer");
-  useAuthStore.getState().logout();
+  const portalScope = isAdminPortalContext() ? "admin" : "customer";
+  useAuthStore.getState().logout(portalScope);
 
   // ROUTE-AWARE REDIRECT:
   // NEVER kick a browsing customer out of public storefront pages (Home, Category, PDP, Cart) to /login.

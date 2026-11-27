@@ -42,10 +42,46 @@
    *               parentId:
    *                 type: string
    *                 nullable: true
-   *     responses:
-   *       201:
-   *         description: Category created
-   */
+ *     responses:
+ *       201:
+ *         description: Category created
+ */
+
+/**
+ * @swagger
+ * /admin/categories/{id}:
+ *   delete:
+ *     summary: Delete a category or soft-delete a storefront template category [Admin Only]
+ *     tags: [Categories]
+ *     security:
+ *       - bearerAuth: []
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: soft
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *         description: Set true when removing a static storefront navigation template category
+ *       - in: query
+ *         name: slug
+ *         required: false
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: name
+ *         required: false
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Category deleted successfully
+ */
 
 // Fix for TypeScript isolatedModules error
 export {};

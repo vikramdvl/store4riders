@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
  * @description Defines API endpoints for Categories and maps them to Controller methods.
  */
 import { CategoryController } from "./category.controller";
-import { extractUserFromAuth } from "../../core/middlewares/auth";
+import { extractAdminFromAuth } from "../../core/middlewares/auth";
 import { checkAdmin } from "../../core/middlewares/admin";
 import { UserService } from "../user/user.service";
 
@@ -17,7 +17,7 @@ export async function categoryRouter(req: NextRequest, routePath: string[]): Pro
   }
 
   if ((method === "POST" || method === "GET") && pathLen === 1 && routePath[0] === "revalidate") {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkAdmin(userId, UserService.getRole);
     const { CategoryService } = await import("./category.service");
     await CategoryService.invalidateCache();
@@ -30,19 +30,19 @@ export async function categoryRouter(req: NextRequest, routePath: string[]): Pro
   }
 
   if (method === "POST" && pathLen === 0) {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkAdmin(userId, UserService.getRole);
     return await CategoryController.create(req);
   }
 
   if (method === "PUT" && pathLen === 1) {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkAdmin(userId, UserService.getRole);
     return await CategoryController.update(req, routePath[0]);
   }
 
   if (method === "DELETE" && pathLen === 1) {
-    const userId = extractUserFromAuth(req);
+    const userId = extractAdminFromAuth(req);
     await checkAdmin(userId, UserService.getRole);
     return await CategoryController.delete(req, routePath[0]);
   }

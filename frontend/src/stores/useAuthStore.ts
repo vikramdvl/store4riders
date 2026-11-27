@@ -26,7 +26,7 @@ interface AuthState {
   setToken: (token: string, refreshToken?: string) => void;
   setUser: (user: User | null) => void;
   setLoggingOut: (value: boolean) => void;
-  logout: () => void;
+  logout: (explicitScope?: "admin" | "customer") => void;
 }
 
 const AUTH_CHANNEL_NAME = "store4riders-auth";
@@ -189,9 +189,11 @@ export const useAuthStore = create<AuthState>()(
       setLoggingOut: (value) => {
         set({ isLoggingOut: value });
       },
-      logout: () => {
+      logout: (explicitScope) => {
         const prevUser = get().user;
-        const logoutScope = prevUser ? getUserScope(prevUser) : getPortalScopeFromLocation();
+        const logoutScope =
+          explicitScope ||
+          (typeof window !== "undefined" ? getPortalScopeFromLocation() : prevUser ? getUserScope(prevUser) : "customer");
         useCartStore.getState().switchUserCart(null);
         set({
           user: null,

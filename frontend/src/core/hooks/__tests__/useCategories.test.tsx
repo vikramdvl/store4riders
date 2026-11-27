@@ -164,5 +164,35 @@ describe("useCategories Hook Suite — Admin Panel Persistence", () => {
       expect(toast.success).toHaveBeenCalledWith("Category deleted successfully");
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["categoryTree"] });
     });
+
+    it("sends soft=true query params when deleting a storefront navigation template category", async () => {
+      vi.mocked(apiClient.delete).mockResolvedValueOnce({
+        data: { success: true },
+      });
+
+      const wrapper = createWrapper();
+      const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+      const { result } = renderHook(() => useDeleteCategory(), { wrapper });
+
+      await act(async () => {
+        await result.current.mutateAsync({
+          id: "cat_cleaners_1",
+          isTemplate: true,
+          slug: "helmet-cleaners",
+          name: "Helmet Cleaners",
+        });
+      });
+
+      expect(apiClient.delete).toHaveBeenCalledWith("/admin/categories/cat_cleaners_1", {
+        params: {
+          soft: "true",
+          slug: "helmet-cleaners",
+          name: "Helmet Cleaners",
+        },
+      });
+      expect(toast.success).toHaveBeenCalledWith("Category deleted successfully");
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["categoryTree"] });
+    });
   });
 });

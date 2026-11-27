@@ -43,7 +43,14 @@ export class CategoryController {
   }
 
   static async delete(req: NextRequest, id: string) {
-    await CategoryService.deleteCategory(id);
+    const isSoftDelete = req.nextUrl.searchParams.get("soft") === "true";
+    if (isSoftDelete) {
+      const slug = req.nextUrl.searchParams.get("slug") || undefined;
+      const name = req.nextUrl.searchParams.get("name") || undefined;
+      await CategoryService.softDeleteTemplateCategory(id, slug, name);
+    } else {
+      await CategoryService.deleteCategory(id);
+    }
     return ApiResponse.success(null, "Category deleted successfully");
   }
 }

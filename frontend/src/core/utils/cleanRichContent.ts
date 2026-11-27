@@ -55,6 +55,7 @@ export function cleanRichContent(rawHtml: string, options: CleanRichContentOptio
       .replace(/max-width:[^;]+;?/gi, "")
       .replace(/height:[^;]+;?/gi, "")
       .replace(/white-space:\s*nowrap;?/gi, "")
+      .replace(/text-align:\s*justify;?/gi, "")
       .trim();
     return cleanedStyles ? `style="${cleanedStyles}"` : "";
   });

@@ -27,6 +27,8 @@ export interface IStoreCategoryNode {
   heroCategoryIds?: string[];
   heroCategories?: any[];
   includeInMenu?: boolean;
+  isDeleted?: boolean;
+  isTemplate?: boolean;
   menuGroup?: string;
   menuLabel?: string;
   menuNavSection?: string;
@@ -474,21 +476,24 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
         };
       }),
       includeInMenu: dbDoc?.includeInMenu === true || (dbDoc?.includeInMenu !== false && !isLegacyNonMenuCategory(node.slug || dbDoc?.slug)),
+      isDeleted: Boolean(dbDoc?.isDeleted),
       menuGroup: dbDoc?.menuGroup || node.groupName || "",
       menuLabel: dbDoc?.menuLabel || "",
       menuNavSection: dbDoc?.menuNavSection || "",
       children: node.children || [],
       hasDbRecord: Boolean(dbDoc && dbDoc._id),
       isCustom: Boolean(node.isCustom),
+      isTemplate: Boolean(node.isTemplate),
     };
   };
 
   const seenSlugs = new Set<string>();
 
   // 2. Build authoritative tree from Storefront Navbar Product Categories
-  const tree: IStoreCategoryNode[] = DEFAULT_NAV_ITEMS
+  const tree: IStoreCategoryNode[] = [];
+  DEFAULT_NAV_ITEMS
     .filter((nav) => Boolean(CORE_PRODUCT_PARENTS[nav.id]))
-    .map((nav) => {
+    .forEach((nav) => {
       const config = CORE_PRODUCT_PARENTS[nav.id];
       const parentSlug = config.slug;
       seenSlugs.add(parentSlug);
@@ -516,6 +521,7 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
                 seenSlugs.add(leafSlug);
                 seenSlugs.add(fullSlug);
                 const itemDbDoc = resolveDbCategory(leafSlug, item.label);
+                if (itemDbDoc?.isDeleted) return;
                 groupChildNodes.push(
                   mergeDbProps(
                     {
@@ -527,6 +533,7 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
                       image: item.logoUrl,
                       groupName: section.group || undefined,
                       children: [],
+                      isTemplate: true,
                     },
                     itemDbDoc
                   )
@@ -536,22 +543,27 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
 
             if (!seenSlugs.has(groupSlug)) {
               seenSlugs.add(groupSlug);
-              subcategoryNodes.push(
-                mergeDbProps(
-                  {
-                    id: groupSlug,
-                    name:
-                      groupSlug === "motorcycle-riding-boots" && section.group === "Riding Boots"
-                        ? "Motorcycle riding boots"
-                        : section.group,
-                    slug: groupSlug,
-                    linkUrl: section.groupHref,
-                    parentId: parentDbDoc?._id ? String(parentDbDoc._id) : nav.id,
-                    children: groupChildNodes,
-                  },
-                  groupDbDoc
-                )
-              );
+              if (groupDbDoc?.isDeleted) {
+                subcategoryNodes.push(...groupChildNodes);
+              } else {
+                subcategoryNodes.push(
+                  mergeDbProps(
+                    {
+                      id: groupSlug,
+                      name:
+                        groupSlug === "motorcycle-riding-boots" && section.group === "Riding Boots"
+                          ? "Motorcycle riding boots"
+                          : section.group,
+                      slug: groupSlug,
+                      linkUrl: section.groupHref,
+                      parentId: parentDbDoc?._id ? String(parentDbDoc._id) : nav.id,
+                      children: groupChildNodes,
+                      isTemplate: true,
+                    },
+                    groupDbDoc
+                  )
+                );
+              }
             }
           } else {
             // Flat group (e.g. Types, Accessories & Care, Touring Bags, etc.)
@@ -564,6 +576,7 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
                 seenSlugs.add(leafSlug);
                 seenSlugs.add(fullSlug);
                 const itemDbDoc = resolveDbCategory(leafSlug, item.label);
+                if (itemDbDoc?.isDeleted) return;
                 subcategoryNodes.push(
                   mergeDbProps(
                     {
@@ -575,6 +588,7 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
                       image: item.logoUrl,
                       groupName: section.group || undefined,
                       children: [],
+                      isTemplate: true,
                     },
                     itemDbDoc
                   )
@@ -585,152 +599,195 @@ export function getStoreNavbarCategoryTree(dbCategories: any[] = []): IStoreCate
         });
       }
 
-      return mergeDbProps(
-        {
-          id: nav.id,
-          name: config.name,
-          slug: parentSlug,
-          linkUrl: config.linkUrl,
-          children: subcategoryNodes,
-        },
-        parentDbDoc
-      );
+      if (!parentDbDoc?.isDeleted) {
+        tree.push(
+          mergeDbProps(
+            {
+              id: nav.id,
+              name: config.name,
+              slug: parentSlug,
+              linkUrl: config.linkUrl,
+              children: subcategoryNodes,
+              isTemplate: true,
+            },
+            parentDbDoc
+          )
+        );
+      }
     });
 
-  // 3. Dynamically merge custom categories created by admin in MongoDB
+  // 3. Dynamically merge custom and admin-mapped categories from MongoDB
   if (flatDbList.length > 0) {
-    flatDbList.forEach((dbCat) => {
-      const dbId = String(dbCat._id || "");
-      if (!dbId || matchedDbIds.has(dbId)) return;
+    const attachToParent = (
+      nodes: IStoreCategoryNode[],
+      dbCat: any,
+      dbSlug: string,
+      targetSectionGroup: string
+    ): boolean => {
+      const rawPid = String(dbCat.parentId || "").trim();
+      const pId = rawPid.toLowerCase();
+      if (!pId) return false;
 
-      const dbSlug = dbCat.slug || dbId;
-      // Skip duplicate aliases of existing menu items (e.g. "full-face-helmet", "helmets", "riding-jacket")
-      if (seenSlugs.has(dbSlug) || isCanonicalMenuAlias(dbSlug)) return;
+      const parentDbDoc = dbById.get(rawPid) || dbById.get(pId) || dbBySlug.get(pId);
+      const parentDbSlug = parentDbDoc?.slug ? String(parentDbDoc.slug).toLowerCase().trim() : "";
 
-      // Skip legacy non-menu categories so they remain in "Unmapped Legacy Categories" tab unless explicitly placed into a menuNavSection by admin
-      if (isLegacyNonMenuCategory(dbSlug) && !dbCat.menuNavSection) return;
+      for (const node of nodes) {
+        const nodeId = String(node._id || "").toLowerCase();
+        const nodeKey = String(node.id || "").toLowerCase();
+        const nodeSlug = String(node.slug || "").toLowerCase().trim();
 
-      // Parse menuNavSection (e.g. "helmets:Types")
-      const navSection = (dbCat.menuNavSection || "").trim();
-      let targetNavId = "";
-      let targetSectionGroup = "";
-      if (navSection && navSection.includes(":")) {
-        const [navId, ...grpParts] = navSection.split(":");
-        targetNavId = navId.trim().toLowerCase();
-        targetSectionGroup = grpParts.join(":").trim();
+        const matchesNode =
+          nodeId === pId ||
+          nodeKey === pId ||
+          nodeSlug === pId ||
+          (parentDbSlug !== "" && (nodeSlug === parentDbSlug || areCategorySlugsEquivalent(nodeSlug, parentDbSlug))) ||
+          areCategorySlugsEquivalent(nodeSlug, pId);
+
+        if (matchesNode) {
+          node.children = node.children || [];
+          node.children.push(
+            mergeDbProps(
+              {
+                id: dbSlug,
+                name: dbCat.name,
+                slug: dbSlug,
+                linkUrl: `/${node.slug}/${dbSlug}`,
+                parentId: node._id || node.id,
+                groupName: targetSectionGroup || dbCat.menuGroup || undefined,
+                children: [],
+                isCustom: true,
+              },
+              dbCat
+            )
+          );
+          return true;
+        }
+        if (node.children && node.children.length > 0) {
+          if (attachToParent(node.children, dbCat, dbSlug, targetSectionGroup)) return true;
+        }
       }
+      return false;
+    };
 
-      // Case A: Custom Subcategory created under an existing parent or group
-      if (dbCat.parentId) {
-        const pId = String(dbCat.parentId).toLowerCase();
+    // Multi-pass attachment ensures child categories whose parents are themselves
+    // custom or newly mapped legacy categories attach cleanly regardless of list order.
+    let madeProgress = true;
+    while (madeProgress) {
+      madeProgress = false;
 
-        const attachToParent = (nodes: IStoreCategoryNode[]): boolean => {
-          for (const node of nodes) {
-            if (
-              String(node._id).toLowerCase() === pId ||
-              String(node.id).toLowerCase() === pId ||
-              String(node.slug).toLowerCase() === pId
-            ) {
-              node.children = node.children || [];
-              node.children.push(
+      for (const dbCat of flatDbList) {
+        const dbId = String(dbCat._id || "");
+        if (!dbId || matchedDbIds.has(dbId) || dbCat.isDeleted) continue;
+
+        const dbSlug = String(dbCat.slug || dbId).toLowerCase().trim();
+        if (seenSlugs.has(dbSlug)) continue;
+
+        const hasExplicitParent = Boolean(dbCat.parentId && String(dbCat.parentId).trim() !== "");
+        const navSection = (dbCat.menuNavSection || "").trim();
+        const hasExplicitSection = Boolean(navSection);
+
+        // Keep unmapped legacy/alias categories isolated in "Unmapped Legacy Categories"
+        // unless the admin explicitly mapped them to a parent category or submenu section.
+        if (!hasExplicitParent && !hasExplicitSection) {
+          if (isCanonicalMenuAlias(dbSlug) || isLegacyNonMenuCategory(dbSlug)) continue;
+        }
+
+        let targetNavId = "";
+        let targetSectionGroup = "";
+        if (navSection && navSection.includes(":")) {
+          const [navId, ...grpParts] = navSection.split(":");
+          targetNavId = navId.trim().toLowerCase();
+          targetSectionGroup = grpParts.join(":").trim();
+        }
+
+        // Case A: Category has an explicit parentId pointing into the menu tree
+        if (hasExplicitParent) {
+          if (attachToParent(tree, dbCat, dbSlug, targetSectionGroup)) {
+            matchedDbIds.add(dbId);
+            seenSlugs.add(dbSlug);
+            madeProgress = true;
+            continue;
+          }
+        }
+
+        // Case B: Category has Target Submenu Section (e.g. "helmets:Types") without resolved parentId
+        if (targetNavId) {
+          const rootNode = tree.find(
+            (n) =>
+              n.id.toLowerCase() === targetNavId ||
+              n.slug.toLowerCase() === targetNavId ||
+              (CORE_PRODUCT_PARENTS[n.id] && CORE_PRODUCT_PARENTS[n.id].slug.toLowerCase() === targetNavId)
+          );
+
+          if (rootNode) {
+            const matchingGroupChild = rootNode.children?.find(
+              (c) =>
+                c.name.toLowerCase() === targetSectionGroup.toLowerCase() ||
+                (c.groupName && c.groupName.toLowerCase() === targetSectionGroup.toLowerCase())
+            );
+
+            if (matchingGroupChild && matchingGroupChild.children) {
+              matchingGroupChild.children.push(
                 mergeDbProps(
                   {
                     id: dbSlug,
                     name: dbCat.name,
                     slug: dbSlug,
-                    linkUrl: `/${node.slug}/${dbSlug}`,
-                    parentId: node._id || node.id,
-                    groupName: targetSectionGroup || dbCat.menuGroup || undefined,
+                    linkUrl: `/${rootNode.slug}/${matchingGroupChild.slug}/${dbSlug}`,
+                    parentId: matchingGroupChild._id || matchingGroupChild.id,
+                    groupName: targetSectionGroup,
                     children: [],
                     isCustom: true,
                   },
                   dbCat
                 )
               );
-              matchedDbIds.add(dbId);
-              seenSlugs.add(dbSlug);
-              return true;
+            } else {
+              rootNode.children = rootNode.children || [];
+              rootNode.children.push(
+                mergeDbProps(
+                  {
+                    id: dbSlug,
+                    name: dbCat.name,
+                    slug: dbSlug,
+                    linkUrl: `/${rootNode.slug}/${dbSlug}`,
+                    parentId: rootNode._id || rootNode.id,
+                    groupName: targetSectionGroup || undefined,
+                    children: [],
+                    isCustom: true,
+                  },
+                  dbCat
+                )
+              );
             }
-            if (node.children && node.children.length > 0) {
-              if (attachToParent(node.children)) return true;
-            }
+            matchedDbIds.add(dbId);
+            seenSlugs.add(dbSlug);
+            madeProgress = true;
+            continue;
           }
-          return false;
-        };
+        }
 
-        attachToParent(tree);
-      } else if (targetNavId) {
-        // Case B: Category has Target Submenu Section (e.g. "helmets:Types") without explicit parentId
-        const rootNode = tree.find(
-          (n) =>
-            n.id.toLowerCase() === targetNavId ||
-            n.slug.toLowerCase() === targetNavId ||
-            (CORE_PRODUCT_PARENTS[n.id] && CORE_PRODUCT_PARENTS[n.id].slug.toLowerCase() === targetNavId)
-        );
-
-        if (rootNode) {
-          const matchingGroupChild = rootNode.children?.find(
-            (c) =>
-              c.name.toLowerCase() === targetSectionGroup.toLowerCase() ||
-              (c.groupName && c.groupName.toLowerCase() === targetSectionGroup.toLowerCase())
+        // Case C: Explicit custom Root Parent category created by Admin
+        if (!hasExplicitParent && dbCat.menuGroup === "admin-custom") {
+          tree.push(
+            mergeDbProps(
+              {
+                id: dbSlug,
+                name: dbCat.name,
+                slug: dbSlug,
+                linkUrl: `/${dbSlug}`,
+                children: [],
+                isCustom: true,
+              },
+              dbCat
+            )
           );
-
-          if (matchingGroupChild && matchingGroupChild.children) {
-            matchingGroupChild.children.push(
-              mergeDbProps(
-                {
-                  id: dbSlug,
-                  name: dbCat.name,
-                  slug: dbSlug,
-                  linkUrl: `/${rootNode.slug}/${matchingGroupChild.slug}/${dbSlug}`,
-                  parentId: matchingGroupChild._id || matchingGroupChild.id,
-                  groupName: targetSectionGroup,
-                  children: [],
-                  isCustom: true,
-                },
-                dbCat
-              )
-            );
-          } else {
-            rootNode.children = rootNode.children || [];
-            rootNode.children.push(
-              mergeDbProps(
-                {
-                  id: dbSlug,
-                  name: dbCat.name,
-                  slug: dbSlug,
-                  linkUrl: `/${rootNode.slug}/${dbSlug}`,
-                  parentId: rootNode._id || rootNode.id,
-                  groupName: targetSectionGroup || undefined,
-                  children: [],
-                  isCustom: true,
-                },
-                dbCat
-              )
-            );
-          }
           matchedDbIds.add(dbId);
           seenSlugs.add(dbSlug);
+          madeProgress = true;
         }
-      } else if (dbCat.menuGroup === "admin-custom") {
-        // Case B: Explicit custom Root Parent category created by Admin
-        tree.push(
-          mergeDbProps(
-            {
-              id: dbSlug,
-              name: dbCat.name,
-              slug: dbSlug,
-              linkUrl: `/${dbSlug}`,
-              children: [],
-              isCustom: true,
-            },
-            dbCat
-          )
-        );
-        matchedDbIds.add(dbId);
-        seenSlugs.add(dbSlug);
       }
-    });
+    }
   }
 
   return tree;
@@ -774,6 +831,7 @@ export function getUnmappedLegacyCategories(
 
   const seenUnmapped = new Set<string>();
   return flatList.filter((cat) => {
+    if (cat.isDeleted) return false;
     const slug = (cat.slug || "").toLowerCase().trim();
     const id = String(cat._id || cat.id || "");
     if (menuSlugs.has(slug) || (id && menuIds.has(id))) return false;

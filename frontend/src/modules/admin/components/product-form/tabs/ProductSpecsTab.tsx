@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Sliders, Plus, Trash2, Shield, Package, Wrench, Check, X } from "lucide-react";
+import { Sliders, Plus, Trash2, Shield, Package, Wrench, Check, X, Sparkles } from "lucide-react";
+import { buildSpecificationsFromTemplate } from "@store4riders/shared-utils";
+import { toast } from "sonner";
 import { SearchableSelect, Option } from "@/components/ui/SearchableSelect";
 import Button from "@/components/ui/Button";
 import { useProductFormContext } from "../ProductFormContext";
@@ -10,6 +12,16 @@ const STANDARD_GENDER_OPTIONS = ["Men", "Women", "Unisex"];
 
 export function ProductSpecsTab() {
   const {
+    name,
+    shortDescription,
+    description,
+    countryOfManufacture,
+    weight,
+    weightUnit,
+    length,
+    breadth,
+    height,
+    dimensionUnit,
     customAttributes,
     setCustomAttributes,
     brand,
@@ -35,6 +47,79 @@ export function ProductSpecsTab() {
     setAttr,
     additionalCustomAttributes,
   } = useProductFormContext();
+
+  const smartSuggestedMap = useMemo(() => {
+    if (!currentSpecDefinition?.fields?.length) return {};
+    const resolved = buildSpecificationsFromTemplate(currentSpecDefinition.fields, null, {
+      name,
+      shortDescription,
+      description,
+      brand,
+      gender,
+      countryOfManufacture,
+      weight: weight === "" ? undefined : Number(weight),
+      weightUnit,
+      length: length === "" ? undefined : Number(length),
+      breadth: breadth === "" ? undefined : Number(breadth),
+      height: height === "" ? undefined : Number(height),
+      dimensionUnit,
+    });
+    const map: Record<string, string> = {};
+    for (const item of resolved) {
+      map[item.key.toLowerCase()] = item.value;
+    }
+    return map;
+  }, [
+    currentSpecDefinition,
+    name,
+    shortDescription,
+    description,
+    brand,
+    gender,
+    countryOfManufacture,
+    weight,
+    weightUnit,
+    length,
+    breadth,
+    height,
+    dimensionUnit,
+  ]);
+
+  const fillableSmartEntries = useMemo(() => {
+    if (!currentSpecDefinition?.fields?.length) return [];
+    return currentSpecDefinition.fields
+      .map((field: any) => {
+        const key = String(field.key || "");
+        const suggested = smartSuggestedMap[key.toLowerCase()];
+        const current = getAttr(key);
+        return !current && suggested ? { key, value: suggested } : null;
+      })
+      .filter((entry: { key: string; value: string } | null): entry is { key: string; value: string } =>
+        Boolean(entry)
+      );
+  }, [currentSpecDefinition, smartSuggestedMap, getAttr]);
+
+  const handleAutoFillFromProduct = () => {
+    if (fillableSmartEntries.length === 0) {
+      toast.info("No additional blank template specifications detected from product details.");
+      return;
+    }
+    setCustomAttributes((prev) => {
+      const updated = [...prev];
+      for (const { key, value } of fillableSmartEntries) {
+        const idx = updated.findIndex((a) => a.key.toLowerCase() === key.toLowerCase());
+        if (idx >= 0) {
+          if (!updated[idx].value.trim()) {
+            updated[idx] = { ...updated[idx], value };
+          }
+        } else {
+          updated.push({ key, value });
+        }
+      }
+      return updated;
+    });
+    toast.success(`Auto-filled ${fillableSmartEntries.length} template specifications from product info`);
+  };
 
   const [customGenderInput, setCustomGenderInput] = useState("");
 
@@ -306,7 +391,7 @@ export function ProductSpecsTab() {
       {/* 2. Category-Specific Accurate Technical Specifications */}
       {currentSpecDefinition && (
         <div className="p-5 bg-gradient-to-b from-slate-50/70 to-white rounded-xl border border-slate-200 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-200/80 pb-3">
             <div className="flex items-center gap-2.5">
               <div className="p-2 bg-brand/10 text-brand rounded-lg">
                 {currentSpecDefinition.icon === "shield" && <Shield size={18} />}
@@ -319,31 +404,57 @@ export function ProductSpecsTab() {
                 <p className="text-xs text-slate-500">{currentSpecDefinition.subtitle}</p>
               </div>
             </div>
-            <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
-              Click any chip to set value or type custom
-            </span>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {fillableSmartEntries.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleAutoFillFromProduct}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                >
+                  <Sparkles size={13} />
+                  <span>Auto-Fill {fillableSmartEntries.length} from Product Details</span>
+                </button>
+              )}
+              <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
+                Click any chip to set value or type custom
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {currentSpecDefinition.fields.map((field: any) => {
               const currentValue = getAttr(field.key);
+              const smartSuggestion = smartSuggestedMap[String(field.key || "").toLowerCase()];
               return (
                 <div
                   key={field.key}
                   className="p-3.5 bg-white rounded-xl border border-slate-200 hover:border-slate-300 transition-colors space-y-2 shadow-xs"
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <label className="block text-xs font-bold text-slate-700">{field.label}</label>
-                    {currentValue && (
-                      <button
-                        type="button"
-                        onClick={() => setAttr(field.key, "")}
-                        className="text-[10px] text-slate-400 hover:text-red-500 cursor-pointer font-medium"
-                        title="Clear this field"
-                      >
-                        Clear
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {!currentValue && smartSuggestion && (
+                        <button
+                          type="button"
+                          onClick={() => setAttr(field.key, smartSuggestion)}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                          title={`Apply detected value: ${smartSuggestion}`}
+                        >
+                          <Sparkles size={10} />
+                          <span>Use: {smartSuggestion}</span>
+                        </button>
+                      )}
+                      {currentValue && (
+                        <button
+                          type="button"
+                          onClick={() => setAttr(field.key, "")}
+                          className="text-[10px] text-slate-400 hover:text-red-500 cursor-pointer font-medium"
+                          title="Clear this field"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="relative">

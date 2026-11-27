@@ -338,5 +338,46 @@ describe("Admin Category & Submenu Persistence — End-to-End Vitest Suite", () 
       expect(CategoryRepository.delete).toHaveBeenCalledWith("parent_jackets_del");
       expect(redis.deleteCache).toHaveBeenCalledWith("category_tree_v2");
     });
+
+    it("soft-deletes a storefront template category when soft=true so it stays removed across logins", async () => {
+      setupAdminAuth();
+
+      const templateId = "672cb0a123456789abcdef77";
+      vi.mocked(CategoryRepository.findById).mockResolvedValueOnce({
+        _id: templateId,
+        name: "Helmet Cleaners",
+        slug: "helmet-cleaners",
+      } as any);
+      vi.mocked(CategoryRepository.updateMany).mockResolvedValue(undefined as any);
+      vi.mocked(CategoryRepository.update).mockResolvedValueOnce({
+        _id: templateId,
+        name: "Helmet Cleaners",
+        slug: "helmet-cleaners",
+        includeInMenu: false,
+        isDeleted: true,
+      } as any);
+
+      const req = new NextRequest(
+        `http://localhost:4000/api/v1/admin/categories/${templateId}?soft=true&slug=helmet-cleaners&name=Helmet%20Cleaners`,
+        {
+          method: "DELETE",
+          headers: { authorization: "Bearer admin_jwt_token" },
+        }
+      );
+
+      const response = await adminRouter(req, ["categories", templateId]);
+      expect(response).not.toBeNull();
+      expect(response!.status).toBe(200);
+
+      expect(CategoryRepository.delete).not.toHaveBeenCalled();
+      expect(CategoryRepository.update).toHaveBeenCalledWith(
+        templateId,
+        expect.objectContaining({
+          includeInMenu: false,
+          isDeleted: true,
+        })
+      );
+      expect(redis.deleteCache).toHaveBeenCalledWith("category_tree_v2");
+    });
   });
 });

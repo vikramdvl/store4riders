@@ -457,6 +457,8 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
             productId={product.id}
             productName={product.name}
             attributes={product.attributes}
+            specTemplate={product.categorySpecTemplate}
+            specifications={product.specifications}
           />
         </div>
         
@@ -502,7 +504,7 @@ export const ProductDetailModule: React.FC<ProductDetailProps> = ({ product }) =
       </main>
 
       {/* 4. Global Footer with extra bottom padding for sticky bar */}
-      <div className="bg-neutral-950 pb-32 md:pb-28">
+      <div className="bg-neutral-950 pb-44 md:pb-32">
         <Footer />
       </div>
 
