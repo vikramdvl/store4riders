@@ -334,7 +334,7 @@ const ProductCard = ({ product, showBuyNow = false, priority = false }: ProductC
               {showBuyNow && (
                 <button
                   onClick={handleBuyNow}
-                  className="h-8 sm:h-9 px-3 sm:px-4 rounded-full bg-slate-900 text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider hover:bg-slate-800 transition-colors shadow-md active:scale-95 shrink-0"
+                  className="hidden sm:inline-flex items-center justify-center h-8 sm:h-9 px-3 sm:px-4 rounded-full bg-slate-900 text-white text-[11px] sm:text-xs font-bold uppercase tracking-wider hover:bg-slate-800 transition-colors shadow-md active:scale-95 shrink-0"
                 >
                   Buy Now
                 </button>

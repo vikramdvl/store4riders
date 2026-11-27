@@ -31,6 +31,7 @@ export function useAddAddress() {
     },
     onSuccess: (updatedUser) => {
       queryClient.invalidateQueries({ queryKey: ["user", "profile"] });
+      queryClient.invalidateQueries({ queryKey: ["user", "me"] });
       setUser(updatedUser);
     }
   });
@@ -48,6 +49,7 @@ export function useUpdateAddress() {
     },
     onSuccess: (updatedUser) => {
       queryClient.invalidateQueries({ queryKey: ["user", "profile"] });
+      queryClient.invalidateQueries({ queryKey: ["user", "me"] });
       setUser(updatedUser);
     }
   });
@@ -65,6 +67,7 @@ export function useDeleteAddress() {
     },
     onSuccess: (updatedUser) => {
       queryClient.invalidateQueries({ queryKey: ["user", "profile"] });
+      queryClient.invalidateQueries({ queryKey: ["user", "me"] });
       setUser(updatedUser);
     }
   });

@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useLogin } from "@/core/hooks/useAuth";
-import { EyeIcon, EyeSlashIcon, CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
+import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/solid";
 import Link from "next/link";
 
 const loginSchema = z.object({
@@ -16,63 +15,61 @@ const loginSchema = z.object({
 type LoginFormInputs = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
-  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  
-  const { register, handleSubmit, watch } = useForm<LoginFormInputs>({
-    resolver: zodResolver(loginSchema)
+  const emailId = useId();
+  const passwordId = useId();
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormInputs>({
+    resolver: zodResolver(loginSchema),
   });
 
-  const passwordValue = watch("password", "");
   const loginMutation = useLogin();
 
-  // Password validation checks for the UI checklist
-  const hasMinLength = passwordValue.length >= 8;
-  const hasNumber = /\d/.test(passwordValue);
-  const hasUpperAndLowerCase = /[a-z]/.test(passwordValue) && /[A-Z]/.test(passwordValue);
-  const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(passwordValue);
-
-  const ValidationItem = ({ isValid, text }: { isValid: boolean; text: string }) => (
-    <div className="flex items-center gap-1.5 text-[11px] text-neutral-500">
-      {isValid ? (
-        <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-      ) : (
-        <XCircleIcon className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
-      )}
-      <span className={isValid ? "text-neutral-700 font-medium" : ""}>{text}</span>
-    </div>
-  );
-
   return (
-    <form onSubmit={handleSubmit(data => loginMutation.mutate(data))} className="flex flex-col gap-4 w-full">
+    <form onSubmit={handleSubmit(data => loginMutation.mutate(data))} className="flex flex-col gap-4 w-full" noValidate>
       
       {/* Email Input */}
       <div className="flex flex-col gap-1.5">
-        <label className="text-[10px] md:text-xs uppercase tracking-wider font-semibold text-neutral-600">
+        <label htmlFor={emailId} className="text-[10px] md:text-xs uppercase tracking-wider font-semibold text-neutral-600">
           Email Address
         </label>
         <input
+          id={emailId}
           type="email"
-          className="w-full border border-neutral-300 p-2.5 md:p-3 text-base md:text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:border-banner rounded-xs transition-colors bg-neutral-50/50 focus:bg-white"
+          autoComplete="email"
+          aria-invalid={errors.email ? "true" : "false"}
+          className={`w-full border ${errors.email ? "border-red-500 bg-red-50/20" : "border-neutral-300"} p-2.5 md:p-3 text-base md:text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:border-banner rounded-xs transition-colors bg-neutral-50/50 focus:bg-white`}
           {...register("email")}
         />
+        {errors.email && (
+          <span role="alert" className="text-[11px] text-red-600 font-medium">{errors.email.message}</span>
+        )}
       </div>
 
       {/* Password Input */}
       <div className="flex flex-col gap-1.5">
-        <label className="text-[10px] md:text-xs uppercase tracking-wider font-semibold text-neutral-600">
+        <label htmlFor={passwordId} className="text-[10px] md:text-xs uppercase tracking-wider font-semibold text-neutral-600">
           Password
         </label>
         <div className="relative">
           <input
+            id={passwordId}
             type={showPassword ? "text" : "password"}
-            className="w-full border border-neutral-300 p-2.5 md:p-3 pr-11 text-base md:text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:border-banner rounded-xs transition-colors bg-neutral-50/50 focus:bg-white"
+            autoComplete="current-password"
+            aria-invalid={errors.password ? "true" : "false"}
+            className={`w-full border ${errors.password ? "border-red-500 bg-red-50/20" : "border-neutral-300"} p-2.5 md:p-3 pr-11 text-base md:text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:border-banner rounded-xs transition-colors bg-neutral-50/50 focus:bg-white`}
             {...register("password")}
           />
           <button
             type="button"
+            aria-pressed={showPassword}
+            aria-label={showPassword ? "Hide password" : "Show password"}
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 p-1"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 p-2"
           >
             {showPassword ? (
               <EyeIcon className="w-4 h-4" />
@@ -81,6 +78,9 @@ export function LoginForm() {
             )}
           </button>
         </div>
+        {errors.password && (
+          <span role="alert" className="text-[11px] text-red-600 font-medium">{errors.password.message}</span>
+        )}
         <div className="flex justify-end">
           <Link 
             href="/forgot-password" 
@@ -89,14 +89,6 @@ export function LoginForm() {
             Forgot Password?
           </Link>
         </div>
-      </div>
-
-      {/* Password Validation Checklist */}
-      <div className="flex flex-col gap-1 pt-0.5">
-        <ValidationItem isValid={hasMinLength} text="Minimum 8 characters" />
-        <ValidationItem isValid={hasNumber} text="Must contain at least 1 number" />
-        <ValidationItem isValid={hasUpperAndLowerCase} text="Must contain capital and lowercase letters" />
-        <ValidationItem isValid={hasSymbol} text="Must contain at least 1 special character" />
       </div>
 
       {/* Submit Button */}

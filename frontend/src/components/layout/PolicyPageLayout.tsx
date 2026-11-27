@@ -478,22 +478,22 @@ export function PolicyPageLayout({
               </div>
 
               {/* Rider Support Desk Widget */}
-              <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 shadow-sm space-y-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-brand/20 text-brand flex items-center justify-center shrink-0">
-                    <PhoneCall size={16} className="text-white" />
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-brand/10 text-brand flex items-center justify-center shrink-0">
+                    <PhoneCall size={16} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">
+                    <h4 className="text-sm font-bold text-slate-900">
                       Rider Support Desk
                     </h4>
-                    <p className="text-[11px] text-slate-300">
+                    <p className="text-[11px] text-slate-500">
                       Have questions about this policy?
                     </p>
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-300 leading-relaxed">
+                <p className="text-xs text-slate-600 leading-relaxed">
                   Our certified moto gear advisors are available to assist with
                   sizing, order exchanges, and warranty inquiries.
                 </p>
@@ -503,7 +503,7 @@ export function PolicyPageLayout({
                     href={`https://wa.me/${whatsappNumber}?text=Hi%20Store4Riders%2C%20I%20have%20a%20query%20about%20your%20policies`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-xl transition-all shadow-xs"
+                    className="w-full min-h-[40px] flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-3 rounded-xl transition-colors shadow-2xs"
                   >
                     <MessageSquare size={14} />
                     <span>Chat on WhatsApp</span>
@@ -511,24 +511,24 @@ export function PolicyPageLayout({
 
                   <a
                     href={`tel:${supportPhone}`}
-                    className="w-full flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white font-medium py-2 px-3 rounded-xl transition-all"
+                    className="w-full min-h-[40px] flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-slate-800 font-semibold py-2 px-3 rounded-xl transition-colors"
                   >
-                    <PhoneCall size={14} />
+                    <PhoneCall size={14} className="text-slate-500" />
                     <span>{supportPhone}</span>
                   </a>
 
                   <a
                     href={`mailto:${supportEmail}`}
-                    className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white py-1.5 px-3 rounded-xl transition-all text-[11px] truncate"
+                    className="w-full min-h-[38px] flex items-center justify-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-slate-600 hover:text-slate-900 py-1.5 px-3 rounded-xl transition-colors text-[11px] truncate"
                   >
-                    <Mail size={13} />
+                    <Mail size={13} className="text-slate-400 shrink-0" />
                     <span className="truncate">{supportEmail}</span>
                   </a>
                 </div>
 
-                <div className="pt-2 border-t border-white/10 text-[10px] text-slate-400 flex items-center justify-between">
+                <div className="pt-2.5 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
                   <span>Support Hours</span>
-                  <span className="font-semibold text-slate-300">
+                  <span className="font-semibold text-slate-700">
                     Mon - Sat: 10AM - 7PM IST
                   </span>
                 </div>
@@ -552,31 +552,35 @@ export function PolicyPageLayout({
 
                 {/* Bottom Assistance Banner */}
                 <div className="mt-8 pt-6 border-t border-slate-100">
-                  {/* Help prompt */}
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl bg-slate-900 text-white">
-                    <div>
-                      <h4 className="text-sm font-bold">
-                        Need clarification on this policy?
-                      </h4>
-                      <p className="text-xs text-slate-300">
-                        Our rider support team is always ready to assist you.
-                      </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-xl bg-slate-50 border border-slate-200/90">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-brand/10 text-brand flex items-center justify-center shrink-0">
+                        <Mail size={18} />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm sm:text-base font-bold text-slate-900">
+                          Need clarification on this policy?
+                        </h4>
+                        <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                          Our rider support team is always ready to assist you.
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="grid grid-cols-2 sm:flex items-center gap-2.5 w-full sm:w-auto shrink-0">
                       <Link
-                        href="/contact-us"
-                        className="inline-flex items-center gap-1.5 bg-brand hover:bg-brand/90 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all"
+                        href="/contact-store4riders"
+                        className="min-h-[42px] inline-flex items-center justify-center gap-1.5 bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 text-xs font-semibold px-4 py-2 rounded-lg transition-colors shadow-2xs"
                       >
-                        <Mail size={13} />
+                        <Mail size={14} className="text-slate-600 shrink-0" />
                         <span>Contact Support</span>
                       </Link>
                       <a
                         href={`https://wa.me/${whatsappNumber}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all"
+                        className="min-h-[42px] inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors shadow-2xs"
                       >
-                        <MessageSquare size={13} />
+                        <MessageSquare size={14} className="shrink-0" />
                         <span>WhatsApp</span>
                       </a>
                     </div>

@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+
+import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { HeroProductCardData } from "../types/homepage.types";
@@ -24,10 +26,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   className = "",
 }) => {
+  const [intentPrefetch, setIntentPrefetch] = useState(false);
+
   return (
     <Link
       href={product.ctaUrl}
-      prefetch={true}
+      prefetch={intentPrefetch ? true : undefined}
+      onMouseEnter={() => setIntentPrefetch(true)}
+      onTouchStart={() => setIntentPrefetch(true)}
+      onFocus={() => setIntentPrefetch(true)}
       className={`bg-white/90 shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-2xl p-3 flex items-center gap-4 w-[260px] md:w-[300px] group transition-transform duration-300 hover:-translate-y-1 will-change-transform border border-white/60 ${className}`}
     >
       {/* Clean Square Image Thumbnail */}

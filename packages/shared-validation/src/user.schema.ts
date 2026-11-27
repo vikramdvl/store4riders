@@ -85,14 +85,30 @@ export const resetPasswordSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters long"),
 });
 
+export const PASSWORD_SYMBOL_REGEX = /[^A-Za-z0-9\s]/;
+
+export const strongPasswordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters long")
+  .max(100, "Password is too long")
+  .regex(/[a-z]/, "Password must contain at least 1 lowercase letter")
+  .regex(/[A-Z]/, "Password must contain at least 1 uppercase letter")
+  .regex(/\d/, "Password must contain at least 1 number")
+  .regex(PASSWORD_SYMBOL_REGEX, "Password must contain at least 1 special character");
+
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
-  newPassword: z.string().min(8, "New password must be at least 8 characters long").max(100, "Password is too long"),
+  newPassword: strongPasswordSchema,
   confirmPassword: z.string().min(1, "Please confirm your new password"),
-}).refine((data) => data.newPassword === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"],
-});
+})
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  })
+  .refine((data) => data.newPassword !== data.currentPassword, {
+    message: "New password must be different from your current password",
+    path: ["newPassword"],
+  });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

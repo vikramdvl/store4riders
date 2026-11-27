@@ -63,9 +63,19 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [hasMounted, setHasMounted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [prefetchedHrefs, setPrefetchedHrefs] = useState<Record<string, boolean>>({});
+
+  const markPrefetchIntent = (href?: string) => {
+    if (!href || href === "#") return;
+    setPrefetchedHrefs((prev) => (prev[href] ? prev : { ...prev, [href]: true }));
+  };
 
   useEffect(() => {
-    setHasMounted(true);
+    const mountTimer = setTimeout(() => setHasMounted(true), 400);
+    return () => clearTimeout(mountTimer);
+  }, []);
+
+  useEffect(() => {
     if (resolvedSlides.length <= 1 || isPaused) return;
     const interval = setInterval(() => {
       setCurrentImageIndex((prev) => (prev + 1) % resolvedSlides.length);
@@ -96,10 +106,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       onMouseLeave={() => setIsPaused(false)}
       className="relative w-full h-[320px] lg:h-[100svh] lg:min-h-[600px] flex flex-col justify-between overflow-hidden bg-neutral-900"
     >
-      {/* Background Image Slider */}
+      {/* Background Image Slider (mounts only active + next 1 slide so many admin slides never bloat PageSpeed) */}
       <div className="absolute inset-0 z-0">
         {resolvedSlides.map((slide, index) => {
-          if (index > 0 && !hasMounted) return null;
+          const nextSlideIndex = resolvedSlides.length > 1 ? (currentImageIndex + 1) % resolvedSlides.length : -1;
+          const shouldMountSlide =
+            index === currentImageIndex || (hasMounted && index === nextSlideIndex);
+          if (!shouldMountSlide) return null;
 
           const slideHref = slide.ctaLink || activeCtaLink || "/products";
 
@@ -107,7 +120,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             <Link
               key={slide.imageUrl + index}
               href={slideHref}
-              prefetch={index === currentImageIndex}
+              prefetch={prefetchedHrefs[slideHref] ? true : undefined}
+              onMouseEnter={() => markPrefetchIntent(slideHref)}
+              onTouchStart={() => markPrefetchIntent(slideHref)}
+              onFocus={() => markPrefetchIntent(slideHref)}
               aria-label={slide.title || `Hero banner ${index + 1}`}
               className={`absolute inset-0 transition-opacity duration-1000 ease-in-out block ${
                 index === currentImageIndex ? "opacity-100 pointer-events-auto cursor-pointer" : "opacity-0 pointer-events-none"
@@ -153,7 +169,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
               {/* Desktop Button */}
               <Link
                 href={activeCtaLink}
-                prefetch={true}
+                prefetch={prefetchedHrefs[activeCtaLink] ? true : undefined}
+                onMouseEnter={() => markPrefetchIntent(activeCtaLink)}
+                onTouchStart={() => markPrefetchIntent(activeCtaLink)}
+                onFocus={() => markPrefetchIntent(activeCtaLink)}
                 className="mt-3.5 inline-flex items-center gap-1.5 bg-banner hover:bg-orange-600 text-white text-[11px] font-bold uppercase tracking-wider px-4 py-2 rounded-full shadow-md transition-all duration-200 hover:scale-[1.02] active:scale-95 group self-start"
               >
                 <span>{activeCtaText}</span>
@@ -168,7 +187,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           {isOverlayVisible && (
             <Link
               href={activeCtaLink}
-              prefetch={true}
+              prefetch={prefetchedHrefs[activeCtaLink] ? true : undefined}
+              onMouseEnter={() => markPrefetchIntent(activeCtaLink)}
+              onTouchStart={() => markPrefetchIntent(activeCtaLink)}
+              onFocus={() => markPrefetchIntent(activeCtaLink)}
               className="lg:hidden mt-auto inline-flex items-center gap-1.5 bg-banner hover:bg-orange-600 text-white text-[10px] sm:text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-full shadow-lg transition-colors self-start pointer-events-auto"
             >
               {activeCtaText}

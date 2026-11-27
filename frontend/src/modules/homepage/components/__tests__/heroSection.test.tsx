@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { HeroSection } from "../HeroSection";
 import { HeroSectionProps } from "../../types/homepage.types";
 
@@ -216,5 +216,41 @@ describe("HeroSection Component Suite", () => {
     expect(container.querySelector(".mix-blend-multiply")).toBeNull();
     expect(container.querySelector(".lg\\:mix-blend-multiply")).toBeNull();
     expect(container.querySelector(".from-black\\/65")).toBeNull();
+  });
+
+  it("mounts only active slide on initial paint and at most current + next slide after mount", () => {
+    vi.useFakeTimers();
+    const manySlides = Array.from({ length: 8 }, (_, idx) => ({
+      id: `slide-${idx + 1}`,
+      imageUrl: `/slide-${idx + 1}.jpg`,
+      title: `SLIDE TITLE ${idx + 1}`,
+      ctaLink: `/products?slide=${idx + 1}`,
+      showOverlay: false,
+    }));
+
+    const { container } = render(
+      <HeroSection
+        subtitle="TEST"
+        title="DEFAULT"
+        bgImageUrl="/slide-1.jpg"
+        featuredProducts={mockFeaturedProducts}
+        slides={manySlides}
+        showOverlay={false}
+      />
+    );
+
+    // Initial render: only Slide 1 should be mounted (prevents downloading 8 banners at once)
+    expect(container.querySelectorAll("img[alt^='Hero background:']").length).toBe(1);
+    expect(screen.getByAltText("Hero background: SLIDE TITLE 1")).toBeInTheDocument();
+
+    // After mount idle delay: only current + next (2 slides total, not 8)
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(container.querySelectorAll("img[alt^='Hero background:']").length).toBe(2);
+    expect(screen.getByAltText("Hero background: SLIDE TITLE 2")).toBeInTheDocument();
+    expect(screen.queryByAltText("Hero background: SLIDE TITLE 5")).not.toBeInTheDocument();
+
+    vi.useRealTimers();
   });
 });

@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api-client";
-import { formatPrice, inferExchangeProgressFromNotes, getExchangeWindowStatus } from "@store4riders/shared-utils";
+import React, { Suspense, useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { formatPrice, inferExchangeProgressFromNotes, getExchangeWindowStatus, getOrderExchangesList } from "@store4riders/shared-utils";
 import Link from "next/link";
 import Image from "next/image";
 import { 
@@ -20,32 +19,27 @@ import {
 } from "lucide-react";
 import { ExchangeOrderModal } from "./ExchangeOrderModal";
 import { usePublicSettings } from "@/core/hooks/usePaymentSettings";
+import { useMyOrders } from "@/core/hooks/useAccount";
 
-type FilterTab = "all" | "active" | "delivered" | "exchanges" | "cancelled_failed";
+type FilterTab = "all" | "active" | "delivered" | "exchanges";
 
-export function OrderHistory() {
+function OrderHistoryInner() {
+  const searchParams = useSearchParams();
   const { data: publicSettings } = usePublicSettings();
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [selectedExchangeOrder, setSelectedExchangeOrder] = useState<any | null>(null);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("tab") === "exchanges") {
-        setActiveTab("exchanges");
-      }
+    const tabParam = searchParams?.get("tab");
+    if (tabParam === "exchanges") {
+      setActiveTab("exchanges");
+    } else if (!tabParam) {
+      setActiveTab("all");
     }
-  }, []);
+  }, [searchParams]);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["orders"],
-    queryFn: async () => {
-      const res = await apiClient.get("/orders/me");
-      return res.data;
-    }
-  });
-
-  const orders: any[] = useMemo(() => data?.data || [], [data]);
+  const { data: ordersData, isLoading, error } = useMyOrders();
+  const orders: any[] = useMemo(() => (Array.isArray(ordersData) ? ordersData : []), [ordersData]);
 
   // Status mapping helper
   const getStatusDisplay = (status: string = "") => {
@@ -160,10 +154,7 @@ export function OrderHistory() {
       return orders.filter(o => (o.status || "").toLowerCase() === "delivered");
     }
     if (activeTab === "exchanges") {
-      return orders.filter(o => ["return_requested", "return_approved", "return_picked", "returned"].includes((o.status || "").toLowerCase()) || Boolean(o.exchangeDetails?.stage));
-    }
-    if (activeTab === "cancelled_failed") {
-      return orders.filter(o => ["cancelled", "failed", "refunded"].includes((o.status || "").toLowerCase()));
+      return orders.filter(o => ["return_requested", "return_approved", "return_picked", "returned"].includes((o.status || "").toLowerCase()) || Boolean(o.exchangeDetails?.stage) || getOrderExchangesList(o).length > 0);
     }
     return orders;
   }, [orders, activeTab]);
@@ -174,8 +165,7 @@ export function OrderHistory() {
       all: orders.length,
       active: orders.filter(o => ["pending_payment", "confirmed", "processing", "packed", "shipped"].includes((o.status || "").toLowerCase())).length,
       delivered: orders.filter(o => (o.status || "").toLowerCase() === "delivered").length,
-      exchanges: orders.filter(o => ["return_requested", "return_approved", "return_picked", "returned"].includes((o.status || "").toLowerCase()) || Boolean(o.exchangeDetails?.stage)).length,
-      cancelled_failed: orders.filter(o => ["cancelled", "failed", "refunded"].includes((o.status || "").toLowerCase())).length,
+      exchanges: orders.filter(o => ["return_requested", "return_approved", "return_picked", "returned"].includes((o.status || "").toLowerCase()) || Boolean(o.exchangeDetails?.stage) || getOrderExchangesList(o).length > 0).length,
     };
   }, [orders]);
 
@@ -233,28 +223,36 @@ export function OrderHistory() {
 
       {/* Horizontal Filter Tabs (Scrollable on Mobile) */}
       {orders.length > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2 mb-4 -mx-1 px-1">
+        <div
+          role="tablist"
+          aria-label="Filter orders by status"
+          className="flex items-center gap-1.5 overflow-x-auto scrollbar-none snap-x snap-proximity pb-2 mb-4 -mx-1 px-1"
+        >
           {[
             { id: "all", label: "All Orders", count: tabCounts.all },
             { id: "active", label: "In Transit / Active", count: tabCounts.active },
             { id: "delivered", label: "Delivered", count: tabCounts.delivered },
             { id: "exchanges", label: "Exchanges", count: tabCounts.exchanges },
-            { id: "cancelled_failed", label: "Cancelled / Failed", count: tabCounts.cancelled_failed },
           ].map(tab => {
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id as FilterTab)}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
+                role="tab"
+                aria-selected={isActive}
+                onClick={(e) => {
+                  setActiveTab(tab.id as FilterTab);
+                  e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" });
+                }}
+                className={`relative flex items-center gap-1.5 px-3.5 min-h-[40px] py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all shrink-0 snap-start cursor-pointer border ${
                   isActive
-                    ? "bg-neutral-900 text-white shadow-xs"
-                    : "bg-white text-neutral-600 border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50"
+                    ? "bg-neutral-900 text-white border-neutral-900 shadow-xs after:content-[''] after:absolute after:inset-x-3 after:bottom-0.5 after:border-b-2 after:border-brand"
+                    : "bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50"
                 }`}
               >
                 <span>{tab.label}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
                   isActive ? "bg-white/20 text-white" : "bg-neutral-100 text-neutral-600"
                 }`}>
                   {tab.count}
@@ -557,5 +555,21 @@ export function OrderHistory() {
       />
 
     </div>
+  );
+}
+
+export function OrderHistory() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col gap-4 w-full animate-pulse">
+          <div className="h-9 w-48 bg-neutral-200 rounded-lg mb-2" />
+          <div className="h-10 w-full bg-neutral-100 rounded-lg mb-4" />
+          <div className="h-44 bg-white border border-neutral-200 rounded-xl p-4" />
+        </div>
+      }
+    >
+      <OrderHistoryInner />
+    </Suspense>
   );
 }
