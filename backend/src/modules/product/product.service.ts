@@ -8,6 +8,7 @@ import {
   extractProductWeight,
   resolveCategorySpecDefinitions,
   buildSpecificationsFromTemplate,
+  sortSizeEntities,
 } from "@store4riders/shared-utils";
 import { getCache, setCache, deleteCache, clearProductCaches } from "../../core/cache/redis";
 import { buildSearchSlugs, resolveCanonicalCategorySlugs } from "./product.category-constants";
@@ -801,7 +802,7 @@ export class ProductService {
       return Object.entries(obj).map(([k, v]) => `${k}:${serializeFilter(v)}`).sort().join(";");
     };
 
-    const cacheKey = `aggs_v29_${categorySlug || 'all'}_${serializeFilter(rawActiveFilters || {})}`;
+    const cacheKey = `aggs_v30_${categorySlug || 'all'}_${serializeFilter(rawActiveFilters || {})}`;
     const cached = await getCache(cacheKey);
     if (cached) return cached;
 
@@ -1326,7 +1327,10 @@ export class ProductService {
       brands: Array.from(brandsMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
       categories: Array.from(categoriesMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
       colors: Array.from(colorsMap.entries()).map(([name, set]) => ({ name, count: set.size })).sort((a, b) => b.count - a.count),
-      sizes: Array.from(sizesMap.entries()).map(([name, set]) => ({ name, count: set.size })).sort((a, b) => b.count - a.count),
+      sizes: sortSizeEntities(
+        Array.from(sizesMap.entries()).map(([name, set]) => ({ name, count: set.size })),
+        (s) => s.name
+      ),
       dynamicAttributes: dynamicAttributesResponse,
       priceStats: { 
         min: overallMinPrice === Infinity ? 0 : overallMinPrice, 

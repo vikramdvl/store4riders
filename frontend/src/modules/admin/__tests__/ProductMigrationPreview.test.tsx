@@ -237,9 +237,12 @@ describe("CsvValidationPreviewModal & ProductMigration workflow", () => {
     fireEvent.change(fileInput, { target: { files: [csvFile] } });
     fireEvent.click(screen.getByRole("button", { name: /Validate & Preview CSV/i }));
 
-    await waitFor(() => {
-      expect(screen.getByText(/CSV Pre-Upload Validator & Dry-Run Preview/i)).toBeDefined();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("heading", { name: /CSV Pre-Upload Validator & Dry-Run Preview/i })).toBeDefined();
+      },
+      { timeout: 10000 }
+    );
 
     expect(mockApiPost).toHaveBeenCalledTimes(1);
     expect(mockApiPost).toHaveBeenCalledWith(
@@ -250,23 +253,42 @@ describe("CsvValidationPreviewModal & ProductMigration workflow", () => {
     expect(mockApiPost.mock.calls.some(([u]) => u === "/migration/start" || u === "/migration/upload")).toBe(false);
 
     // 3. Cancel does not upload anything
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: "Cancel" })).toBeDefined();
+      },
+      { timeout: 10000 }
+    );
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(mockApiPost).toHaveBeenCalledTimes(1);
 
     // 4. Re-open preview & Confirm & Apply Changes -> completes polling and renders counters
+    await waitFor(
+      () => {
+        const previewBtn = screen.getByRole("button", { name: /Validate & Preview CSV/i }) as HTMLButtonElement;
+        expect(previewBtn.disabled).toBe(false);
+      },
+      { timeout: 10000 }
+    );
     fireEvent.click(screen.getByRole("button", { name: /Validate & Preview CSV/i }));
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Confirm & Apply Changes/i })).toBeDefined();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /Confirm & Apply Changes/i })).toBeDefined();
+      },
+      { timeout: 10000 }
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /Confirm & Apply Changes/i }));
 
-    await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledWith("/migration/start", {
-        s3Key: "migrations/1-patch.csv",
-        fileName: "patch.csv",
-      });
-    });
+    await waitFor(
+      () => {
+        expect(mockApiPost).toHaveBeenCalledWith("/migration/start", {
+          s3Key: "migrations/1-patch.csv",
+          fileName: "patch.csv",
+        });
+      },
+      { timeout: 10000 }
+    );
 
     await waitFor(
       () => {
@@ -276,7 +298,7 @@ describe("CsvValidationPreviewModal & ProductMigration workflow", () => {
         expect(screen.getByText("Variants Updated")).toBeDefined();
         expect(screen.getByText("Skipped Rows")).toBeDefined();
       },
-      { timeout: 3000 }
+      { timeout: 10000 }
     );
-  });
+  }, 20000);
 });

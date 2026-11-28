@@ -14,7 +14,7 @@ import {
   CheckBadgeIcon
 } from "@heroicons/react/24/solid";
 import { toast } from "sonner";
-import { formatPrice } from "@store4riders/shared-utils";
+import { formatPrice, sortSizes } from "@store4riders/shared-utils";
 import { useCartStore } from "@/stores/useCartStore";
 import { useProductBySlug, IBackendProduct } from "@/core/hooks/useProducts";
 import { CatalogProduct } from "../types/catalog.types";
@@ -30,24 +30,6 @@ export interface QuickAddModalProps {
   product: CatalogProduct;
   initialSelectedColor?: string | null;
 }
-
-const standardOrder = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "XXL", "3XL", "XXXL", "4XL", "5XL"];
-
-const sortSizes = (sizesList: string[]): string[] => {
-  return [...sizesList].sort((a, b) => {
-    const aNorm = a.trim().toUpperCase();
-    const bNorm = b.trim().toUpperCase();
-    const aIdx = standardOrder.indexOf(aNorm);
-    const bIdx = standardOrder.indexOf(bNorm);
-    if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
-    if (aIdx !== -1) return -1;
-    if (bIdx !== -1) return 1;
-    const aNum = parseFloat(a);
-    const bNum = parseFloat(b);
-    if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
-    return a.localeCompare(b);
-  });
-};
 
 const isJunkVariantVal = (val?: string) =>
   Boolean(val && ["standard", "default", "none", "n/a", "na", "-", "--"].includes(val.trim().toLowerCase()));

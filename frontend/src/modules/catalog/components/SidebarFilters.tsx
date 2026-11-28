@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useProductAggregations } from "@/core/hooks/useProducts";
-import { slugify } from "@store4riders/shared-utils";
+import { slugify, sortSizeEntities } from "@store4riders/shared-utils";
 import { updateQueryUrlShallow } from "@/core/utils/shallowUrl";
 
 const PRICE_RANGES = [
@@ -138,9 +138,13 @@ export function SidebarFilters({
     ? aggregations.brands.slice(0, 15).map((b: any) => ({ name: b.name, short: b.name, count: b.count }))
     : [];
     
-  const SIZES = aggregations?.sizes 
-    ? aggregations.sizes.slice(0, 12).map((s: any) => ({ name: s.name, count: s.count }))
-    : [];
+  const SIZES = useMemo(() => {
+    if (!aggregations?.sizes) return [];
+    return sortSizeEntities(
+      aggregations.sizes.map((s: any) => ({ name: s.name, count: s.count })),
+      (s: any) => s.name
+    );
+  }, [aggregations?.sizes]);
     
   const COLOURS = useMemo(() => {
     if (!aggregations?.colors) return [];

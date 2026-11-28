@@ -5,7 +5,7 @@ import { Suspense, useEffect, useMemo } from "react";
 import { useProductBySlug, useProductKit, useProductUpsell, useProductCrossSell, useProductReviews, IBackendProduct } from "@/core/hooks/useProducts";
 import { useCategoryTree } from "@/core/hooks/useCategories";
 import { CATEGORY_SLUG_ALIASES } from "@/core/utils/navCategories";
-import { resolveProductSpecificationsFromTree } from "@store4riders/shared-utils";
+import { resolveProductSpecificationsFromTree, sortSizes } from "@store4riders/shared-utils";
 import { ProductDetailModule } from "@/modules/product-detail";
 import { normalizeExternalImageUrl, deduplicateProductImages, getProductThumbnailUrl, getPreferredInStockColor, isUtilityOrInfographicImage } from "@/core/utils/mediaUrlHelper";
 import { PDPData, KitProduct } from "@/modules/product-detail/types/product-detail.types";
@@ -644,7 +644,7 @@ const mapProductToPDP = (
   }
 
   colorNames = Array.from(colorSet).filter(c => !isJunkVariantVal(c));
-  sizes = Array.from(sizeSet).filter(s => !isJunkVariantVal(s));
+  sizes = sortSizes(Array.from(sizeSet).filter(s => !isJunkVariantVal(s)));
 
   // 1. Collect all images for the product
   const rawGalleryImages: any[] = [];
