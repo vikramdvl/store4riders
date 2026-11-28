@@ -205,9 +205,28 @@ export function getCategoryRegexRule(categorySlug: string): any {
     regexRule = {
       $or: [{ magentoCategories: /off-beat|off beat/i }, { name: /off-beat|off beat/i }]
     };
-  } else if (cleanSlug.includes("performance-parts") || cleanSlug.includes("performance") || cleanSlug.includes("exhaust")) {
+  } else if (cleanSlug.includes("exhaust")) {
     regexRule = {
-      $or: [{ magentoCategories: /performance|exhaust/i }, { name: /performance|exhaust|air filter/i }]
+      $or: [
+        { magentoCategories: /exhaust/i },
+        { name: /\b(exhausts?|silencers?|mufflers?|db\s*killers?|slip[-_\s]?on)\b(?!\s*(?:guard|protector|slider|shield|heat\s*shield))/i },
+      ],
+    };
+  } else if (cleanSlug.includes("performance-parts") || cleanSlug.includes("performance")) {
+    regexRule = {
+      $and: [
+        {
+          $or: [
+            { magentoCategories: /performance/i },
+            { name: /\b(performance|fuelx|powertronic|air\s*filter)\b/i },
+          ],
+        },
+        {
+          name: {
+            $not: /\b(exhausts?|silencers?|mufflers?|db\s*killers?|slip[-_\s]?on)\b(?!\s*(?:guard|protector|slider|shield|heat\s*shield))/i,
+          },
+        },
+      ],
     };
   } else if (cleanSlug.includes("rally-tower") || cleanSlug.includes("navigation-tower")) {
     regexRule = {

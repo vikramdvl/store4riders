@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { createProductSchema, updateProductSchema } from "@store4riders/shared-validation";
 import { resolveFuzzySearchTerms, getGearAccessoryExclusion } from "../../core/utils/fuzzySearch";
-import { buildSearchSlugs } from "./product.category-constants";
+import { buildCategoryExclusionConditions, buildSearchSlugs } from "./product.category-constants";
 
 /**
  * ProductValidator
@@ -193,52 +193,8 @@ export class ProductValidator {
             ],
           };
 
-      // Clean up Magento's messy tagging: Exclude cross-category contamination
-      const excludeConditions: any[] = [];
-      if (!isAdmin) {
-        if (cleanSlug === "riding-gear" || cleanSlug.includes("off-road-motocross") || cleanSlug.includes("touring-gear") || cleanSlug.includes("monsoon-gear")) {
-          excludeConditions.push({ name: { $not: /\b(helmets?|tail\s*bag|tank\s*bag|saddle\s*bag|backpacks?|hydration|bladder|bungee|cargo\s*net|panniers?|top\s*box|top\s*case|chain\s*(lube|clean|cleaner|paste|wax)|bike\s*cleaner|mobile\s*holder|phone\s*mount|phone\s*holder|bluetooth|intercom|communicator|auxiliary\s*light|fog\s*light|flasher|bandana|buff|face\s*covering|balaclava|tower|stand|paddock|tyre\s*repair|exhaust|bike\s*cover)\b/i } });
-        } else if (cleanSlug === "motorcycle-bags-bike-luggage") {
-          excludeConditions.push({ name: { $not: /\b(helmets?|jackets?|boots?|shoes?|gloves?|pants?|jeans?|trousers?|chain\s*(lube|clean|cleaner))\b/i } });
-        } else if (cleanSlug.includes("full-face")) {
-          excludeConditions.push({ name: { $not: /\b(modular|flip\s*up|open\s*face|half\s*face|jet\b|off\s*road|motocross|dirt\s*bike|bluetooth|intercom|headset|earphone|communicator|cleaner|spray|wash|backpack|bag)\b/i } });
-        } else if (cleanSlug.includes("modular")) {
-          excludeConditions.push({ name: { $not: /\b(open\s*face|half\s*face|jet\b|bluetooth|intercom|headset|earphone|communicator|cleaner|spray|wash|backpack|bag)\b/i } });
-        } else if (cleanSlug.includes("open-face")) {
-          excludeConditions.push({ name: { $not: /\b(modular|flip\s*up|full\s*face|bluetooth|intercom|headset|earphone|communicator|cleaner|spray|wash|backpack|bag)\b/i } });
-        } else if (cleanSlug.includes("saddle-bag")) {
-          excludeConditions.push({ name: { $not: /\b(tank\s*bag|tankbag|tail\s*bag|tailbag|top\s*case|top\s*box|hydration|bladder)\b/i } });
-        } else if (cleanSlug.includes("tank-bag")) {
-          excludeConditions.push({ name: { $not: /\b(saddle\s*bag|saddlebag|panniers?|tail\s*bag|tailbag|top\s*case|top\s*box|hydration|bladder)\b/i } });
-        } else if (cleanSlug.includes("tail-bag")) {
-          excludeConditions.push({ name: { $not: /\b(tank\s*bag|tankbag|saddle\s*bag|saddlebag|panniers?|top\s*case|top\s*box|hydration|bladder)\b/i } });
-        } else if (cleanSlug.includes("top-box") || cleanSlug.includes("top-case")) {
-          excludeConditions.push({ name: { $not: /\b(tank\s*bag|tankbag|saddle\s*bag|saddlebag|tail\s*bag|tailbag)\b/i } });
-        } else if (cleanSlug.includes("hydration")) {
-          excludeConditions.push({ name: { $not: /\b(saddle\s*bag|saddlebag|tank\s*bag|tankbag|tail\s*bag|tailbag|top\s*case|top\s*box)\b/i } });
-        } else if (cleanSlug === "helmet-accessories" || cleanSlug.includes("helmet-accessories")) {
-          excludeConditions.push({ name: { $not: /\b(dual\s*visor\s*helmet|dual\s*spoiler\s*helmet|open\s*face\s*helmet|full\s*face\s*helmet|modular\s*helmet|double\s*visor\s*helmet)\b/i } });
-        } else if ((cleanSlug.includes("boot") || cleanSlug.includes("shoe")) && !cleanSlug.includes("sock") && !cleanSlug.includes("lace") && !cleanSlug.includes("insole") && !cleanSlug.includes("cover") && !cleanSlug.includes("slider")) {
-          excludeConditions.push({ name: { $not: /\b(socks?|laces?|insole|covers?|toe\s*slider)\b/i } });
-        } else if (cleanSlug.includes("helmet") && !cleanSlug.includes("bag") && !cleanSlug.includes("visor") && !cleanSlug.includes("cleaner") && !cleanSlug.includes("balaclava") && !cleanSlug.includes("intercom") && !cleanSlug.includes("communicator") && !cleanSlug.includes("spoiler") && !cleanSlug.includes("pinlock") && !cleanSlug.includes("lens") && !cleanSlug.includes("shield") && !cleanSlug.includes("accessories")) {
-          excludeConditions.push({ name: { $not: /\b(communicator|communicators|intercom|intercoms|bluetooth|headset|camera|action\s*cam|pinlock|spoiler|deflector|pad|pads|screw|lock|chin\s*curtain|ratchet|pivot|vent|vents|replacement|cleaner|spray|mask|balaclava|lens|shield|glove|gloves|jacket|jackets|boots?|shoes?|pants?|backpacks?|bags?|luggage|hydration|tail\s*bag|tank\s*bag|saddle\s*bag|panniers?|goggle|goggles)\b/i } });
-          // Strictly exclude standalone replacement visors, but preserve genuine Dual Visor / Double Visor helmets
-          excludeConditions.push({
-            $or: [
-              { name: /\b(dual|double)\s+visor/i },
-              { name: { $not: /\bvisors?\b/i } }
-            ]
-          });
-        } else if ((cleanSlug.includes("jacket") || cleanSlug.includes("suit")) && !cleanSlug.includes("armor") && !cleanSlug.includes("armour") && !cleanSlug.includes("protector") && !cleanSlug.includes("guard") && !cleanSlug.includes("pad") && !cleanSlug.includes("insert") && !cleanSlug.includes("layer") && !cleanSlug.includes("liner")) {
-          excludeConditions.push({ name: { $not: /\b((hip|knee|elbow|back|shoulder|chest)\s*(protector|armor|armour|insert|pad|pads)|armour\s*insert|armor\s*insert|knee\s*guard|base\s*layer|liner)\b/i } });
-        } else if ((cleanSlug.includes("pant") || cleanSlug.includes("jeans")) && !cleanSlug.includes("armor") && !cleanSlug.includes("armour") && !cleanSlug.includes("protector") && !cleanSlug.includes("guard") && !cleanSlug.includes("pad") && !cleanSlug.includes("insert")) {
-          excludeConditions.push({ name: { $not: /\b(knee\s*guards?|shin\s*guards?|(hip|knee)\s*(protector|armor|armour|insert|pad|pads)|armour\s*insert|armor\s*insert)\b/i } });
-        } else if ((cleanSlug.includes("communicator") || cleanSlug.includes("intercom")) && !cleanSlug.includes("mount") && !cleanSlug.includes("cable") && !cleanSlug.includes("wire") && !cleanSlug.includes("battery") && !cleanSlug.includes("clamp") && !cleanSlug.includes("pad")) {
-          excludeConditions.push({ name: { $not: /\b(cable|wire|battery|clamp|mount|pad)\b/i } });
-        } else if (cleanSlug.includes("knee-guard") || cleanSlug.includes("knee-guards")) {
-          excludeConditions.push({ name: { $not: /\b(hip|elbow|shoulder|back|chest|tailbone|riding\s*pants?|touring\s*pants?|riding\s*jeans?)\b/i } });
-        }
-      }
+      // Exclude cross-category contamination using the shared boundary rules
+      const excludeConditions = isAdmin ? [] : buildCategoryExclusionConditions(cleanSlug);
 
       // Strict category condition matching database-indexed categorySlugs
       andConditions.push(categoryMatchCondition);

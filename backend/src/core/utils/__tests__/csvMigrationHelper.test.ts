@@ -719,4 +719,58 @@ describe("csvMigrationHelper - Partial CSV Safety & L/B/H Parsing", () => {
     expect(report.rows[0]).toMatchObject({ action: "skip", reason: "SKU missing in row" });
     expect(report.rows.find((r) => r.sku === "NEW-CHILD-XL")?.action).toBe("variant_create");
   });
+
+  it("strips polluted Action Camera / Phone Holder / Performance Parts CSV slugs for T-shirts, Intercoms, and Exhausts", () => {
+    const tShirt = mapCsvRowToProductData(
+      {
+        sku: "AS-T-BEAS",
+        name: "Beast T-Shirt",
+        price: "999",
+        categories:
+          "Root Test 01/Gadgets/Action Cameras/Camera Accessories,Root Test 01/Merchandise/Biker T-shirts | Motorcycle T shirts",
+      },
+      noopFormatImg
+    );
+    expect(tShirt.categorySlugs).toContain("merchandise");
+    expect(tShirt.categorySlugs).not.toContain("action-cameras");
+    expect(tShirt.categorySlugs).not.toContain("camera-accessories");
+    expect(tShirt.categorySlugs).not.toContain("gadgets");
+    expect(tShirt.categorySlugs).not.toContain("motorcycle-accessories-online");
+
+    const intercom = mapCsvRowToProductData(
+      {
+        sku: "BC10BC",
+        name: "BluArmor C10 Bluetooth Communicator",
+        price: "4999",
+        categories: "Root Test 01/Gadgets/Bike Phone Holders,Root Test 01/Gadgets/Communicators",
+      },
+      noopFormatImg
+    );
+    expect(intercom.categorySlugs).toContain("communicators");
+    expect(intercom.categorySlugs).not.toContain("bike-phone-holders");
+
+    const exhaust = mapCsvRowToProductData(
+      {
+        sku: "RRSEFCGT650",
+        name: "Red Rooster Stellar Exhaust For Continental GT 650",
+        price: "18999",
+        categories: "Root Test 01/Motorcycle Accessories | Bike Accessories/Performance Parts,Root Test 01/Bike Exhausts",
+      },
+      noopFormatImg
+    );
+    expect(exhaust.categorySlugs).toContain("exhausts");
+    expect(exhaust.categorySlugs).not.toContain("performance-parts");
+    expect(exhaust.categorySlugs).not.toContain("spares");
+
+    const mxJersey = mapCsvRowToProductData(
+      {
+        sku: "AXCJ",
+        name: "Axor X-Cross Motocross Jersey",
+        price: "2499",
+        categories: "Root Test 01/Riding Gear/Off-Road Motocross,Root Test 01/Merchandise/Biker T-shirts | Motorcycle T shirts",
+      },
+      noopFormatImg
+    );
+    expect(mxJersey.categorySlugs).toContain("riding-gear");
+  });
 });

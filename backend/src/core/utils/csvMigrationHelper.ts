@@ -637,7 +637,8 @@ export function mapCsvRowToProductData(
     magentoCategories: categories,
     categorySlugs: rawSlugs,
   });
-  const categorySlugs = Array.from(new Set([...rawSlugs, ...canonicalSlugs]));
+  // Prefer sanitized canonical slugs over raw CSV splits so cross-category safeguards cannot be undone
+  const categorySlugs = canonicalSlugs.length > 0 ? canonicalSlugs : rawSlugs;
 
   const description = getCsvColumnValue(row, ["description"]) || "";
   const shortDescription = getCsvColumnValue(row, ["short_description"]) || "";
@@ -819,9 +820,19 @@ export function buildExistingProductUpdateDoc(
   if (present.hasHsnCode && p.hsnCode) updateDoc.hsnCode = p.hsnCode;
   if (present.hasBrand && p.brand) updateDoc.brand = p.brand;
   if (present.hasCategories && p.magentoCategories) updateDoc.magentoCategories = p.magentoCategories;
-  if (present.hasCategories && p.categorySlugs && p.categorySlugs.length > 0) {
-    updateDoc.categorySlugs = p.categorySlugs;
-    updateDoc.categoryId = p.categoryId || p.categorySlugs[0];
+  if (present.hasCategories) {
+    const resolvedForExisting =
+      !present.hasName && existing.name && p.magentoCategories
+        ? resolveCanonicalCategorySlugs({
+            name: existing.name,
+            magentoCategories: p.magentoCategories,
+            categorySlugs: p.categorySlugs,
+          })
+        : p.categorySlugs;
+    if (resolvedForExisting && resolvedForExisting.length > 0) {
+      updateDoc.categorySlugs = resolvedForExisting;
+      updateDoc.categoryId = resolvedForExisting[0] || p.categoryId;
+    }
   }
   if (present.hasMetaTitle) updateDoc.metaTitle = p.metaTitle;
   if (present.hasMetaDescription) updateDoc.metaDescription = p.metaDescription;

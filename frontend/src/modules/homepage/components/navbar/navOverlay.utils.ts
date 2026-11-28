@@ -172,11 +172,30 @@ function resolveSectionKeyFromParent(
     const matchedGroup = preferredGroup
       ? baseNav.megaMenuItems.find((g) => (g.group || "").toLowerCase().trim() === preferredGroup)
       : undefined;
-    const targetGroup = matchedGroup || baseNav.megaMenuItems[0];
+    // Route unassigned department children to each menu's catch-all column rather than column 0
+    const fallbackGroupByNav: Record<string, string> = {
+      helmets: "accessories & care",
+      "riding-gear": "specialized gear",
+      luggage: "specialty & rider luggage",
+      accessories: "protection, performance & care",
+    };
+    const defaultGroupName = fallbackGroupByNav[navIdLower];
+    const defaultGroup = defaultGroupName
+      ? baseNav.megaMenuItems.find((g) => (g.group || "").toLowerCase().trim() === defaultGroupName)
+      : undefined;
+    const targetGroup = matchedGroup || defaultGroup || baseNav.megaMenuItems[0];
     return `${navIdLower}:${(targetGroup.group || "").toLowerCase().trim()}`;
   }
 
   return "";
+}
+
+function isCategoryHiddenFromMenu(c: any): boolean {
+  return (
+    c?.includeInMenu === false ||
+    String(c?.includeInMenu).toLowerCase() === "false" ||
+    c?.isDeleted === true
+  );
 }
 
 /**
@@ -189,27 +208,58 @@ export function resolveStorefrontNavItems(
   dbCategories?: any[]
 ): NavItem[] {
   const flatDbCategories: any[] = [];
-  const traverse = (nodes: any[]) => {
+  const hiddenCategoryIds = new Set<string>();
+  const hiddenSlugs = new Set<string>();
+
+  const markCategoryHidden = (c: any) => {
+    const id = String(c?._id || c?.id || "").trim().toLowerCase();
+    if (id) hiddenCategoryIds.add(id);
+    if (c?.slug) hiddenSlugs.add(String(c.slug).trim().toLowerCase());
+    const linkLeaf = extractLeafSlug(c?.linkUrl);
+    if (linkLeaf) hiddenSlugs.add(linkLeaf);
+  };
+
+  const traverse = (nodes: any[], ancestorHidden = false) => {
     if (!Array.isArray(nodes)) return;
     for (const n of nodes) {
       flatDbCategories.push(n);
-      if (Array.isArray(n.children) && n.children.length > 0) traverse(n.children);
+      const nodeHidden = ancestorHidden || isCategoryHiddenFromMenu(n);
+      if (nodeHidden) markCategoryHidden(n);
+      if (Array.isArray(n.children) && n.children.length > 0) {
+        traverse(n.children, nodeHidden);
+      }
     }
   };
   if (Array.isArray(dbCategories)) {
-    traverse(dbCategories);
+    traverse(dbCategories, false);
   }
 
-  const hiddenSlugs = new Set<string>();
-  flatDbCategories.forEach((c) => {
-    if ((c.includeInMenu === false || c.isDeleted === true) && c.slug) {
-      hiddenSlugs.add(String(c.slug).trim().toLowerCase());
+  // Propagate hidden state along flat parentId chains in case categories are passed unnested
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const c of flatDbCategories) {
+      const id = String(c?._id || c?.id || "").trim().toLowerCase();
+      const slug = String(c?.slug || "").trim().toLowerCase();
+      if ((id && hiddenCategoryIds.has(id)) || (slug && hiddenSlugs.has(slug))) continue;
+      const pId = String(c?.parentId || "").trim().toLowerCase();
+      if (pId && (hiddenCategoryIds.has(pId) || hiddenSlugs.has(pId))) {
+        markCategoryHidden(c);
+        changed = true;
+      }
     }
-  });
+  }
+
+  const isEffectiveHiddenCategory = (c: any): boolean => {
+    if (isCategoryHiddenFromMenu(c)) return true;
+    const id = String(c?._id || c?.id || "").trim().toLowerCase();
+    const slug = String(c?.slug || "").trim().toLowerCase();
+    return Boolean((id && hiddenCategoryIds.has(id)) || (slug && hiddenSlugs.has(slug)));
+  };
 
   const customBySection = new Map<string, any[]>();
   flatDbCategories.forEach((c) => {
-    if (c.includeInMenu === false || c.isDeleted === true) return;
+    if (isEffectiveHiddenCategory(c)) return;
 
     const catSlug = String(c.slug || "").trim().toLowerCase();
     const explicitSection = typeof c.menuNavSection === "string" ? c.menuNavSection.trim() : "";
@@ -241,15 +291,31 @@ export function resolveStorefrontNavItems(
       )
     : [];
 
-  return baseItems.map((item) => {
-    if (!item.megaMenuItems) return item;
+  return baseItems
+    .filter((item) => {
+      if (isBrandNavItem(item)) return true;
+      const topLeaf = extractLeafSlug(item.href);
+      const coreParentSlug = CORE_PRODUCT_PARENTS[item.id]?.slug?.toLowerCase();
+      return (
+        (!topLeaf || !hiddenSlugs.has(topLeaf)) &&
+        (!coreParentSlug || !hiddenSlugs.has(coreParentSlug))
+      );
+    })
+    .map((item) => {
+      if (!item.megaMenuItems) return item;
 
-    const isBrandNav = isBrandNavItem(item);
-    const existingItemSlugsInMenu = item.megaMenuItems.flatMap((g) =>
-      g.items.map((sub) => extractLeafSlug(sub.href))
-    );
+      const isBrandNav = isBrandNavItem(item);
+      const existingItemSlugsInMenu = item.megaMenuItems.flatMap((g) => [
+        ...(g.groupHref ? [extractLeafSlug(g.groupHref)] : []),
+        ...g.items.map((sub) => extractLeafSlug(sub.href)),
+      ]);
 
-    const updatedMegaMenuItems = item.megaMenuItems.map((group) => {
+      const updatedMegaMenuItems = item.megaMenuItems
+        .filter((group) => {
+          const groupLeaf = extractLeafSlug(group.groupHref);
+          return !groupLeaf || !hiddenSlugs.has(groupLeaf);
+        })
+        .map((group) => {
       const groupKey = `${item.id.toLowerCase()}:${(group.group || "").toLowerCase().trim()}`;
       const currentGroupLower = (group.group || "").toLowerCase().trim();
       const sectionCustomCategories = customBySection.get(groupKey) || [];
@@ -380,15 +446,45 @@ export function resolveStorefrontNavItems(
         });
       }
 
+        return {
+          ...group,
+          items: visibleItems,
+        };
+      })
+      .filter((group) => group.items.length > 0);
+
+      const featured = item.megaMenuFeatured;
+      let megaMenuFeatured = featured;
+      if (featured) {
+        const filteredFeaturedItems = featured.items?.filter((fi) => {
+          const leaf = extractLeafSlug(fi.href);
+          return !leaf || !hiddenSlugs.has(leaf);
+        });
+        const bannerLeaf = extractLeafSlug(featured.bannerImage?.href);
+        const bannerImage =
+          featured.bannerImage && (!bannerLeaf || !hiddenSlugs.has(bannerLeaf))
+            ? featured.bannerImage
+            : undefined;
+        if (!filteredFeaturedItems?.length && !bannerImage) {
+          megaMenuFeatured = undefined;
+        } else {
+          megaMenuFeatured = {
+            ...featured,
+            items: filteredFeaturedItems,
+            bannerImage,
+          };
+        }
+      }
+
+      const hasDropdownContent =
+        updatedMegaMenuItems.length > 0 || Boolean(megaMenuFeatured);
+
       return {
-        ...group,
-        items: visibleItems,
+        ...item,
+        hasDropdown: hasDropdownContent ? item.hasDropdown : false,
+        megaMenuItems:
+          updatedMegaMenuItems.length > 0 ? updatedMegaMenuItems : undefined,
+        megaMenuFeatured,
       };
     });
-
-    return {
-      ...item,
-      megaMenuItems: updatedMegaMenuItems,
-    };
-  });
 }

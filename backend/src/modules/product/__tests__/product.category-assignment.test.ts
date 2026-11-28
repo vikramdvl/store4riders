@@ -278,4 +278,26 @@ describe("ProductValidator Category Query Isolation & Rally Tower Alias", () => 
     expect(actionCamSearchSlugs).toContain("action-cameras");
     expect(actionCamSearchSlugs).not.toContain("camera-accessories");
   });
+
+  it("excludes exhausts from performance-parts/spares, intercoms from bike-phone-holders, and T-shirts from action-cameras", () => {
+    const perfReq = createMockReq("http://localhost/api/products?category=performance-parts");
+    const perfAnd = (ProductValidator.validateListQuery(perfReq).filters as any).$and;
+    const perfExcludes = perfAnd.filter((c: any) => c.name?.$not || c.magentoCategories?.$not);
+    expect(perfExcludes.length).toBeGreaterThanOrEqual(2);
+    expect(perfExcludes.some((c: any) => c.name?.$not?.test("Red Rooster Stellar Exhaust"))).toBe(true);
+    expect(perfExcludes.some((c: any) => c.name?.$not?.test("FuelX Pro+"))).toBe(false);
+
+    const holderReq = createMockReq("http://localhost/api/products?category=bike-phone-holders");
+    const holderAnd = (ProductValidator.validateListQuery(holderReq).filters as any).$and;
+    const holderExcludes = holderAnd.filter((c: any) => c.name?.$not || c.magentoCategories?.$not);
+    expect(holderExcludes.some((c: any) => c.name?.$not?.test("BluArmor C50Pro Bluetooth Communicator"))).toBe(true);
+    expect(holderExcludes.some((c: any) => c.name?.$not?.test("Beast T-Shirt"))).toBe(true);
+    expect(holderExcludes.some((c: any) => c.name?.$not?.test("Bobogear Claw Grip Bike Mobile Holder"))).toBe(false);
+
+    const camReq = createMockReq("http://localhost/api/products?category=action-cameras");
+    const camAnd = (ProductValidator.validateListQuery(camReq).filters as any).$and;
+    const camExcludes = camAnd.filter((c: any) => c.name?.$not || c.magentoCategories?.$not);
+    expect(camExcludes.some((c: any) => c.name?.$not?.test("Beast T-Shirt"))).toBe(true);
+    expect(camExcludes.some((c: any) => c.name?.$not?.test("Qubo Bike Cam Pro"))).toBe(false);
+  });
 });

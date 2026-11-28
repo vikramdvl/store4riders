@@ -11,7 +11,7 @@ import {
   sortSizeEntities,
 } from "@store4riders/shared-utils";
 import { getCache, setCache, deleteCache, clearProductCaches } from "../../core/cache/redis";
-import { buildSearchSlugs, resolveCanonicalCategorySlugs } from "./product.category-constants";
+import { buildCategoryExclusionConditions, buildSearchSlugs, resolveCanonicalCategorySlugs } from "./product.category-constants";
 import { supportsTransactions } from "../../core/database/transaction";
 import {
   getCsvColumnValue,
@@ -842,25 +842,7 @@ export class ProductService {
 
       const categoryMatchCondition = { categorySlugs: { $in: searchSlugs } };
 
-      const excludeConditions: any[] = [];
-      if ((cleanSlug.includes("boot") || cleanSlug.includes("shoe")) && !cleanSlug.includes("sock") && !cleanSlug.includes("lace") && !cleanSlug.includes("insole") && !cleanSlug.includes("cover") && !cleanSlug.includes("slider")) {
-        excludeConditions.push({ name: { $not: /\b(socks?|laces?|insole|covers?|toe\s*slider)\b/i } });
-      } else if (cleanSlug.includes("helmet") && !cleanSlug.includes("bag") && !cleanSlug.includes("visor") && !cleanSlug.includes("cleaner") && !cleanSlug.includes("balaclava") && !cleanSlug.includes("intercom") && !cleanSlug.includes("communicator") && !cleanSlug.includes("spoiler") && !cleanSlug.includes("pinlock") && !cleanSlug.includes("lens") && !cleanSlug.includes("shield") && !cleanSlug.includes("accessories")) {
-        excludeConditions.push({ name: { $not: /\b(communicator|communicators|intercom|intercoms|bluetooth|headset|camera|action\s*cam|pinlock|spoiler|deflector|pad|pads|screw|lock|chin\s*curtain|ratchet|pivot|vent|vents|replacement|cleaner|spray|mask|balaclava|lens|shield|glove|gloves|jacket|jackets|boots?|shoes?|pants?|backpacks?|bags?|luggage|hydration|tail\s*bag|tank\s*bag|saddle\s*bag|panniers?|goggle|goggles)\b/i } });
-        // Strictly exclude standalone replacement visors, but preserve genuine Dual Visor / Double Visor helmets
-        excludeConditions.push({
-          $or: [
-            { name: /\b(dual|double)\s+visor/i },
-            { name: { $not: /\bvisors?\b/i } }
-          ]
-        });
-      } else if ((cleanSlug.includes("jacket") || cleanSlug.includes("suit") || cleanSlug.includes("pant") || cleanSlug.includes("jeans")) && !cleanSlug.includes("armor") && !cleanSlug.includes("armour") && !cleanSlug.includes("protector") && !cleanSlug.includes("guard") && !cleanSlug.includes("pad") && !cleanSlug.includes("insert") && !cleanSlug.includes("layer") && !cleanSlug.includes("liner")) {
-        excludeConditions.push({ name: { $not: /\b((hip|knee|elbow|back|shoulder|chest)\s*(protector|armor|armour|insert|pad|pads)|armour\s*insert|armor\s*insert|base\s*layer|liner)\b/i } });
-      } else if ((cleanSlug.includes("communicator") || cleanSlug.includes("intercom")) && !cleanSlug.includes("mount") && !cleanSlug.includes("cable") && !cleanSlug.includes("wire") && !cleanSlug.includes("battery") && !cleanSlug.includes("clamp") && !cleanSlug.includes("pad")) {
-        excludeConditions.push({ name: { $not: /\b(cable|wire|battery|clamp|mount|pad)\b/i } });
-      } else if (cleanSlug.includes("knee-guard") || cleanSlug.includes("knee-guards")) {
-        excludeConditions.push({ name: { $not: /\b(hip|elbow|shoulder|back|chest|tailbone)\b/i } });
-      }
+      const excludeConditions = buildCategoryExclusionConditions(cleanSlug);
 
       baseFilters.$and = baseFilters.$and || [];
       baseFilters.$and.push(categoryMatchCondition);

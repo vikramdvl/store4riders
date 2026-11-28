@@ -355,5 +355,168 @@ describe("Navbar & Submenu Navigation Integrity Suite", () => {
       expect(allHelmetHrefs).not.toContain("/motorcycle-helmets/helmet-cleaners");
       expect(allHelmetHrefs).toContain("/motorcycle-helmets/balaclava");
     });
+
+    it("does not leak column-header categories or unassigned department children into Riding Gloves or Auxiliary Lights", () => {
+      const dbCategories = [
+        {
+          _id: "cat_riding_gear",
+          name: "Riding Gear",
+          slug: "riding-gear",
+          includeInMenu: true,
+        },
+        {
+          _id: "cat_gloves",
+          name: "Riding Gloves",
+          slug: "riding-gloves",
+          parentId: "cat_riding_gear",
+          includeInMenu: true,
+          menuNavSection: "",
+        },
+        {
+          _id: "cat_jackets",
+          name: "Riding Jackets",
+          slug: "riding-jackets",
+          parentId: "cat_riding_gear",
+          includeInMenu: true,
+          menuNavSection: "",
+        },
+        {
+          _id: "cat_boots",
+          name: "Motorcycle riding boots",
+          slug: "motorcycle-riding-boots",
+          parentId: "cat_riding_gear",
+          includeInMenu: true,
+          menuNavSection: "",
+        },
+        {
+          _id: "cat_base_layers",
+          name: "Motorcycle Base Layers",
+          slug: "motorcycle-base-layers",
+          parentId: "cat_riding_gear",
+          includeInMenu: true,
+          menuNavSection: "",
+        },
+        {
+          _id: "cat_touring_gloves",
+          name: "Touring Gloves",
+          slug: "touring-gloves",
+          parentId: "cat_gloves",
+          includeInMenu: false,
+          menuNavSection: "riding-gear:Riding Gloves",
+        },
+        {
+          _id: "cat_rynox_gloves",
+          name: "Rynox Gloves",
+          slug: "rynox-gloves",
+          parentId: "cat_gloves",
+          includeInMenu: false,
+          menuNavSection: "",
+        },
+        {
+          _id: "cat_ls2_gloves",
+          name: "LS2 Riding Gloves",
+          slug: "ls2-riding-gloves",
+          parentId: "cat_gloves",
+          includeInMenu: false,
+          menuNavSection: "",
+        },
+        {
+          _id: "cat_accessories",
+          name: "Motorcycle Accessories | Bike Accessories",
+          slug: "motorcycle-accessories-online",
+          includeInMenu: true,
+        },
+        {
+          _id: "cat_paddocks",
+          name: "Paddocks",
+          slug: "paddocks",
+          parentId: "cat_accessories",
+          includeInMenu: true,
+          menuNavSection: "",
+        },
+        {
+          _id: "cat_seating",
+          name: "Seating",
+          slug: "seating",
+          parentId: "cat_accessories",
+          includeInMenu: true,
+          menuNavSection: "",
+        },
+      ];
+
+      const resolved = resolveStorefrontNavItems(DEFAULT_NAV_ITEMS, [], dbCategories);
+
+      const gearNav = resolved.find((i) => i.id === "riding-gear");
+      const glovesGroup = gearNav?.megaMenuItems?.find((g) => g.group === "Riding Gloves");
+      const specializedGroup = gearNav?.megaMenuItems?.find((g) => g.group === "Specialized Gear");
+      const gloveLabels = (glovesGroup?.items || []).map((i) => i.label);
+      const specializedLabels = (specializedGroup?.items || []).map((i) => i.label);
+
+      expect(gloveLabels).not.toContain("Riding Jackets");
+      expect(gloveLabels).not.toContain("Motorcycle riding boots");
+      expect(gloveLabels).not.toContain("Touring Gloves");
+      expect(gloveLabels).not.toContain("Rynox Gloves");
+      expect(gloveLabels).not.toContain("LS2 Riding Gloves");
+      expect(gloveLabels).not.toContain("Motorcycle Base Layers");
+      expect(specializedLabels).toContain("Motorcycle Base Layers");
+
+      const accNav = resolved.find((i) => i.id === "accessories");
+      const auxGroup = accNav?.megaMenuItems?.find((g) => g.group === "Auxiliary Lights & Mounts");
+      const protectionGroup = accNav?.megaMenuItems?.find((g) => g.group === "Protection, Performance & Care");
+      const auxLabels = (auxGroup?.items || []).map((i) => i.label);
+      const protectionLabels = (protectionGroup?.items || []).map((i) => i.label);
+
+      expect(auxLabels).not.toContain("Paddocks");
+      expect(auxLabels).not.toContain("Seating");
+      expect(protectionLabels).toContain("Paddocks");
+      expect(protectionLabels).toContain("Seating");
+    });
+
+    it("hides top-level menus, column groups, and descendant children whenever any category has includeInMenu: false", () => {
+      const dbCategories = [
+        {
+          _id: "cat_exhausts",
+          name: "Exhausts",
+          slug: "exhausts",
+          includeInMenu: false,
+        },
+        {
+          _id: "cat_gloves",
+          name: "Riding Gloves",
+          slug: "riding-gloves",
+          parentId: "riding-gear",
+          includeInMenu: false,
+          children: [
+            {
+              _id: "cat_full_gauntlet",
+              name: "Full Gauntlet Gloves",
+              slug: "full-gauntlet-gloves",
+              includeInMenu: true,
+            },
+          ],
+        },
+        {
+          _id: "cat_helmet_acc",
+          name: "Helmet Accessories",
+          slug: "helmet-accessories",
+          includeInMenu: "false",
+        },
+      ];
+
+      const resolved = resolveStorefrontNavItems(DEFAULT_NAV_ITEMS, [], dbCategories);
+
+      // Hidden top-level category (Exhausts) is removed completely
+      expect(resolved.find((i) => i.id === "exhausts")).toBeUndefined();
+
+      // Hidden parent/column header (Riding Gloves) hides both its column and descendant items
+      const gearNav = resolved.find((i) => i.id === "riding-gear");
+      const glovesCol = gearNav?.megaMenuItems?.find((g) => g.group === "Riding Gloves");
+      expect(glovesCol).toBeUndefined();
+
+      // String "false" on includeInMenu also hides sub-items cleanly
+      const helmetsNav = resolved.find((i) => i.id === "helmets");
+      const allHelmetHrefs = (helmetsNav?.megaMenuItems || []).flatMap((g) => g.items.map((x) => x.href));
+      expect(allHelmetHrefs).not.toContain("/motorcycle-helmets/helmet-accessories");
+    });
   });
 });
