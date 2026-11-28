@@ -105,12 +105,16 @@ describe('cleanRichContent Utility', () => {
     expect(cleaned).toContain('loading="lazy" />');
   });
 
-  it('should strip text-align: justify to prevent narrow mobile column word-spacing rivers', () => {
-    const justified = '<p style="text-align: justify; color: #333; margin-bottom: 10px;">Stormproof dry bag description</p>';
+  it('should strip text-align: justify and redundant &nbsp; gaps to prevent word-spacing rivers across all screens', () => {
+    const justified = `<p style="text-align: justify; color: #333; margin-bottom: 10px;" align="justify">Stormproof&nbsp;&nbsp;dry&nbsp;bag description</p><p style='text-align: justify;' class="ql-align-justify">Second paragraph</p><table><tr><td>&nbsp;</td></tr></table>`;
     const cleaned = cleanRichContent(justified);
 
     expect(cleaned).not.toContain('text-align: justify');
+    expect(cleaned).not.toContain('align="justify"');
+    expect(cleaned).not.toContain('ql-align-justify');
     expect(cleaned).toContain('margin-bottom: 10px');
+    expect(cleaned).toContain('Stormproof dry bag description');
+    expect(cleaned).toContain('<td class="border border-neutral-200 p-2 align-top text-xs sm:text-sm">&nbsp;</td>');
   });
 });
 

@@ -102,6 +102,22 @@ export async function resolveServerUrlRedirect(
   return { matched: false };
 }
 
+/**
+ * Safe 301 fallback map for discontinued or skipped legacy Magento URLs referenced
+ * in historical product descriptions and external links.
+ * Runs ONLY after live DB lookups (product/category/policy) AND admin UrlRedirect rules miss.
+ */
+export const LEGACY_DISCONTINUED_SLUG_REDIRECTS: Record<string, string> = {
+  "/rynox-expedition-trail-bag-v2": "/motorcycle-bags-bike-luggage/motorcycle-tail-bags",
+  "/rynox-h2go-rain-jacket": "/riding-gear/monsoon-gear-for-riders",
+  "/rynox-cerros-chest-protector-inserts": "/riding-gear/riding-jackets/protectors-armour",
+  "/maddog-wiring-harness-pro":
+    "/motorcycle-accessories-online/bike-auxiliary-lights-filters-flashers/auxiliary-light-wiring-harness-switch",
+  "/smk-retro-jet-solid-matt-helmet": "/motorcycle-helmets/open-face-helmets",
+  "/rynox-gloves": "/riding-gear/riding-gloves",
+  "/brands/rynox-gears": "/brands/rynox-gear",
+};
+
 export async function redirectIfMatchedOrNotFound(pathname: string): Promise<void> {
   const match = await resolveServerUrlRedirect(pathname);
   if (match.matched && match.toPath) {
@@ -109,5 +125,11 @@ export async function redirectIfMatchedOrNotFound(pathname: string): Promise<voi
       redirect(match.toPath);
     }
     permanentRedirect(match.toPath);
+  }
+
+  const normalized = normalizeUrlRedirectPath(pathname);
+  const legacyDestination = LEGACY_DISCONTINUED_SLUG_REDIRECTS[normalized];
+  if (legacyDestination && legacyDestination !== normalized) {
+    permanentRedirect(legacyDestination);
   }
 }

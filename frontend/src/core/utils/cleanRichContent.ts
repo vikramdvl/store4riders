@@ -43,8 +43,9 @@ export function cleanRichContent(rawHtml: string, options: CleanRichContentOptio
   // 1b. Resolve Magento media directives, legacy domains, and S3 description paths
   clean = resolveMagentoMediaUrls(clean);
 
-  // 2. Strip inline typography & legacy colors/widths to enforce site fonts & brand theme
-  clean = clean.replace(/style="([^"]*)"/gi, (_match, styles) => {
+  // 2. Strip inline typography & legacy colors/widths/justify alignment to enforce uniform left-aligned prose
+  clean = clean.replace(/style\s*=\s*(?:"([^"]*)"|'([^']*)')/gi, (_match, doubleStyles, singleStyles) => {
+    const styles = doubleStyles ?? singleStyles ?? "";
     const cleanedStyles = styles
       .replace(/font-family:[^;]+;?/gi, "")
       .replace(/font-size:[^;]+;?/gi, "")
@@ -54,11 +55,21 @@ export function cleanRichContent(rawHtml: string, options: CleanRichContentOptio
       .replace(/min-width:[^;]+;?/gi, "")
       .replace(/max-width:[^;]+;?/gi, "")
       .replace(/height:[^;]+;?/gi, "")
-      .replace(/white-space:\s*nowrap;?/gi, "")
-      .replace(/text-align:\s*justify;?/gi, "")
+      .replace(/white-space:\s*nowrap(?:\s*!important)?;?/gi, "")
+      .replace(/text-align:\s*justify(?:\s*!important)?;?/gi, "")
       .trim();
     return cleanedStyles ? `style="${cleanedStyles}"` : "";
   });
+
+  // 2b. Strip legacy align="justify" attributes, Quill justify/Tailwind justify utility classes, and redundant &nbsp; word gaps
+  clean = clean.replace(/\s+align\s*=\s*(?:"justify"|'justify'|justify\b)/gi, "");
+  clean = clean.replace(/\b(?:ql-align-justify|text-justify)\b/gi, "");
+  clean = clean.replace(
+    /(<(?:td|th|p|div|li|span)[^>]*>)\s*(?:&nbsp;|&#160;|\u00a0)+\s*(<\/(?:td|th|p|div|li|span)>)/gi,
+    "$1__KEEP_NBSP__$2"
+  );
+  clean = clean.replace(/(?:\s*(?:&nbsp;|&#160;|\u00a0)\s*)+/gi, " ");
+  clean = clean.replace(/__KEEP_NBSP__/g, "&nbsp;");
 
   // 3. Strip legacy attributes like width, height, nowrap, colgroup
   clean = clean.replace(/<colgroup[\s\S]*?<\/colgroup>/gi, "");

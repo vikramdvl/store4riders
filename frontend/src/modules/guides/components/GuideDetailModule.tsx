@@ -261,7 +261,7 @@ export const GuideDetailModule: React.FC<GuideDetailModuleProps> = ({
         <div className="bg-white rounded-xl p-5 sm:p-7 lg:p-9 border border-neutral-200/80 shadow-xs mb-10">
           <div
             onClick={(e) => handleRichTextClick(e, router)}
-            className="guide-article-body prose prose-neutral prose-sm sm:prose-base max-w-none 
+            className="guide-article-body prose prose-neutral prose-sm sm:prose-base text-left prose-p:text-left max-w-none 
               prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-neutral-900
               prose-h1:text-xl sm:prose-h1:text-2xl prose-h1:mt-5 prose-h1:mb-3
               prose-h2:text-lg sm:prose-h2:text-xl prose-h2:mt-7 prose-h2:mb-2.5 prose-h2:border-b prose-h2:border-neutral-100 prose-h2:pb-1.5

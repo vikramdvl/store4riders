@@ -147,21 +147,20 @@ textarea {
   max-width: 100%;
 }
 
-.magento-layout p,
-.magento-layout li {
+:is(.magento-layout, .magento-layout-accordion, .policy-prose, .policy-content, .guide-article-body, .prose) :is(p, li, blockquote) {
   text-wrap: pretty;
+  word-spacing: normal;
 }
 
-.magento-layout a,
-.magento-layout code {
+:is(.magento-layout, .magento-layout-accordion, .policy-prose, .policy-content, .guide-article-body, .prose)
+  :is(p, li, blockquote, [style*="justify" i], [align="justify" i], .ql-align-justify, .text-justify):not(.text-center):not(.text-right):not([style*="text-align: center" i]):not([style*="text-align:center" i]):not([style*="text-align: right" i]):not([style*="text-align:right" i]) {
+  text-align: left !important;
+  word-spacing: normal;
+}
+
+:is(.magento-layout, .magento-layout-accordion, .policy-prose, .policy-content, .guide-article-body, .prose) a,
+:is(.magento-layout, .magento-layout-accordion, .policy-prose, .policy-content, .guide-article-body, .prose) code {
   overflow-wrap: anywhere;
-}
-
-@media (max-width: 767px) {
-  .magento-layout p,
-  .magento-layout li {
-    text-align: left !important;
-  }
 }
 
 .spec-heading-balance {

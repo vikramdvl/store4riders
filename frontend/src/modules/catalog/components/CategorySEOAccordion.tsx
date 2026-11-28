@@ -131,7 +131,7 @@ export const CategorySEOAccordion: React.FC<CategorySEOAccordionProps> = ({
                     onClick={(e) => isStringContent && handleRichTextClick(e, router)}
                     className={
                       isStringContent
-                        ? "text-sm text-neutral-700 leading-relaxed font-sans border-t border-neutral-200 p-3 sm:p-5 break-words overflow-x-hidden w-full max-w-full prose prose-sm prose-neutral prose-a:text-blue-600 hover:prose-a:text-blue-800 prose-a:underline prose-a:font-medium prose-table:w-full prose-table:table-fixed prose-table:border-collapse"
+                        ? "text-sm text-left text-neutral-700 leading-relaxed font-sans border-t border-neutral-200 p-3 sm:p-5 break-words overflow-x-hidden w-full max-w-full prose prose-sm prose-neutral prose-p:text-left prose-a:text-blue-600 hover:prose-a:text-blue-800 prose-a:underline prose-a:font-medium prose-table:w-full prose-table:table-fixed prose-table:border-collapse"
                         : "border-t border-neutral-200 p-3 sm:p-5 w-full overflow-x-hidden"
                     }
                   >

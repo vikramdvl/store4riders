@@ -22,6 +22,7 @@ import {
   isKnownCategorySlug,
 } from "@/core/utils/navCategories";
 import { resolveProductSpecificationsFromTree } from "@store4riders/shared-utils";
+import { cleanRichContent } from "@/core/utils/cleanRichContent";
 
 const rawApiBase = (
   process.env.API_URL ||
@@ -381,8 +382,8 @@ function renderPolicyPage(policyPage: any, candidateSlug: string) {
       }
     >
       <div
-        className="policy-content prose prose-slate max-w-none text-slate-700 leading-relaxed space-y-4"
-        dangerouslySetInnerHTML={{ __html: policyPage.contentHtml || "" }}
+        className="policy-content prose prose-slate text-left max-w-none text-slate-700 leading-relaxed space-y-4"
+        dangerouslySetInnerHTML={{ __html: cleanRichContent(policyPage.contentHtml || "") }}
       />
     </PolicyPageLayout>
   );

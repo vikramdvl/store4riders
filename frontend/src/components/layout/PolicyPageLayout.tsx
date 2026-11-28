@@ -541,7 +541,7 @@ export function PolicyPageLayout({
               <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 sm:p-10 min-w-0 max-w-full overflow-hidden">
                 <article
                   onClick={(e) => handleRichTextClick(e, router)}
-                  className="policy-prose break-words max-w-none text-slate-700 leading-relaxed text-sm sm:text-base space-y-6 prose-a:text-blue-600 hover:prose-a:text-blue-800 prose-a:underline"
+                  className="policy-prose text-left break-words max-w-none text-slate-700 leading-relaxed text-sm sm:text-base space-y-6 prose-a:text-blue-600 hover:prose-a:text-blue-800 prose-a:underline"
                 >
                   {hasCustomContent ? (
                     <div dangerouslySetInnerHTML={{ __html: cleanRichContent(customPage!.contentHtml) }} />
